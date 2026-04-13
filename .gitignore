@@ -1,0 +1,17 @@
+# Binary
+gigot
+gigot.exe
+
+# Config (may contain secrets)
+gigot.json
+
+# Repositories managed by GiGot
+repos/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
