@@ -1,0 +1,317 @@
+basePath: /api
+definitions:
+  server.ErrorResponse:
+    properties:
+      error:
+        example: repository not found
+        type: string
+    type: object
+  server.HealthResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  server.MessageResponse:
+    properties:
+      message:
+        example: repository created
+        type: string
+    type: object
+  server.RepoInfo:
+    properties:
+      name:
+        example: my-templates
+        type: string
+      path:
+        example: repos/my-templates.git
+        type: string
+    type: object
+  server.RepoListResponse:
+    properties:
+      count:
+        example: 2
+        type: integer
+      repos:
+        items:
+          $ref: '#/definitions/server.RepoInfo'
+        type: array
+    type: object
+  server.RevokeTokenRequest:
+    properties:
+      token:
+        example: a1b2c3d4...
+        type: string
+    type: object
+  server.TokenRequest:
+    properties:
+      roles:
+        example:
+        - admin
+        - reader
+        items:
+          type: string
+        type: array
+      username:
+        example: alice
+        type: string
+    type: object
+  server.TokenResponse:
+    properties:
+      roles:
+        example:
+        - admin
+        - reader
+        items:
+          type: string
+        type: array
+      token:
+        example: a1b2c3d4...
+        type: string
+      username:
+        example: alice
+        type: string
+    type: object
+host: localhost:3417
+info:
+  contact:
+    name: Peter van de Pas
+  description: Git-backed sync server for Formidable — local-first, server-optional.
+  license:
+    name: MIT
+  title: GiGot API
+  version: 0.1.0
+paths:
+  /auth/token:
+    delete:
+      consumes:
+      - application/json
+      description: POST issues a new token, DELETE revokes one
+      parameters:
+      - description: Token request (for POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.TokenRequest'
+      - description: Revoke request (for DELETE)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.RevokeTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.MessageResponse'
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/server.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Issue or revoke API tokens
+      tags:
+      - auth
+    post:
+      consumes:
+      - application/json
+      description: POST issues a new token, DELETE revokes one
+      parameters:
+      - description: Token request (for POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.TokenRequest'
+      - description: Revoke request (for DELETE)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.RevokeTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.MessageResponse'
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/server.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Issue or revoke API tokens
+      tags:
+      - auth
+  /health:
+    get:
+      description: Returns server health status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.HealthResponse'
+      summary: Health check
+      tags:
+      - system
+  /repos:
+    get:
+      consumes:
+      - application/json
+      description: GET lists all repositories, POST creates a new one
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.RepoListResponse'
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/server.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List or create repositories
+      tags:
+      - repos
+    post:
+      consumes:
+      - application/json
+      description: GET lists all repositories, POST creates a new one
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.RepoListResponse'
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/server.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List or create repositories
+      tags:
+      - repos
+  /repos/{name}:
+    delete:
+      description: GET returns repository details, DELETE removes it
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.RepoInfo'
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get or delete a repository
+      tags:
+      - repos
+    get:
+      description: GET returns repository details, DELETE removes it
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.RepoInfo'
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get or delete a repository
+      tags:
+      - repos
+securityDefinitions:
+  BearerAuth:
+    description: 'Enter your bearer token as: Bearer <token>'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -9,8 +9,8 @@ import (
 func TestDefaults(t *testing.T) {
 	cfg := Defaults()
 
-	if cfg.Server.Host != "0.0.0.0" {
-		t.Errorf("expected host 0.0.0.0, got %s", cfg.Server.Host)
+	if cfg.Server.Host != "127.0.0.1" {
+		t.Errorf("expected host 127.0.0.1, got %s", cfg.Server.Host)
 	}
 	if cfg.Server.Port != 3417 {
 		t.Errorf("expected port 3417, got %d", cfg.Server.Port)

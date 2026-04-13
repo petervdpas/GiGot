@@ -106,6 +106,34 @@ func TestListWithRepos(t *testing.T) {
 	}
 }
 
+func TestDelete(t *testing.T) {
+	dir := t.TempDir()
+	m := NewManager(dir)
+
+	m.InitBare("deleteme")
+	if !m.Exists("deleteme") {
+		t.Fatal("repo should exist before delete")
+	}
+
+	if err := m.Delete("deleteme"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if m.Exists("deleteme") {
+		t.Error("repo should not exist after delete")
+	}
+}
+
+func TestDeleteNonExistent(t *testing.T) {
+	dir := t.TempDir()
+	m := NewManager(dir)
+
+	err := m.Delete("ghost")
+	if err == nil {
+		t.Fatal("expected error for deleting nonexistent repo")
+	}
+}
+
 func TestExists(t *testing.T) {
 	dir := t.TempDir()
 	m := NewManager(dir)

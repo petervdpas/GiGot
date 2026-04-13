@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,25 +9,30 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cucumber/godog"
+	"github.com/petervdpas/GiGot/internal/auth"
 	"github.com/petervdpas/GiGot/internal/config"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
 	"github.com/petervdpas/GiGot/internal/server"
 )
 
 type testContext struct {
-	tmpDir     string
-	configPath string
-	cfg        *config.Config
-	srv        *server.Server
-	ts         *httptest.Server
-	git        *gitmanager.Manager
-	resp       *http.Response
-	respBody   string
-	repoList   []string
-	lastErr    error
+	tmpDir        string
+	configPath    string
+	cfg           *config.Config
+	srv           *server.Server
+	ts            *httptest.Server
+	git           *gitmanager.Manager
+	tokenStrategy *auth.TokenStrategy
+	currentToken  string
+	savedValues   map[string]string
+	resp          *http.Response
+	respBody      string
+	repoList      []string
+	lastErr       error
 }
 
 func (tc *testContext) reset() {
@@ -39,6 +45,9 @@ func (tc *testContext) reset() {
 	tc.cfg = nil
 	tc.srv = nil
 	tc.git = nil
+	tc.tokenStrategy = nil
+	tc.currentToken = ""
+	tc.savedValues = make(map[string]string)
 	tc.resp = nil
 	tc.respBody = ""
 	tc.repoList = nil
@@ -256,6 +265,210 @@ func (tc *testContext) aPlainDirectoryExistsInTheRepoRoot(name string) error {
 	return os.MkdirAll(filepath.Join(tc.tmpDir, name), 0755)
 }
 
+// --- Auth steps ---
+
+func (tc *testContext) startServerWithAuth(enabled bool) error {
+	tc.tmpDir, _ = os.MkdirTemp("", "gigot-test-*")
+	cfg := config.Defaults()
+	cfg.Storage.RepoRoot = filepath.Join(tc.tmpDir, "repos")
+	cfg.Auth.Enabled = enabled
+	os.MkdirAll(cfg.Storage.RepoRoot, 0755)
+	tc.cfg = cfg
+	tc.git = gitmanager.NewManager(cfg.Storage.RepoRoot)
+	tc.srv = server.New(cfg)
+	tc.tokenStrategy = tc.srv.TokenStrategy()
+	tc.ts = httptest.NewServer(tc.srv.Handler())
+	return nil
+}
+
+func (tc *testContext) theServerIsRunningWithAuthDisabled() error {
+	return tc.startServerWithAuth(false)
+}
+
+func (tc *testContext) theServerIsRunningWithAuthEnabled() error {
+	return tc.startServerWithAuth(true)
+}
+
+func (tc *testContext) aTokenIsIssuedForUserWithRoles(username, roles string) error {
+	roleList := strings.Split(roles, ",")
+	for i := range roleList {
+		roleList[i] = strings.TrimSpace(roleList[i])
+	}
+	token, err := tc.tokenStrategy.Issue(username, roleList)
+	if err != nil {
+		return err
+	}
+	tc.currentToken = token
+	return nil
+}
+
+func (tc *testContext) iRequestWithoutAToken(path string) error {
+	resp, err := http.Get(tc.ts.URL + path)
+	if err != nil {
+		return err
+	}
+	tc.resp = resp
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	tc.respBody = string(body)
+	return nil
+}
+
+func (tc *testContext) iRequestWithThatToken(path string) error {
+	return tc.requestWithToken(path, tc.currentToken)
+}
+
+func (tc *testContext) iRequestWithToken(path, token string) error {
+	return tc.requestWithToken(path, token)
+}
+
+func (tc *testContext) requestWithToken(path, token string) error {
+	req, err := http.NewRequest(http.MethodGet, tc.ts.URL+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	tc.resp = resp
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	tc.respBody = string(body)
+	return nil
+}
+
+func (tc *testContext) thatTokenIsRevoked() error {
+	tc.tokenStrategy.Revoke(tc.currentToken)
+	return nil
+}
+
+// --- API steps ---
+
+func (tc *testContext) iGET(path string) error {
+	return tc.doRequest(http.MethodGet, path, "")
+}
+
+func (tc *testContext) iPOSTWithBody(path, body string) error {
+	return tc.doRequest(http.MethodPost, path, body)
+}
+
+func (tc *testContext) iDELETE(path string) error {
+	return tc.doRequest(http.MethodDelete, path, "")
+}
+
+func (tc *testContext) iDELETEWithSavedToken(path, key string) error {
+	token, ok := tc.savedValues[key]
+	if !ok {
+		return fmt.Errorf("no saved value for key %q", key)
+	}
+	body := fmt.Sprintf(`{"token":"%s"}`, token)
+	return tc.doRequest(http.MethodDelete, path, body)
+}
+
+func (tc *testContext) doRequest(method, path, body string) error {
+	var req *http.Request
+	var err error
+	if body != "" {
+		req, err = http.NewRequest(method, tc.ts.URL+path, bytes.NewBufferString(body))
+	} else {
+		req, err = http.NewRequest(method, tc.ts.URL+path, nil)
+	}
+	if err != nil {
+		return err
+	}
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	tc.resp = resp
+	respBody, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	tc.respBody = string(respBody)
+	return nil
+}
+
+func (tc *testContext) theJSONResponseShouldBe(key string, expected int) error {
+	var body map[string]interface{}
+	if err := json.Unmarshal([]byte(tc.respBody), &body); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	val, ok := body[key]
+	if !ok {
+		return fmt.Errorf("key %q not found in response", key)
+	}
+	// JSON numbers are float64.
+	num, ok := val.(float64)
+	if !ok {
+		return fmt.Errorf("expected number for %q, got %T", key, val)
+	}
+	if int(num) != expected {
+		return fmt.Errorf("expected %s=%d, got %v", key, expected, num)
+	}
+	return nil
+}
+
+func (tc *testContext) theJSONResponseStringShouldBe(key, expected string) error {
+	var body map[string]interface{}
+	if err := json.Unmarshal([]byte(tc.respBody), &body); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	val, ok := body[key]
+	if !ok {
+		return fmt.Errorf("key %q not found in response", key)
+	}
+	str, ok := val.(string)
+	if !ok {
+		return fmt.Errorf("expected string for %q, got %T", key, val)
+	}
+	if str != expected {
+		return fmt.Errorf("expected %s=%q, got %q", key, expected, str)
+	}
+	return nil
+}
+
+func (tc *testContext) theJSONResponseShouldNotBeEmpty(key string) error {
+	var body map[string]interface{}
+	if err := json.Unmarshal([]byte(tc.respBody), &body); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	val, ok := body[key]
+	if !ok {
+		return fmt.Errorf("key %q not found in response", key)
+	}
+	str, ok := val.(string)
+	if !ok {
+		return fmt.Errorf("expected string for %q, got %T", key, val)
+	}
+	if str == "" {
+		return fmt.Errorf("expected %q to be non-empty", key)
+	}
+	return nil
+}
+
+func (tc *testContext) iSaveTheJSONResponseAs(key, saveKey string) error {
+	var body map[string]interface{}
+	if err := json.Unmarshal([]byte(tc.respBody), &body); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	val, ok := body[key]
+	if !ok {
+		return fmt.Errorf("key %q not found in response", key)
+	}
+	str, ok := val.(string)
+	if !ok {
+		return fmt.Errorf("expected string for %q, got %T", key, val)
+	}
+	tc.savedValues[saveKey] = str
+	return nil
+}
+
 // --- Helpers ---
 
 func contains(s, substr string) bool {
@@ -319,6 +532,25 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^there should be (\d+) repositories$`, tc.thereShouldBeNRepositories)
 	ctx.Step(`^the list should contain "([^"]*)"$`, tc.theListShouldContain)
 	ctx.Step(`^a plain directory "([^"]*)" exists in the repo root$`, tc.aPlainDirectoryExistsInTheRepoRoot)
+
+	// Auth steps
+	ctx.Step(`^the server is running with auth disabled$`, tc.theServerIsRunningWithAuthDisabled)
+	ctx.Step(`^the server is running with auth enabled$`, tc.theServerIsRunningWithAuthEnabled)
+	ctx.Step(`^a token is issued for user "([^"]*)" with roles "([^"]*)"$`, tc.aTokenIsIssuedForUserWithRoles)
+	ctx.Step(`^I request "([^"]*)" without a token$`, tc.iRequestWithoutAToken)
+	ctx.Step(`^I request "([^"]*)" with that token$`, tc.iRequestWithThatToken)
+	ctx.Step(`^I request "([^"]*)" with token "([^"]*)"$`, tc.iRequestWithToken)
+	ctx.Step(`^that token is revoked$`, tc.thatTokenIsRevoked)
+
+	// API steps
+	ctx.Step(`^I GET "([^"]*)"$`, tc.iGET)
+	ctx.Step(`^I POST "([^"]*)" with body '([^']*)'$`, tc.iPOSTWithBody)
+	ctx.Step(`^I DELETE "([^"]*)"$`, tc.iDELETE)
+	ctx.Step(`^I DELETE "([^"]*)" with saved token "([^"]*)"$`, tc.iDELETEWithSavedToken)
+	ctx.Step(`^the JSON response "([^"]*)" should be (\d+)$`, tc.theJSONResponseShouldBe)
+	ctx.Step(`^the JSON response "([^"]*)" should be "([^"]*)"$`, tc.theJSONResponseStringShouldBe)
+	ctx.Step(`^the JSON response "([^"]*)" should not be empty$`, tc.theJSONResponseShouldNotBeEmpty)
+	ctx.Step(`^I save the JSON response "([^"]*)" as "([^"]*)"$`, tc.iSaveTheJSONResponseAs)
 }
 
 func TestFeatures(t *testing.T) {

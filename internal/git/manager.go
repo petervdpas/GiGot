@@ -56,3 +56,12 @@ func (m *Manager) Exists(name string) bool {
 	_, err := os.Stat(m.RepoPath(name))
 	return err == nil
 }
+
+// Delete removes a repository from disk.
+func (m *Manager) Delete(name string) error {
+	path := m.RepoPath(name)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return fmt.Errorf("repository %q does not exist", name)
+	}
+	return os.RemoveAll(path)
+}

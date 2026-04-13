@@ -27,7 +27,7 @@ GiGot is configured via a `gigot.json` file:
 ```json
 {
   "server": {
-    "host": "0.0.0.0",
+    "host": "127.0.0.1",
     "port": 3417
   },
   "storage": {

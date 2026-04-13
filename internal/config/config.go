@@ -41,7 +41,7 @@ type LoggingConfig struct {
 func Defaults() *Config {
 	return &Config{
 		Server: ServerConfig{
-			Host: "0.0.0.0",
+			Host: "127.0.0.1",
 			Port: 3417,
 		},
 		Storage: StorageConfig{

@@ -9,60 +9,75 @@ import (
 	"github.com/petervdpas/GiGot/internal/auth"
 	"github.com/petervdpas/GiGot/internal/config"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
+
+	httpSwagger "github.com/swaggo/http-swagger"
+
+	// Import generated docs.
+	_ "github.com/petervdpas/GiGot/docs"
 )
 
 // Server is the GiGot HTTP server.
 type Server struct {
-	cfg     *config.Config
-	git     *gitmanager.Manager
-	auth    *auth.Provider
-	mux     *http.ServeMux
+	cfg           *config.Config
+	git           *gitmanager.Manager
+	auth          *auth.Provider
+	tokenStrategy *auth.TokenStrategy
+	mux           *http.ServeMux
 }
 
 // New creates a new Server instance.
 func New(cfg *config.Config) *Server {
+	ap := auth.NewProvider()
+	ap.SetEnabled(cfg.Auth.Enabled)
+
+	ts := auth.NewTokenStrategy()
+	ap.Register(ts)
+
 	s := &Server{
-		cfg:  cfg,
-		git:  gitmanager.NewManager(cfg.Storage.RepoRoot),
-		auth: auth.NewProvider(),
-		mux:  http.NewServeMux(),
+		cfg:           cfg,
+		git:           gitmanager.NewManager(cfg.Storage.RepoRoot),
+		auth:          ap,
+		tokenStrategy: ts,
+		mux:           http.NewServeMux(),
 	}
 	s.routes()
 	return s
 }
 
-// Handler returns the HTTP handler for use in tests.
+// Auth returns the auth provider for registration of strategies.
+func (s *Server) Auth() *auth.Provider {
+	return s.auth
+}
+
+// TokenStrategy returns the token strategy for external token management.
+func (s *Server) TokenStrategy() *auth.TokenStrategy {
+	return s.tokenStrategy
+}
+
+// Handler returns the HTTP handler (with auth middleware) for use in tests.
 func (s *Server) Handler() http.Handler {
-	return s.mux
+	return s.auth.Middleware(s.mux)
 }
 
 // Start begins listening for HTTP requests.
 func (s *Server) Start() error {
 	addr := fmt.Sprintf("%s:%d", s.cfg.Server.Host, s.cfg.Server.Port)
-	return http.ListenAndServe(addr, s.mux)
+	return http.ListenAndServe(addr, s.Handler())
 }
 
 // routes registers all HTTP handlers.
 func (s *Server) routes() {
+	// Pages
 	s.mux.HandleFunc("/", s.handleIndex)
+
+	// Swagger
+	s.mux.Handle("/swagger/", httpSwagger.WrapHandler)
+
+	// API
 	s.mux.HandleFunc("/api/health", s.handleHealth)
 	s.mux.HandleFunc("/api/repos", s.handleRepos)
 	s.mux.HandleFunc("/api/repos/", s.handleRepo)
-}
-
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ok"}`))
-}
-
-func (s *Server) handleRepos(w http.ResponseWriter, r *http.Request) {
-	// TODO: list repos, create repo
-	http.Error(w, "not implemented", http.StatusNotImplemented)
-}
-
-func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
-	// TODO: repo details, git smart HTTP transport
-	http.Error(w, "not implemented", http.StatusNotImplemented)
+	s.mux.HandleFunc("/api/auth/token", s.handleToken)
 }
 
 var indexTmpl = template.Must(template.New("index").Parse(`<!DOCTYPE html>
@@ -97,6 +112,7 @@ var indexTmpl = template.Must(template.New("index").Parse(`<!DOCTYPE html>
     <div><span>Repo root:</span> {{.RepoRoot}}</div>
     <div><span>Repos:</span> {{.RepoCount}}</div>
     <div><span>Go:</span> {{.GoVersion}}</div>
+    <div><a href="/swagger/index.html">API Documentation</a></div>
   </div>
 </div>
 </body>
