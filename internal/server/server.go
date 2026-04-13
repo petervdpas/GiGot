@@ -76,8 +76,11 @@ func (s *Server) routes() {
 	// API
 	s.mux.HandleFunc("/api/health", s.handleHealth)
 	s.mux.HandleFunc("/api/repos", s.handleRepos)
-	s.mux.HandleFunc("/api/repos/", s.handleRepo)
+	s.mux.HandleFunc("/api/repos/", s.handleRepoRouter)
 	s.mux.HandleFunc("/api/auth/token", s.handleToken)
+
+	// Git smart HTTP transport
+	s.mux.HandleFunc("/git/", s.handleGitRouter)
 }
 
 var indexTmpl = template.Must(template.New("index").Parse(`<!DOCTYPE html>

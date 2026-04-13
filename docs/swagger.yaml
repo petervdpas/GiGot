@@ -1,5 +1,25 @@
 basePath: /api
 definitions:
+  git.BranchInfo:
+    properties:
+      active:
+        type: boolean
+      head:
+        type: string
+      name:
+        type: string
+    type: object
+  git.LogEntry:
+    properties:
+      author:
+        type: string
+      date:
+        type: string
+      hash:
+        type: string
+      message:
+        type: string
+    type: object
   server.ErrorResponse:
     properties:
       error:
@@ -36,6 +56,32 @@ definitions:
         items:
           $ref: '#/definitions/server.RepoInfo'
         type: array
+    type: object
+  server.RepoLogResponse:
+    properties:
+      count:
+        example: 5
+        type: integer
+      entries:
+        items:
+          $ref: '#/definitions/git.LogEntry'
+        type: array
+      name:
+        example: my-templates
+        type: string
+    type: object
+  server.RepoStatusResponse:
+    properties:
+      branches:
+        items:
+          $ref: '#/definitions/git.BranchInfo'
+        type: array
+      empty:
+        example: false
+        type: boolean
+      name:
+        example: my-templates
+        type: string
     type: object
   server.RevokeTokenRequest:
     properties:
@@ -169,6 +215,93 @@ paths:
       summary: Issue or revoke API tokens
       tags:
       - auth
+  /git/{name}.git/git-receive-pack:
+    post:
+      consumes:
+      - application/octet-stream
+      description: Git smart HTTP protocol — receives packfile data for push operations
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Git push
+      tags:
+      - git
+  /git/{name}.git/git-upload-pack:
+    post:
+      consumes:
+      - application/octet-stream
+      description: Git smart HTTP protocol — serves packfile data for clone and fetch
+        operations
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Git clone/fetch
+      tags:
+      - git
+  /git/{name}.git/info/refs:
+    get:
+      description: Git smart HTTP protocol — advertise refs for clone/fetch/push
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: git-upload-pack or git-receive-pack
+        in: query
+        name: service
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Git refs discovery
+      tags:
+      - git
   /health:
     get:
       description: Returns server health status
@@ -308,6 +441,88 @@ paths:
       summary: Get or delete a repository
       tags:
       - repos
+  /repos/{name}/branches:
+    get:
+      description: Returns all branches in a repository
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/git.BranchInfo'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List branches
+      tags:
+      - sync
+  /repos/{name}/log:
+    get:
+      description: Returns recent commits from a repository
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      - default: 20
+        description: Max number of commits
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.RepoLogResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Commit log
+      tags:
+      - sync
+  /repos/{name}/status:
+    get:
+      description: Returns branches and status of a repository
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.RepoStatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Repository status
+      tags:
+      - sync
 securityDefinitions:
   BearerAuth:
     description: 'Enter your bearer token as: Bearer <token>'

@@ -1,0 +1,38 @@
+package server
+
+import (
+	"net/http"
+	"strings"
+)
+
+// handleRepoRouter dispatches /api/repos/* to the appropriate handler.
+func (s *Server) handleRepoRouter(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/repos/")
+
+	switch {
+	case strings.HasSuffix(path, "/status"):
+		s.handleRepoStatus(w, r)
+	case strings.HasSuffix(path, "/branches"):
+		s.handleRepoBranches(w, r)
+	case strings.HasSuffix(path, "/log"):
+		s.handleRepoLog(w, r)
+	default:
+		s.handleRepo(w, r)
+	}
+}
+
+// handleGitRouter dispatches /git/* to the appropriate git protocol handler.
+func (s *Server) handleGitRouter(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+
+	switch {
+	case strings.HasSuffix(path, "/info/refs"):
+		s.handleGitInfoRefs(w, r)
+	case strings.HasSuffix(path, "/git-upload-pack"):
+		s.handleGitUploadPack(w, r)
+	case strings.HasSuffix(path, "/git-receive-pack"):
+		s.handleGitReceivePack(w, r)
+	default:
+		http.NotFound(w, r)
+	}
+}
