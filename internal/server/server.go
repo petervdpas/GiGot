@@ -31,6 +31,11 @@ func New(cfg *config.Config) *Server {
 	return s
 }
 
+// Handler returns the HTTP handler for use in tests.
+func (s *Server) Handler() http.Handler {
+	return s.mux
+}
+
 // Start begins listening for HTTP requests.
 func (s *Server) Start() error {
 	addr := fmt.Sprintf("%s:%d", s.cfg.Server.Host, s.cfg.Server.Port)
