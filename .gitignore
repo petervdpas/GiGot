@@ -8,6 +8,10 @@ gigot.json
 # Repositories managed by GiGot
 repos/
 
+# Encrypted state: server keypair + sealed clients/tokens/admins.
+# Irrecoverable if lost — back it up separately, do not commit it.
+data/
+
 # IDE
 .vscode/
 .idea/

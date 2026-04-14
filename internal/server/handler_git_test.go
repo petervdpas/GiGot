@@ -16,7 +16,7 @@ func TestGitInfoRefsUploadPack(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/git/test-repo.git/info/refs?service=git-upload-pack", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
@@ -40,7 +40,7 @@ func TestGitInfoRefsReceivePack(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/git/test-repo.git/info/refs?service=git-receive-pack", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
@@ -59,7 +59,7 @@ func TestGitInfoRefsInvalidService(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/git/test-repo.git/info/refs?service=invalid", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
@@ -72,7 +72,7 @@ func TestGitInfoRefsNotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/git/nope.git/info/refs?service=git-upload-pack", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
@@ -91,7 +91,7 @@ func TestGitCloneIntegration(t *testing.T) {
 	run(t, "git", "-C", tmpWork+"/work", "push", "origin", "master")
 
 	// Start test server.
-	ts := httptest.NewServer(srv.mux)
+	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
 	// Clone over HTTP from GiGot.
@@ -117,7 +117,7 @@ func TestGitPushIntegration(t *testing.T) {
 	srv := testServer(t)
 	srv.git.InitBare("push-test")
 
-	ts := httptest.NewServer(srv.mux)
+	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
 	// Clone the empty repo.

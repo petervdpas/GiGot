@@ -19,6 +19,7 @@ import (
 	"github.com/petervdpas/GiGot/internal/config"
 	"github.com/petervdpas/GiGot/internal/crypto"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
+	"github.com/petervdpas/GiGot/internal/policy"
 	"github.com/petervdpas/GiGot/internal/server"
 )
 
@@ -307,6 +308,14 @@ func (tc *testContext) theServerIsRunningWithAuthDisabled() error {
 
 func (tc *testContext) theServerIsRunningWithAuthEnabled() error {
 	return tc.startServerWithAuth(true)
+}
+
+func (tc *testContext) thePolicyIsDenyAll() error {
+	if tc.srv == nil {
+		return fmt.Errorf("server must be running")
+	}
+	tc.srv.SetPolicy(policy.DenyAll{})
+	return nil
 }
 
 func (tc *testContext) aTokenIsIssuedForUser(username string) error {
@@ -743,6 +752,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the server is running with auth disabled$`, tc.theServerIsRunningWithAuthDisabled)
 	ctx.Step(`^the server is running with auth enabled$`, tc.theServerIsRunningWithAuthEnabled)
 	ctx.Step(`^a token is issued for user "([^"]*)"$`, tc.aTokenIsIssuedForUser)
+	ctx.Step(`^the policy is deny-all$`, tc.thePolicyIsDenyAll)
 	ctx.Step(`^I request "([^"]*)" without a token$`, tc.iRequestWithoutAToken)
 	ctx.Step(`^I request "([^"]*)" with that token$`, tc.iRequestWithThatToken)
 	ctx.Step(`^I request "([^"]*)" with token "([^"]*)"$`, tc.iRequestWithToken)

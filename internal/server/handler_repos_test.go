@@ -13,7 +13,7 @@ func TestListReposEmpty(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/repos", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
@@ -34,7 +34,7 @@ func TestListReposWithEntries(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/repos", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	var body RepoListResponse
 	json.Unmarshal(rec.Body.Bytes(), &body)
@@ -49,7 +49,7 @@ func TestCreateRepo(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/repos", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Errorf("expected 201, got %d", rec.Code)
@@ -66,7 +66,7 @@ func TestCreateRepoEmptyName(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/repos", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
@@ -81,7 +81,7 @@ func TestCreateRepoDuplicate(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/repos", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409, got %d", rec.Code)
@@ -93,7 +93,7 @@ func TestCreateRepoInvalidBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/repos", bytes.NewBufferString("not json"))
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
@@ -107,7 +107,7 @@ func TestGetRepo(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/repos/my-repo", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
@@ -125,7 +125,7 @@ func TestGetRepoNotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/repos/nonexistent", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
@@ -139,7 +139,7 @@ func TestDeleteRepo(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/repos/doomed", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNoContent {
 		t.Errorf("expected 204, got %d", rec.Code)
@@ -155,7 +155,7 @@ func TestDeleteRepoNotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/repos/ghost", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
@@ -167,7 +167,7 @@ func TestReposMethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/repos", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("expected 405, got %d", rec.Code)
@@ -179,7 +179,7 @@ func TestRepoMethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/repos/something", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("expected 405, got %d", rec.Code)

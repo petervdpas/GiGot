@@ -103,10 +103,22 @@ func (p *Provider) Authenticate(r *http.Request) (*Identity, error) {
 	return nil, ErrNoCredentials
 }
 
-// Middleware wraps an http.Handler with authentication checks.
+// Middleware wraps an http.Handler with authentication checks. It also
+// attaches an Identity to the request context on successful auth, so
+// downstream policy checks can read it.
+//
+// When authentication is disabled globally, a sentinel "auth-disabled"
+// Identity is attached instead, so policy evaluators treat the request as
+// authenticated. This keeps dev mode usable without leaking Identity:nil
+// through to handlers that expect to evaluate a policy.
 func (p *Provider) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !p.enabled || p.isPublic(r.URL.Path) {
+		if !p.enabled {
+			ctx := context.WithValue(r.Context(), identityKey, authDisabledIdentity)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+		if p.isPublic(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -120,6 +132,15 @@ func (p *Provider) Middleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), identityKey, id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// authDisabledIdentity is injected when Provider.enabled is false. It is a
+// stable sentinel so tests can assert on it. Handlers should not special-case
+// it — policy evaluators already handle authenticated callers.
+var authDisabledIdentity = &Identity{
+	ID:       "auth-disabled",
+	Username: "auth-disabled",
+	Provider: "auth-disabled",
 }
 
 // IdentityFromContext retrieves the authenticated Identity from the request context.

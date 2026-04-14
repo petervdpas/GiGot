@@ -14,7 +14,7 @@ func TestRepoStatusEmpty(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/repos/status-test/status", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
@@ -35,7 +35,7 @@ func TestRepoStatusNotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/repos/ghost/status", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
@@ -49,7 +49,7 @@ func TestRepoBranchesEmpty(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/repos/branch-test/branches", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
@@ -61,7 +61,7 @@ func TestRepoBranchesNotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/repos/ghost/branches", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
@@ -75,7 +75,7 @@ func TestRepoLogEmpty(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/repos/log-test/log", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
@@ -93,7 +93,7 @@ func TestRepoLogNotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/repos/ghost/log", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
@@ -114,7 +114,7 @@ func TestRepoLogWithCommits(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/repos/log-commits/log", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)

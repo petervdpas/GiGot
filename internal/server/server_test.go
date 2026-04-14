@@ -26,7 +26,7 @@ func TestIndexPage(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
@@ -54,7 +54,7 @@ func TestIndexPageShowsRepoCount(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	body := rec.Body.String()
 	if !strings.Contains(body, "2") {
@@ -67,7 +67,7 @@ func TestIndexPageLinksToSwagger(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if !strings.Contains(rec.Body.String(), "/swagger/") {
 		t.Error("index page should link to swagger docs")
@@ -79,7 +79,7 @@ func TestNotFoundForUnknownPaths(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)

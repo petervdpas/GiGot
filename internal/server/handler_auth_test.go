@@ -14,7 +14,7 @@ func TestIssueToken(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Errorf("expected 201, got %d", rec.Code)
@@ -36,7 +36,7 @@ func TestIssueTokenEmptyUsername(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
@@ -48,7 +48,7 @@ func TestIssueTokenInvalidBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString("nope"))
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
@@ -65,7 +65,7 @@ func TestRevokeToken(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/auth/token", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
@@ -84,7 +84,7 @@ func TestRevokeTokenNotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/auth/token", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
@@ -97,7 +97,7 @@ func TestRevokeTokenEmptyToken(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/auth/token", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
@@ -109,7 +109,7 @@ func TestTokenMethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/token", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("expected 405, got %d", rec.Code)

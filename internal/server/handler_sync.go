@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
+	"github.com/petervdpas/GiGot/internal/policy"
 )
 
 // RepoStatusResponse describes the current state of a repository.
@@ -36,6 +37,9 @@ func (s *Server) handleRepoStatus(w http.ResponseWriter, r *http.Request) {
 	name := s.extractRepoSubPath(r.URL.Path, "/status")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "repository name is required")
+		return
+	}
+	if !s.requireAllow(w, r, policy.ActionReadRepo, name) {
 		return
 	}
 
@@ -69,6 +73,9 @@ func (s *Server) handleRepoBranches(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "repository name is required")
 		return
 	}
+	if !s.requireAllow(w, r, policy.ActionReadRepo, name) {
+		return
+	}
 
 	if !s.git.Exists(name) {
 		writeError(w, http.StatusNotFound, "repository not found")
@@ -99,6 +106,9 @@ func (s *Server) handleRepoLog(w http.ResponseWriter, r *http.Request) {
 	name := s.extractRepoSubPath(r.URL.Path, "/log")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "repository name is required")
+		return
+	}
+	if !s.requireAllow(w, r, policy.ActionReadRepo, name) {
 		return
 	}
 

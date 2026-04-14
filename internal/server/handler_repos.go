@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/petervdpas/GiGot/internal/policy"
 )
 
 // handleRepos godoc
@@ -32,6 +34,9 @@ func (s *Server) handleRepos(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listRepos(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAllow(w, r, policy.ActionReadRepo, "") {
+		return
+	}
 	names, err := s.git.List()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -53,6 +58,9 @@ func (s *Server) listRepos(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAllow(w, r, policy.ActionManageRepos, "") {
+		return
+	}
 	var req CreateRepoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -96,15 +104,18 @@ func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		s.getRepo(w, name)
+		s.getRepo(w, r, name)
 	case http.MethodDelete:
-		s.deleteRepo(w, name)
+		s.deleteRepo(w, r, name)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
-func (s *Server) getRepo(w http.ResponseWriter, name string) {
+func (s *Server) getRepo(w http.ResponseWriter, r *http.Request, name string) {
+	if !s.requireAllow(w, r, policy.ActionReadRepo, name) {
+		return
+	}
 	if !s.git.Exists(name) {
 		writeError(w, http.StatusNotFound, "repository not found")
 		return
@@ -116,7 +127,10 @@ func (s *Server) getRepo(w http.ResponseWriter, name string) {
 	})
 }
 
-func (s *Server) deleteRepo(w http.ResponseWriter, name string) {
+func (s *Server) deleteRepo(w http.ResponseWriter, r *http.Request, name string) {
+	if !s.requireAllow(w, r, policy.ActionManageRepos, name) {
+		return
+	}
 	if err := s.git.Delete(name); err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
 		return

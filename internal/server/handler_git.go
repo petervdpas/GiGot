@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+
+	"github.com/petervdpas/GiGot/internal/policy"
 )
 
 // handleGit handles the git smart HTTP protocol.
@@ -44,8 +46,17 @@ func (s *Server) handleGitInfoRefs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	service := r.URL.Query().Get("service")
-	if service != "git-upload-pack" && service != "git-receive-pack" {
+	var act policy.Action
+	switch service {
+	case "git-upload-pack":
+		act = policy.ActionReadRepo
+	case "git-receive-pack":
+		act = policy.ActionWriteRepo
+	default:
 		writeError(w, http.StatusBadRequest, "invalid service")
+		return
+	}
+	if !s.requireAllow(w, r, act, name) {
 		return
 	}
 
@@ -104,6 +115,14 @@ func (s *Server) handleGitService(w http.ResponseWriter, r *http.Request, servic
 	name, err := s.extractGitRepoName(r.URL.Path, suffix)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	act := policy.ActionReadRepo
+	if service == "receive-pack" {
+		act = policy.ActionWriteRepo
+	}
+	if !s.requireAllow(w, r, act, name) {
 		return
 	}
 

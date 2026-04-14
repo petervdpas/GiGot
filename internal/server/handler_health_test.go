@@ -12,7 +12,7 @@ func TestHealthReturnsOK(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
@@ -32,7 +32,7 @@ func TestHealthContentType(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	rec := httptest.NewRecorder()
 
-	srv.mux.ServeHTTP(rec, req)
+	srv.Handler().ServeHTTP(rec, req)
 
 	ct := rec.Header().Get("Content-Type")
 	if ct != "application/json" {

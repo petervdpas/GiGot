@@ -16,6 +16,7 @@ import (
 	"github.com/petervdpas/GiGot/internal/config"
 	"github.com/petervdpas/GiGot/internal/crypto"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
+	"github.com/petervdpas/GiGot/internal/policy"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 
@@ -33,6 +34,7 @@ type Server struct {
 	encryptor       *crypto.Encryptor
 	clients         *clients.Store
 	admins          *admins.Store
+	policy          policy.Evaluator
 	mux             *http.ServeMux
 }
 
@@ -95,11 +97,16 @@ func New(cfg *config.Config) *Server {
 		encryptor:       enc,
 		clients:         clientStore,
 		admins:          adminStore,
+		policy:          policy.AllowAuthenticated{},
 		mux:             http.NewServeMux(),
 	}
 	s.routes()
 	return s
 }
+
+// SetPolicy replaces the authorisation evaluator. Used by tests and future
+// per-deployment configuration.
+func (s *Server) SetPolicy(p policy.Evaluator) { s.policy = p }
 
 // Admins returns the admin store (used by CLI tools like --add-admin).
 func (s *Server) Admins() *admins.Store { return s.admins }
