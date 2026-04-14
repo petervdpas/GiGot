@@ -29,10 +29,6 @@ definitions:
     type: object
   server.AdminLoginResponse:
     properties:
-      roles:
-        items:
-          type: string
-        type: array
       username:
         type: string
     type: object
@@ -129,10 +125,6 @@ definitions:
     type: object
   server.TokenListItem:
     properties:
-      roles:
-        items:
-          type: string
-        type: array
       token:
         type: string
       username:
@@ -149,26 +141,12 @@ definitions:
     type: object
   server.TokenRequest:
     properties:
-      roles:
-        example:
-        - admin
-        - reader
-        items:
-          type: string
-        type: array
       username:
         example: alice
         type: string
     type: object
   server.TokenResponse:
     properties:
-      roles:
-        example:
-        - admin
-        - reader
-        items:
-          type: string
-        type: array
       token:
         example: a1b2c3d4...
         type: string

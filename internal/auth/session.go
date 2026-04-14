@@ -17,7 +17,6 @@ const SessionCookieName = "gigot_session"
 type Session struct {
 	ID        string
 	Username  string
-	Roles     []string
 	ExpiresAt time.Time
 }
 
@@ -67,13 +66,12 @@ func (s *SessionStrategy) Authenticate(r *http.Request) (*Identity, error) {
 	return &Identity{
 		ID:       sess.Username,
 		Username: sess.Username,
-		Roles:    sess.Roles,
 		Provider: s.Name(),
 	}, nil
 }
 
-// Create mints a new session for the given username/roles and returns it.
-func (s *SessionStrategy) Create(username string, roles []string) (*Session, error) {
+// Create mints a new session for the given username and returns it.
+func (s *SessionStrategy) Create(username string) (*Session, error) {
 	id, err := generateSessionID()
 	if err != nil {
 		return nil, err
@@ -81,7 +79,6 @@ func (s *SessionStrategy) Create(username string, roles []string) (*Session, err
 	sess := &Session{
 		ID:        id,
 		Username:  username,
-		Roles:     roles,
 		ExpiresAt: time.Now().Add(s.ttl),
 	}
 	s.mu.Lock()

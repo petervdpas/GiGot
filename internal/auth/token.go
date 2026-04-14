@@ -11,9 +11,8 @@ import (
 
 // TokenEntry is a stored API token with its associated identity.
 type TokenEntry struct {
-	Token    string   `json:"token"`
-	Username string   `json:"username"`
-	Roles    []string `json:"roles"`
+	Token    string `json:"token"`
+	Username string `json:"username"`
 }
 
 // TokenPersister persists the token set to durable storage. Set via
@@ -102,13 +101,12 @@ func (s *TokenStrategy) Authenticate(r *http.Request) (*Identity, error) {
 	return &Identity{
 		ID:       entry.Username,
 		Username: entry.Username,
-		Roles:    entry.Roles,
 		Provider: s.Name(),
 	}, nil
 }
 
-// Issue creates and stores a new token for the given username and roles.
-func (s *TokenStrategy) Issue(username string, roles []string) (string, error) {
+// Issue creates and stores a new token for the given username.
+func (s *TokenStrategy) Issue(username string) (string, error) {
 	token, err := generateToken(32)
 	if err != nil {
 		return "", fmt.Errorf("generating token: %w", err)
@@ -117,7 +115,6 @@ func (s *TokenStrategy) Issue(username string, roles []string) (string, error) {
 	entry := &TokenEntry{
 		Token:    token,
 		Username: username,
-		Roles:    roles,
 	}
 
 	s.mu.Lock()

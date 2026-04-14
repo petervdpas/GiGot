@@ -34,15 +34,13 @@ type ErrorResponse struct {
 
 // TokenRequest is the body for issuing a token.
 type TokenRequest struct {
-	Username string   `json:"username" example:"alice"`
-	Roles    []string `json:"roles" example:"admin,reader"`
+	Username string `json:"username" example:"alice"`
 }
 
 // TokenResponse is returned when a token is issued.
 type TokenResponse struct {
-	Token    string   `json:"token" example:"a1b2c3d4..."`
-	Username string   `json:"username" example:"alice"`
-	Roles    []string `json:"roles" example:"admin,reader"`
+	Token    string `json:"token" example:"a1b2c3d4..."`
+	Username string `json:"username" example:"alice"`
 }
 
 // RevokeTokenRequest is the body for revoking a token.
@@ -77,15 +75,13 @@ type AdminLoginRequest struct {
 
 // AdminLoginResponse confirms a successful admin login.
 type AdminLoginResponse struct {
-	Username string   `json:"username"`
-	Roles    []string `json:"roles"`
+	Username string `json:"username"`
 }
 
 // TokenListItem describes one issued token in an admin listing.
 type TokenListItem struct {
-	Token    string   `json:"token"`
-	Username string   `json:"username"`
-	Roles    []string `json:"roles"`
+	Token    string `json:"token"`
+	Username string `json:"username"`
 }
 
 // TokenListResponse is the body of GET /api/admin/tokens.

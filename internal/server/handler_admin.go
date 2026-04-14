@@ -41,7 +41,7 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sess, err := s.sessionStrategy.Create(a.Username, a.Roles)
+	sess, err := s.sessionStrategy.Create(a.Username)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -58,7 +58,6 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	})
 	writeJSON(w, http.StatusOK, AdminLoginResponse{
 		Username: a.Username,
-		Roles:    a.Roles,
 	})
 }
 
@@ -137,7 +136,6 @@ func (s *Server) adminListTokens(w http.ResponseWriter, _ *http.Request) {
 		items = append(items, TokenListItem{
 			Token:    e.Token,
 			Username: e.Username,
-			Roles:    e.Roles,
 		})
 	}
 	writeJSON(w, http.StatusOK, TokenListResponse{
@@ -163,7 +161,6 @@ func (s *Server) handleAdminSession(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, AdminLoginResponse{
 		Username: id.Username,
-		Roles:    id.Roles,
 	})
 }
 

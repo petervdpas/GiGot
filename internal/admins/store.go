@@ -22,7 +22,6 @@ var (
 type Admin struct {
 	Username     string    `json:"username"`
 	PasswordHash string    `json:"password_hash"`
-	Roles        []string  `json:"roles"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -78,7 +77,7 @@ func (s *Store) persist() error {
 }
 
 // Put creates or overwrites an admin. Password is hashed with bcrypt.
-func (s *Store) Put(username, password string, roles []string) (*Admin, error) {
+func (s *Store) Put(username, password string) (*Admin, error) {
 	if username == "" {
 		return nil, fmt.Errorf("admins: username required")
 	}
@@ -92,7 +91,6 @@ func (s *Store) Put(username, password string, roles []string) (*Admin, error) {
 	a := &Admin{
 		Username:     username,
 		PasswordHash: string(hash),
-		Roles:        roles,
 		CreatedAt:    time.Now().UTC(),
 	}
 

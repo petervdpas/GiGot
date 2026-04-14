@@ -309,12 +309,8 @@ func (tc *testContext) theServerIsRunningWithAuthEnabled() error {
 	return tc.startServerWithAuth(true)
 }
 
-func (tc *testContext) aTokenIsIssuedForUserWithRoles(username, roles string) error {
-	roleList := strings.Split(roles, ",")
-	for i := range roleList {
-		roleList[i] = strings.TrimSpace(roleList[i])
-	}
-	token, err := tc.tokenStrategy.Issue(username, roleList)
+func (tc *testContext) aTokenIsIssuedForUser(username string) error {
+	token, err := tc.tokenStrategy.Issue(username)
 	if err != nil {
 		return err
 	}
@@ -531,7 +527,7 @@ func (tc *testContext) anAdminExistsWithPassword(username, password string) erro
 	if tc.srv == nil {
 		return fmt.Errorf("server must be running")
 	}
-	_, err := tc.srv.Admins().Put(username, password, []string{"admin"})
+	_, err := tc.srv.Admins().Put(username, password)
 	return err
 }
 
@@ -746,7 +742,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	// Auth steps
 	ctx.Step(`^the server is running with auth disabled$`, tc.theServerIsRunningWithAuthDisabled)
 	ctx.Step(`^the server is running with auth enabled$`, tc.theServerIsRunningWithAuthEnabled)
-	ctx.Step(`^a token is issued for user "([^"]*)" with roles "([^"]*)"$`, tc.aTokenIsIssuedForUserWithRoles)
+	ctx.Step(`^a token is issued for user "([^"]*)"$`, tc.aTokenIsIssuedForUser)
 	ctx.Step(`^I request "([^"]*)" without a token$`, tc.iRequestWithoutAToken)
 	ctx.Step(`^I request "([^"]*)" with that token$`, tc.iRequestWithThatToken)
 	ctx.Step(`^I request "([^"]*)" with token "([^"]*)"$`, tc.iRequestWithToken)

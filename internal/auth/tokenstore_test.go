@@ -42,8 +42,8 @@ func TestSealedTokenStore_RoundTrip(t *testing.T) {
 	s, _ := NewSealedTokenStore(path, enc)
 
 	in := []*TokenEntry{
-		{Token: "t1", Username: "alice", Roles: []string{"admin"}},
-		{Token: "t2", Username: "bob", Roles: []string{"reader"}},
+		{Token: "t1", Username: "alice"},
+		{Token: "t2", Username: "bob"},
 	}
 	if err := s.SaveTokens(in); err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func TestTokenStrategy_PersistsAcrossRestart(t *testing.T) {
 	if err := s1.SetPersister(store1); err != nil {
 		t.Fatal(err)
 	}
-	token, err := s1.Issue("alice", []string{"admin"})
+	token, err := s1.Issue("alice")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestTokenStrategy_RevokeSurvivesRestart(t *testing.T) {
 	store, _ := NewSealedTokenStore(path, enc)
 	s := NewTokenStrategy()
 	_ = s.SetPersister(store)
-	token, _ := s.Issue("alice", nil)
+	token, _ := s.Issue("alice")
 	if !s.Revoke(token) {
 		t.Fatal("revoke returned false")
 	}

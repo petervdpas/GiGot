@@ -56,7 +56,7 @@ go build -o gigot .
 ./gigot --add-admin alice
 # Password for alice:
 # Confirm password:
-# → Admin "alice" saved (roles: [admin])
+# → Admin "alice" saved
 
 # 4. Run the server
 ./gigot
@@ -80,16 +80,12 @@ parsed via Go's standard `flag` package, so any order works.
 | `--config <path>`             | Path to a `gigot.json`. Defaults to `./gigot.json`. Missing file falls back to built-in defaults.             |
 | `--init`                      | Writes a default `gigot.json` into the current directory and exits. Will not overwrite by accident — you own the file. |
 | `--add-admin <username>`      | Creates (or overwrites) an admin account with the given username and exits. Prompts for a password on stdin. |
-| `--admin-roles <csv>`         | Roles to associate with `--add-admin`. Defaults to `admin`. Example: `--admin-roles admin,owner`.            |
 
 ### Examples
 
 ```bash
 # Generate a default config
 ./gigot --init
-
-# Add an admin with a custom role list
-./gigot --add-admin bob --admin-roles admin,operator
 
 # Run with a non-default config path
 ./gigot --config /etc/gigot/gigot.json
@@ -377,7 +373,7 @@ The account is stored in `data/admins.enc` (sealed), so it survives restarts.
 | ------ | ----------------------- | ------------------------------------------------------------------------------------- |
 | GET    | `/api/admin/session`    | Returns the current admin identity or 401. The page polls this on load.               |
 | GET    | `/api/admin/tokens`     | Lists every issued subscription key.                                                  |
-| POST   | `/api/admin/tokens`     | Issues a new subscription key. Body: `{ "username", "roles": [...] }`.                |
+| POST   | `/api/admin/tokens`     | Issues a new subscription key. Body: `{ "username" }`.                                |
 | DELETE | `/api/admin/tokens`     | Revokes a subscription key. Body: `{ "token": "<value>" }`.                            |
 
 The legacy unauthenticated `POST /api/auth/token` still exists for backward
@@ -531,8 +527,9 @@ login when you're already authenticated at the gateway.
   restart — admins re-log in. This is deliberate: it avoids persisting session
   tokens at all. It means the admin UI is not HA-friendly yet.
 - **Bearer tokens are opaque, not JWTs.** GiGot issues random 32-byte tokens
-  that are looked up server-side. They can be revoked. They do not carry claims;
-  roles are attached server-side and read from the sealed token store.
+  that are looked up server-side. They can be revoked. They do not carry claims.
+  GiGot is a git-repo proxy: a valid subscription key means "this client may
+  talk to the server." Per-repo access control is a planned follow-up.
 - **bcrypt cost.** `bcrypt.DefaultCost` (10) is used for admin passwords. Adjust
   in `internal/admins/store.go` if your hardware warrants it.
 - **NaCl box, not OpenPGP.** Despite occasional shorthand, the crypto used is

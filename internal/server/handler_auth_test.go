@@ -10,7 +10,7 @@ import (
 
 func TestIssueToken(t *testing.T) {
 	srv := testServer(t)
-	payload := `{"username":"alice","roles":["admin"]}`
+	payload := `{"username":"alice"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
 
@@ -59,7 +59,7 @@ func TestRevokeToken(t *testing.T) {
 	srv := testServer(t)
 
 	// Issue a token first.
-	token, _ := srv.tokenStrategy.Issue("bob", nil)
+	token, _ := srv.tokenStrategy.Issue("bob")
 
 	payload := `{"token":"` + token + `"}`
 	req := httptest.NewRequest(http.MethodDelete, "/api/auth/token", bytes.NewBufferString(payload))

@@ -1013,12 +1013,6 @@ const docTemplate = `{
         "server.AdminLoginResponse": {
             "type": "object",
             "properties": {
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "username": {
                     "type": "string"
                 }
@@ -1162,12 +1156,6 @@ const docTemplate = `{
         "server.TokenListItem": {
             "type": "object",
             "properties": {
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "token": {
                     "type": "string"
                 },
@@ -1193,16 +1181,6 @@ const docTemplate = `{
         "server.TokenRequest": {
             "type": "object",
             "properties": {
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "admin",
-                        "reader"
-                    ]
-                },
                 "username": {
                     "type": "string",
                     "example": "alice"
@@ -1212,16 +1190,6 @@ const docTemplate = `{
         "server.TokenResponse": {
             "type": "object",
             "properties": {
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "admin",
-                        "reader"
-                    ]
-                },
                 "token": {
                     "type": "string",
                     "example": "a1b2c3d4..."

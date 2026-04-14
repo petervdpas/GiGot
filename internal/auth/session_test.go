@@ -16,7 +16,7 @@ func TestSessionStrategyName(t *testing.T) {
 
 func TestSessionCreateAndAuthenticate(t *testing.T) {
 	s := NewSessionStrategy(time.Hour)
-	sess, err := s.Create("alice", []string{"admin"})
+	sess, err := s.Create("alice")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestSessionAuthenticate_BadCookie(t *testing.T) {
 
 func TestSessionExpiry(t *testing.T) {
 	s := NewSessionStrategy(10 * time.Millisecond)
-	sess, _ := s.Create("alice", nil)
+	sess, _ := s.Create("alice")
 
 	time.Sleep(20 * time.Millisecond)
 
@@ -65,7 +65,7 @@ func TestSessionExpiry(t *testing.T) {
 
 func TestSessionDestroy(t *testing.T) {
 	s := NewSessionStrategy(time.Hour)
-	sess, _ := s.Create("alice", nil)
+	sess, _ := s.Create("alice")
 	if !s.Destroy(sess.ID) {
 		t.Fatal("expected Destroy to return true")
 	}
@@ -78,7 +78,7 @@ func TestSessionIDUniqueness(t *testing.T) {
 	s := NewSessionStrategy(time.Hour)
 	seen := make(map[string]bool)
 	for i := 0; i < 100; i++ {
-		sess, err := s.Create("u", nil)
+		sess, err := s.Create("u")
 		if err != nil {
 			t.Fatal(err)
 		}

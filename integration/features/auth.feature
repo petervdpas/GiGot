@@ -15,7 +15,7 @@ Feature: Authentication
 
   Scenario: Valid token grants access
     Given the server is running with auth enabled
-    And a token is issued for user "alice" with roles "admin"
+    And a token is issued for user "alice"
     When I request "/api/health" with that token
     Then the response status should be 200
 
@@ -26,7 +26,7 @@ Feature: Authentication
 
   Scenario: Revoked token is rejected
     Given the server is running with auth enabled
-    And a token is issued for user "bob" with roles "reader"
+    And a token is issued for user "bob"
     And that token is revoked
     When I request "/api/health" with that token
     Then the response status should be 401

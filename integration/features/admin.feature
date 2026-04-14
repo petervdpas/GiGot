@@ -29,7 +29,7 @@ Feature: Admin subscription-key management
     And I GET "/api/admin/tokens"
     Then the JSON response "count" should be 0
 
-    When I POST "/api/admin/tokens" with body '{"username":"client-1","roles":["reader"]}'
+    When I POST "/api/admin/tokens" with body '{"username":"client-1"}'
     Then the response status should be 201
 
     When I GET "/api/admin/tokens"

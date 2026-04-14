@@ -14,7 +14,7 @@ func TestTokenStrategyName(t *testing.T) {
 
 func TestTokenIssueAndAuthenticate(t *testing.T) {
 	s := NewTokenStrategy()
-	token, err := s.Issue("alice", []string{"admin"})
+	token, err := s.Issue("alice")
 	if err != nil {
 		t.Fatalf("unexpected error issuing token: %v", err)
 	}
@@ -34,9 +34,6 @@ func TestTokenIssueAndAuthenticate(t *testing.T) {
 	}
 	if id.Provider != "token" {
 		t.Errorf("expected provider token, got %s", id.Provider)
-	}
-	if len(id.Roles) != 1 || id.Roles[0] != "admin" {
-		t.Errorf("expected roles [admin], got %v", id.Roles)
 	}
 }
 
@@ -74,7 +71,7 @@ func TestTokenAuthenticateInvalidToken(t *testing.T) {
 
 func TestTokenAuthenticateCaseInsensitiveBearer(t *testing.T) {
 	s := NewTokenStrategy()
-	token, _ := s.Issue("bob", nil)
+	token, _ := s.Issue("bob")
 
 	req := httptest.NewRequest("GET", "/", nil)
 	req.Header.Set("Authorization", "bearer "+token)
@@ -90,7 +87,7 @@ func TestTokenAuthenticateCaseInsensitiveBearer(t *testing.T) {
 
 func TestTokenRevoke(t *testing.T) {
 	s := NewTokenStrategy()
-	token, _ := s.Issue("alice", nil)
+	token, _ := s.Issue("alice")
 
 	if !s.Revoke(token) {
 		t.Error("expected revoke to return true for existing token")
@@ -117,7 +114,6 @@ func TestTokenLoad(t *testing.T) {
 	s.Load(&TokenEntry{
 		Token:    "preloaded-token-123",
 		Username: "service-account",
-		Roles:    []string{"reader"},
 	})
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -138,8 +134,8 @@ func TestTokenCount(t *testing.T) {
 		t.Errorf("expected 0, got %d", s.Count())
 	}
 
-	s.Issue("a", nil)
-	s.Issue("b", nil)
+	s.Issue("a")
+	s.Issue("b")
 	if s.Count() != 2 {
 		t.Errorf("expected 2, got %d", s.Count())
 	}
@@ -149,7 +145,7 @@ func TestTokenUniqueness(t *testing.T) {
 	s := NewTokenStrategy()
 	tokens := make(map[string]bool)
 	for i := 0; i < 100; i++ {
-		token, err := s.Issue("user", nil)
+		token, err := s.Issue("user")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

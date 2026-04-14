@@ -66,7 +66,6 @@ var adminPageTmpl = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
     <h2>Issue subscription key</h2>
     <form id="issue-form">
       <input name="username" placeholder="Client username" required>
-      <input name="roles" placeholder="Roles (comma-separated)" value="reader">
       <button type="submit">Issue key</button>
     </form>
     <div id="issue-msg" class="success"></div>
@@ -75,7 +74,7 @@ var adminPageTmpl = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
   <div class="card">
     <h2>Active subscription keys (<span id="count">0</span>)</h2>
     <table>
-      <thead><tr><th>Username</th><th>Roles</th><th>Token</th><th></th></tr></thead>
+      <thead><tr><th>Username</th><th>Token</th><th></th></tr></thead>
       <tbody id="token-rows"></tbody>
     </table>
   </div>
@@ -105,12 +104,12 @@ const api = {
     if (!r.ok) throw new Error('list failed');
     return r.json();
   },
-  async issueToken(username, roles) {
+  async issueToken(username) {
     const r = await fetch('/api/admin/tokens', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify({ username, roles }),
+      body: JSON.stringify({ username }),
     });
     if (!r.ok) throw new Error((await r.json()).error || 'issue failed');
     return r.json();
@@ -147,7 +146,6 @@ async function refreshTokens() {
       const tr = document.createElement('tr');
       tr.innerHTML =
         '<td>' + escapeHtml(t.username) + '</td>' +
-        '<td>' + (t.roles || []).map(escapeHtml).join(', ') + '</td>' +
         '<td><code>' + escapeHtml(t.token) + '</code></td>' +
         '<td><button class="danger" data-token="' + escapeHtml(t.token) + '">Revoke</button></td>';
       return tr;
@@ -193,14 +191,12 @@ document.getElementById('logout').addEventListener('click', async () => {
 document.getElementById('issue-form').addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target;
-  const roles = f.roles.value.split(',').map(r => r.trim()).filter(Boolean);
   const msg = document.getElementById('issue-msg');
   msg.textContent = '';
   try {
-    const t = await api.issueToken(f.username.value, roles);
+    const t = await api.issueToken(f.username.value);
     msg.textContent = 'Issued: ' + t.token;
     f.reset();
-    f.roles.value = 'reader';
     refreshTokens();
   } catch (ex) {
     msg.textContent = ex.message;

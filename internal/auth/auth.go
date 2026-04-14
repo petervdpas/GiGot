@@ -20,11 +20,10 @@ const identityKey contextKey = "gigot-identity"
 
 // Identity represents an authenticated user or client.
 type Identity struct {
-	ID       string   `json:"id"`
-	Username string   `json:"username"`
-	Email    string   `json:"email,omitempty"`
-	Roles    []string `json:"roles"`
-	Provider string   `json:"provider"`
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email,omitempty"`
+	Provider string `json:"provider"`
 }
 
 // Strategy is the interface every authentication method implements.

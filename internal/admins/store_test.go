@@ -28,7 +28,7 @@ func newTestStore(t *testing.T) (*Store, *crypto.Encryptor, string) {
 
 func TestPutAndVerify(t *testing.T) {
 	s, _, _ := newTestStore(t)
-	if _, err := s.Put("alice", "hunter2", []string{"admin"}); err != nil {
+	if _, err := s.Put("alice", "hunter2"); err != nil {
 		t.Fatal(err)
 	}
 	a, err := s.Verify("alice", "hunter2")
@@ -42,7 +42,7 @@ func TestPutAndVerify(t *testing.T) {
 
 func TestVerify_WrongPassword(t *testing.T) {
 	s, _, _ := newTestStore(t)
-	_, _ = s.Put("alice", "hunter2", nil)
+	_, _ = s.Put("alice", "hunter2")
 	if _, err := s.Verify("alice", "bad"); err != ErrInvalidPassword {
 		t.Fatalf("got %v, want ErrInvalidPassword", err)
 	}
@@ -57,7 +57,7 @@ func TestVerify_UnknownUser(t *testing.T) {
 
 func TestPersistence_SurvivesReopen(t *testing.T) {
 	s, enc, path := newTestStore(t)
-	_, _ = s.Put("alice", "hunter2", []string{"admin"})
+	_, _ = s.Put("alice", "hunter2")
 
 	s2, err := Open(path, enc)
 	if err != nil {
@@ -70,7 +70,7 @@ func TestPersistence_SurvivesReopen(t *testing.T) {
 
 func TestPersistence_DifferentServerCannotOpen(t *testing.T) {
 	s, _, path := newTestStore(t)
-	_, _ = s.Put("alice", "pw", nil)
+	_, _ = s.Put("alice", "pw")
 
 	otherPriv, _, _ := crypto.GenerateKeyPair()
 	otherEnc, _ := crypto.New(otherPriv)
@@ -81,7 +81,7 @@ func TestPersistence_DifferentServerCannotOpen(t *testing.T) {
 
 func TestRemove(t *testing.T) {
 	s, _, _ := newTestStore(t)
-	_, _ = s.Put("alice", "pw", nil)
+	_, _ = s.Put("alice", "pw")
 	if err := s.Remove("alice"); err != nil {
 		t.Fatal(err)
 	}
@@ -95,10 +95,10 @@ func TestRemove(t *testing.T) {
 
 func TestPut_RequiresFields(t *testing.T) {
 	s, _, _ := newTestStore(t)
-	if _, err := s.Put("", "pw", nil); err == nil {
+	if _, err := s.Put("", "pw"); err == nil {
 		t.Fatal("expected error for empty username")
 	}
-	if _, err := s.Put("alice", "", nil); err == nil {
+	if _, err := s.Put("alice", ""); err == nil {
 		t.Fatal("expected error for empty password")
 	}
 }
