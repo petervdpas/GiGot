@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -30,8 +28,7 @@ type Admin struct {
 
 // Store holds admin accounts, persisted to an encrypted file on disk.
 type Store struct {
-	path string
-	enc  *crypto.Encryptor
+	file *crypto.SealedFile
 
 	mu     sync.RWMutex
 	admins map[string]*Admin
@@ -39,17 +36,11 @@ type Store struct {
 
 // Open loads (or initialises) the admin store at path, sealed to enc.
 func Open(path string, enc *crypto.Encryptor) (*Store, error) {
-	if path == "" {
-		return nil, fmt.Errorf("admins: path required")
+	f, err := crypto.NewSealedFile(path, enc)
+	if err != nil {
+		return nil, fmt.Errorf("admins: %w", err)
 	}
-	if enc == nil {
-		return nil, fmt.Errorf("admins: encryptor required")
-	}
-	s := &Store{path: path, enc: enc, admins: make(map[string]*Admin)}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return nil, fmt.Errorf("admins: mkdir: %w", err)
-	}
+	s := &Store{file: f, admins: make(map[string]*Admin)}
 	if err := s.load(); err != nil {
 		return nil, err
 	}
@@ -57,19 +48,12 @@ func Open(path string, enc *crypto.Encryptor) (*Store, error) {
 }
 
 func (s *Store) load() error {
-	data, err := os.ReadFile(s.path)
+	plain, err := s.file.Load()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("admins: read: %w", err)
+		return fmt.Errorf("admins: %w", err)
 	}
-	if len(data) == 0 {
+	if plain == nil {
 		return nil
-	}
-	plain, err := s.enc.OpenSelf(data)
-	if err != nil {
-		return fmt.Errorf("admins: decrypt: %w", err)
 	}
 	var list []*Admin
 	if err := json.Unmarshal(plain, &list); err != nil {
@@ -88,17 +72,9 @@ func (s *Store) persist() error {
 	}
 	plain, err := json.Marshal(list)
 	if err != nil {
-		return err
+		return fmt.Errorf("admins: marshal: %w", err)
 	}
-	sealed, err := s.enc.SealSelf(plain)
-	if err != nil {
-		return err
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, sealed, 0600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return s.file.Save(plain)
 }
 
 // Put creates or overwrites an admin. Password is hashed with bcrypt.

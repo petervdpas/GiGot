@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -29,8 +27,7 @@ type Client struct {
 
 // Store holds enrolled clients, persisted to an encrypted file on disk.
 type Store struct {
-	path string
-	enc  *crypto.Encryptor
+	file *crypto.SealedFile
 
 	mu      sync.RWMutex
 	clients map[string]*Client
@@ -39,17 +36,11 @@ type Store struct {
 // Open loads the store from path (creating an empty one if the file is missing).
 // The file is sealed to the server's own public key.
 func Open(path string, enc *crypto.Encryptor) (*Store, error) {
-	if path == "" {
-		return nil, fmt.Errorf("clients: path required")
+	f, err := crypto.NewSealedFile(path, enc)
+	if err != nil {
+		return nil, fmt.Errorf("clients: %w", err)
 	}
-	if enc == nil {
-		return nil, fmt.Errorf("clients: encryptor required")
-	}
-	s := &Store{path: path, enc: enc, clients: make(map[string]*Client)}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return nil, fmt.Errorf("clients: mkdir: %w", err)
-	}
+	s := &Store{file: f, clients: make(map[string]*Client)}
 	if err := s.load(); err != nil {
 		return nil, err
 	}
@@ -57,23 +48,16 @@ func Open(path string, enc *crypto.Encryptor) (*Store, error) {
 }
 
 func (s *Store) load() error {
-	data, err := os.ReadFile(s.path)
+	plain, err := s.file.Load()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("clients: read %s: %w", s.path, err)
+		return fmt.Errorf("clients: %w", err)
 	}
-	if len(data) == 0 {
+	if plain == nil {
 		return nil
-	}
-	plain, err := s.enc.OpenSelf(data)
-	if err != nil {
-		return fmt.Errorf("clients: decrypt %s: %w", s.path, err)
 	}
 	var list []*Client
 	if err := json.Unmarshal(plain, &list); err != nil {
-		return fmt.Errorf("clients: parse %s: %w", s.path, err)
+		return fmt.Errorf("clients: parse: %w", err)
 	}
 	for _, c := range list {
 		s.clients[c.ID] = c
@@ -90,15 +74,7 @@ func (s *Store) persist() error {
 	if err != nil {
 		return fmt.Errorf("clients: marshal: %w", err)
 	}
-	sealed, err := s.enc.SealSelf(plain)
-	if err != nil {
-		return fmt.Errorf("clients: seal: %w", err)
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, sealed, 0600); err != nil {
-		return fmt.Errorf("clients: write: %w", err)
-	}
-	return os.Rename(tmp, s.path)
+	return s.file.Save(plain)
 }
 
 // Enroll records a new client. Returns ErrExists if the ID is already taken
