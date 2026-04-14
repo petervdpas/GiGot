@@ -9,10 +9,11 @@ import (
 
 // Config is the top-level GiGot configuration.
 type Config struct {
-	Server   ServerConfig   `json:"server"`
-	Storage  StorageConfig  `json:"storage"`
-	Auth     AuthConfig     `json:"auth"`
-	Logging  LoggingConfig  `json:"logging"`
+	Server  ServerConfig  `json:"server"`
+	Storage StorageConfig `json:"storage"`
+	Auth    AuthConfig    `json:"auth"`
+	Crypto  CryptoConfig  `json:"crypto"`
+	Logging LoggingConfig `json:"logging"`
 }
 
 // ServerConfig controls the HTTP listener.
@@ -30,6 +31,18 @@ type StorageConfig struct {
 type AuthConfig struct {
 	Enabled bool   `json:"enabled"`
 	Type    string `json:"type"`
+}
+
+// CryptoConfig controls server-side NaCl keypair storage and on-disk layout
+// for encrypted data (client enrollments, token store).
+type CryptoConfig struct {
+	// PrivateKeyPath is where the server's private key is stored (base64, 0600).
+	// Generated on first run if missing.
+	PrivateKeyPath string `json:"private_key_path"`
+	// PublicKeyPath is where the server's public key is stored (base64).
+	PublicKeyPath string `json:"public_key_path"`
+	// DataDir holds encrypted state files (clients.enc, tokens.enc, admins.json).
+	DataDir string `json:"data_dir"`
 }
 
 // LoggingConfig controls log output.
@@ -50,6 +63,11 @@ func Defaults() *Config {
 		Auth: AuthConfig{
 			Enabled: false,
 			Type:    "token",
+		},
+		Crypto: CryptoConfig{
+			PrivateKeyPath: "./data/server.key",
+			PublicKeyPath:  "./data/server.pub",
+			DataDir:        "./data",
 		},
 		Logging: LoggingConfig{
 			Level: "info",
@@ -80,10 +98,19 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing config %s: %w", path, err)
 	}
 
-	// Resolve relative repo_root against config file directory.
+	// Resolve relative paths against config file directory.
+	dir := filepath.Dir(path)
 	if !filepath.IsAbs(cfg.Storage.RepoRoot) {
-		dir := filepath.Dir(path)
 		cfg.Storage.RepoRoot = filepath.Join(dir, cfg.Storage.RepoRoot)
+	}
+	if cfg.Crypto.PrivateKeyPath != "" && !filepath.IsAbs(cfg.Crypto.PrivateKeyPath) {
+		cfg.Crypto.PrivateKeyPath = filepath.Join(dir, cfg.Crypto.PrivateKeyPath)
+	}
+	if cfg.Crypto.PublicKeyPath != "" && !filepath.IsAbs(cfg.Crypto.PublicKeyPath) {
+		cfg.Crypto.PublicKeyPath = filepath.Join(dir, cfg.Crypto.PublicKeyPath)
+	}
+	if cfg.Crypto.DataDir != "" && !filepath.IsAbs(cfg.Crypto.DataDir) {
+		cfg.Crypto.DataDir = filepath.Join(dir, cfg.Crypto.DataDir)
 	}
 
 	return cfg, nil

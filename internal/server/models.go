@@ -49,3 +49,47 @@ type TokenResponse struct {
 type RevokeTokenRequest struct {
 	Token string `json:"token" example:"a1b2c3d4..."`
 }
+
+// ServerPubKeyResponse exposes the server's NaCl public key. Clients use this
+// to seal request bodies before sending them to the server.
+type ServerPubKeyResponse struct {
+	PublicKey string `json:"public_key" example:"base64-encoded-32-byte-key"`
+}
+
+// EnrollRequest registers a client's NaCl public key with the server.
+type EnrollRequest struct {
+	ClientID  string `json:"client_id"  example:"laptop-01"`
+	PublicKey string `json:"public_key" example:"base64-encoded-32-byte-key"`
+}
+
+// EnrollResponse confirms enrollment and hands back the server's public key
+// so the client can seal subsequent requests without a second round trip.
+type EnrollResponse struct {
+	ClientID        string `json:"client_id"`
+	ServerPublicKey string `json:"server_public_key"`
+}
+
+// AdminLoginRequest is the body for /admin/login.
+type AdminLoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// AdminLoginResponse confirms a successful admin login.
+type AdminLoginResponse struct {
+	Username string   `json:"username"`
+	Roles    []string `json:"roles"`
+}
+
+// TokenListItem describes one issued token in an admin listing.
+type TokenListItem struct {
+	Token    string   `json:"token"`
+	Username string   `json:"username"`
+	Roles    []string `json:"roles"`
+}
+
+// TokenListResponse is the body of GET /api/admin/tokens.
+type TokenListResponse struct {
+	Tokens []TokenListItem `json:"tokens"`
+	Count  int             `json:"count"`
+}

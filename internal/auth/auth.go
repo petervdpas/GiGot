@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 )
 
 // Errors returned by strategies.
@@ -39,8 +40,10 @@ type Strategy interface {
 
 // Provider manages multiple strategies and acts as HTTP middleware.
 type Provider struct {
-	strategies []Strategy
-	enabled    bool
+	strategies      []Strategy
+	enabled         bool
+	publicExact     []string
+	publicPrefixes  []string
 }
 
 // NewProvider creates a new auth Provider.
@@ -56,6 +59,32 @@ func (p *Provider) SetEnabled(enabled bool) {
 // Register adds a strategy to the provider. Strategies are tried in order.
 func (p *Provider) Register(s Strategy) {
 	p.strategies = append(p.strategies, s)
+}
+
+// MarkPublic excludes an exact path from authentication.
+func (p *Provider) MarkPublic(path string) {
+	p.publicExact = append(p.publicExact, path)
+}
+
+// MarkPublicPrefix excludes any path starting with the given prefix.
+// prefix should be a concrete directory (e.g. "/admin/" or "/swagger/").
+func (p *Provider) MarkPublicPrefix(prefix string) {
+	p.publicPrefixes = append(p.publicPrefixes, prefix)
+}
+
+// isPublic reports whether the request path is marked public.
+func (p *Provider) isPublic(urlPath string) bool {
+	for _, pp := range p.publicExact {
+		if urlPath == pp {
+			return true
+		}
+	}
+	for _, pp := range p.publicPrefixes {
+		if strings.HasPrefix(urlPath, pp) {
+			return true
+		}
+	}
+	return false
 }
 
 // Authenticate tries each registered strategy in order.
@@ -78,7 +107,7 @@ func (p *Provider) Authenticate(r *http.Request) (*Identity, error) {
 // Middleware wraps an http.Handler with authentication checks.
 func (p *Provider) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !p.enabled {
+		if !p.enabled || p.isPublic(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}

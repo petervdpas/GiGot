@@ -12,12 +12,20 @@ import (
 	"strings"
 	"testing"
 
+	"net/http/cookiejar"
+
 	"github.com/cucumber/godog"
 	"github.com/petervdpas/GiGot/internal/auth"
 	"github.com/petervdpas/GiGot/internal/config"
+	"github.com/petervdpas/GiGot/internal/crypto"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
 	"github.com/petervdpas/GiGot/internal/server"
 )
+
+type testKeypair struct {
+	Priv crypto.Key
+	Pub  crypto.Key
+}
 
 type testContext struct {
 	tmpDir        string
@@ -27,8 +35,10 @@ type testContext struct {
 	ts            *httptest.Server
 	git           *gitmanager.Manager
 	tokenStrategy *auth.TokenStrategy
+	client        *http.Client
 	currentToken  string
 	savedValues   map[string]string
+	keypairs      map[string]*testKeypair
 	resp          *http.Response
 	respBody      string
 	repoList      []string
@@ -48,6 +58,9 @@ func (tc *testContext) reset() {
 	tc.tokenStrategy = nil
 	tc.currentToken = ""
 	tc.savedValues = make(map[string]string)
+	tc.keypairs = make(map[string]*testKeypair)
+	jar, _ := cookiejar.New(nil)
+	tc.client = &http.Client{Jar: jar}
 	tc.resp = nil
 	tc.respBody = ""
 	tc.repoList = nil
@@ -58,8 +71,7 @@ func (tc *testContext) reset() {
 
 func (tc *testContext) theServerIsRunning() error {
 	tc.tmpDir, _ = os.MkdirTemp("", "gigot-test-*")
-	cfg := config.Defaults()
-	cfg.Storage.RepoRoot = filepath.Join(tc.tmpDir, "repos")
+	cfg := configInTempDir(tc.tmpDir)
 	os.MkdirAll(cfg.Storage.RepoRoot, 0755)
 	tc.cfg = cfg
 	tc.git = gitmanager.NewManager(cfg.Storage.RepoRoot)
@@ -68,8 +80,17 @@ func (tc *testContext) theServerIsRunning() error {
 	return nil
 }
 
+func configInTempDir(dir string) *config.Config {
+	cfg := config.Defaults()
+	cfg.Storage.RepoRoot = filepath.Join(dir, "repos")
+	cfg.Crypto.PrivateKeyPath = filepath.Join(dir, "server.key")
+	cfg.Crypto.PublicKeyPath = filepath.Join(dir, "server.pub")
+	cfg.Crypto.DataDir = filepath.Join(dir, "data")
+	return cfg
+}
+
 func (tc *testContext) iRequest(path string) error {
-	resp, err := http.Get(tc.ts.URL + path)
+	resp, err := tc.client.Get(tc.ts.URL + path)
 	if err != nil {
 		return err
 	}
@@ -178,7 +199,7 @@ func (tc *testContext) theLoggingLevelShouldBe(level string) error {
 }
 
 func (tc *testContext) iGenerateADefaultConfig() error {
-	cfg := config.Defaults()
+	cfg := configInTempDir(tc.tmpDir)
 	tc.configPath = filepath.Join(tc.tmpDir, "gigot.json")
 	return cfg.Save(tc.configPath)
 }
@@ -269,8 +290,7 @@ func (tc *testContext) aPlainDirectoryExistsInTheRepoRoot(name string) error {
 
 func (tc *testContext) startServerWithAuth(enabled bool) error {
 	tc.tmpDir, _ = os.MkdirTemp("", "gigot-test-*")
-	cfg := config.Defaults()
-	cfg.Storage.RepoRoot = filepath.Join(tc.tmpDir, "repos")
+	cfg := configInTempDir(tc.tmpDir)
 	cfg.Auth.Enabled = enabled
 	os.MkdirAll(cfg.Storage.RepoRoot, 0755)
 	tc.cfg = cfg
@@ -303,7 +323,7 @@ func (tc *testContext) aTokenIsIssuedForUserWithRoles(username, roles string) er
 }
 
 func (tc *testContext) iRequestWithoutAToken(path string) error {
-	resp, err := http.Get(tc.ts.URL + path)
+	resp, err := tc.client.Get(tc.ts.URL + path)
 	if err != nil {
 		return err
 	}
@@ -318,6 +338,14 @@ func (tc *testContext) iRequestWithThatToken(path string) error {
 	return tc.requestWithToken(path, tc.currentToken)
 }
 
+func (tc *testContext) iRequestWithSavedToken(path, saveKey string) error {
+	token, ok := tc.savedValues[saveKey]
+	if !ok {
+		return fmt.Errorf("no saved value for %q", saveKey)
+	}
+	return tc.requestWithToken(path, token)
+}
+
 func (tc *testContext) iRequestWithToken(path, token string) error {
 	return tc.requestWithToken(path, token)
 }
@@ -329,7 +357,7 @@ func (tc *testContext) requestWithToken(path, token string) error {
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := tc.client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -383,7 +411,7 @@ func (tc *testContext) doRequest(method, path, body string) error {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := tc.client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -448,6 +476,188 @@ func (tc *testContext) theJSONResponseShouldNotBeEmpty(key string) error {
 	}
 	if str == "" {
 		return fmt.Errorf("expected %q to be non-empty", key)
+	}
+	return nil
+}
+
+func (tc *testContext) theServerRestarts() error {
+	return tc.restartServer(tc.cfg.Auth.Enabled)
+}
+
+func (tc *testContext) theServerRestartsWithAuth(onOff string) error {
+	return tc.restartServer(onOff == "enabled")
+}
+
+func (tc *testContext) restartServer(authEnabled bool) error {
+	if tc.ts == nil {
+		return fmt.Errorf("server was never started")
+	}
+	tc.ts.Close()
+	// Reuse the same tmpDir so on-disk state (keypair, data dir) persists.
+	cfg := configInTempDir(tc.tmpDir)
+	cfg.Auth.Enabled = authEnabled
+	tc.cfg = cfg
+	tc.git = gitmanager.NewManager(cfg.Storage.RepoRoot)
+	tc.srv = server.New(cfg)
+	tc.tokenStrategy = tc.srv.TokenStrategy()
+	tc.ts = httptest.NewServer(tc.srv.Handler())
+	return nil
+}
+
+func (tc *testContext) theJSONResponseShouldEqualSaved(key, saveKey string) error {
+	saved, ok := tc.savedValues[saveKey]
+	if !ok {
+		return fmt.Errorf("no saved value for %q", saveKey)
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal([]byte(tc.respBody), &body); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	val, ok := body[key]
+	if !ok {
+		return fmt.Errorf("key %q not found in response", key)
+	}
+	str, ok := val.(string)
+	if !ok {
+		return fmt.Errorf("expected string for %q, got %T", key, val)
+	}
+	if str != saved {
+		return fmt.Errorf("expected %s=%q (saved as %s), got %q", key, saved, saveKey, str)
+	}
+	return nil
+}
+
+func (tc *testContext) anAdminExistsWithPassword(username, password string) error {
+	if tc.srv == nil {
+		return fmt.Errorf("server must be running")
+	}
+	_, err := tc.srv.Admins().Put(username, password, []string{"admin"})
+	return err
+}
+
+func (tc *testContext) iLogInAsAdminWithPassword(username, password string) error {
+	body := fmt.Sprintf(`{"username":%q,"password":%q}`, username, password)
+	return tc.doRequest(http.MethodPost, "/admin/login", body)
+}
+
+func (tc *testContext) theCurrentResponseSetsSessionCookie() error {
+	if tc.resp == nil {
+		return fmt.Errorf("no response")
+	}
+	for _, c := range tc.resp.Cookies() {
+		if c.Name == "gigot_session" && c.Value != "" {
+			return nil
+		}
+	}
+	return fmt.Errorf("no gigot_session cookie in response")
+}
+
+func (tc *testContext) aFreshClientKeypair(name string) error {
+	priv, pub, err := crypto.GenerateKeyPair()
+	if err != nil {
+		return err
+	}
+	tc.keypairs[name] = &testKeypair{Priv: priv, Pub: pub}
+	return nil
+}
+
+func (tc *testContext) iEnrollClientWithKeypair(clientID, kpName string) error {
+	kp, ok := tc.keypairs[kpName]
+	if !ok {
+		return fmt.Errorf("unknown keypair %q", kpName)
+	}
+	body := fmt.Sprintf(`{"client_id":%q,"public_key":%q}`, clientID, kp.Pub.Encode())
+	return tc.doRequest(http.MethodPost, "/api/clients/enroll", body)
+}
+
+// --- Sealed request helpers ---
+
+func (tc *testContext) serverPubKey() (crypto.Key, error) {
+	resp, err := http.Get(tc.ts.URL + "/api/crypto/pubkey")
+	if err != nil {
+		return crypto.Key{}, err
+	}
+	defer resp.Body.Close()
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return crypto.Key{}, err
+	}
+	return crypto.DecodeKey(body["public_key"])
+}
+
+func (tc *testContext) clientPOSTsSealed(clientID, kpName, path, plaintext string) error {
+	kp, ok := tc.keypairs[kpName]
+	if !ok {
+		return fmt.Errorf("unknown keypair %q", kpName)
+	}
+	serverPub, err := tc.serverPubKey()
+	if err != nil {
+		return err
+	}
+	enc, err := crypto.New(kp.Priv)
+	if err != nil {
+		return err
+	}
+	sealed, err := enc.SealString(serverPub, []byte(plaintext))
+	if err != nil {
+		return err
+	}
+	return tc.sendSealed(clientID, path, sealed)
+}
+
+func (tc *testContext) clientPOSTsRawSealed(clientID, path, raw string) error {
+	return tc.sendSealed(clientID, path, raw)
+}
+
+func (tc *testContext) sendSealed(clientID, path, body string) error {
+	req, err := http.NewRequest(http.MethodPost, tc.ts.URL+path, strings.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/vnd.gigot.sealed+b64")
+	req.Header.Set("X-Client-Id", clientID)
+	resp, err := tc.client.Do(req)
+	if err != nil {
+		return err
+	}
+	tc.resp = resp
+	data, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	tc.respBody = string(data)
+	return nil
+}
+
+func (tc *testContext) openingResponseGivesJSONKeyEquals(kpName, key, expected string) error {
+	kp, ok := tc.keypairs[kpName]
+	if !ok {
+		return fmt.Errorf("unknown keypair %q", kpName)
+	}
+	serverPub, err := tc.serverPubKey()
+	if err != nil {
+		return err
+	}
+	enc, err := crypto.New(kp.Priv)
+	if err != nil {
+		return err
+	}
+	plain, err := enc.OpenString(serverPub, strings.TrimSpace(tc.respBody))
+	if err != nil {
+		return fmt.Errorf("opening sealed response: %w (body=%q)", err, tc.respBody)
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal(plain, &body); err != nil {
+		return fmt.Errorf("response plaintext is not JSON: %w (body=%q)", err, plain)
+	}
+	got, ok := body[key]
+	if !ok {
+		return fmt.Errorf("key %q not in response", key)
+	}
+	str, ok := got.(string)
+	if !ok {
+		return fmt.Errorf("expected string for %q, got %T", key, got)
+	}
+	if str != expected {
+		return fmt.Errorf("expected %s=%q, got %q", key, expected, str)
 	}
 	return nil
 }
@@ -540,6 +750,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I request "([^"]*)" without a token$`, tc.iRequestWithoutAToken)
 	ctx.Step(`^I request "([^"]*)" with that token$`, tc.iRequestWithThatToken)
 	ctx.Step(`^I request "([^"]*)" with token "([^"]*)"$`, tc.iRequestWithToken)
+	ctx.Step(`^I request "([^"]*)" with saved token "([^"]*)"$`, tc.iRequestWithSavedToken)
 	ctx.Step(`^that token is revoked$`, tc.thatTokenIsRevoked)
 
 	// API steps
@@ -551,6 +762,23 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the JSON response "([^"]*)" should be "([^"]*)"$`, tc.theJSONResponseStringShouldBe)
 	ctx.Step(`^the JSON response "([^"]*)" should not be empty$`, tc.theJSONResponseShouldNotBeEmpty)
 	ctx.Step(`^I save the JSON response "([^"]*)" as "([^"]*)"$`, tc.iSaveTheJSONResponseAs)
+	ctx.Step(`^the JSON response "([^"]*)" should equal saved "([^"]*)"$`, tc.theJSONResponseShouldEqualSaved)
+	ctx.Step(`^the server restarts$`, tc.theServerRestarts)
+	ctx.Step(`^the server restarts with auth (enabled|disabled)$`, tc.theServerRestartsWithAuth)
+
+	// Client enrollment steps
+	ctx.Step(`^a fresh client keypair "([^"]*)"$`, tc.aFreshClientKeypair)
+	ctx.Step(`^I enroll client "([^"]*)" with keypair "([^"]*)"$`, tc.iEnrollClientWithKeypair)
+
+	// Admin steps
+	ctx.Step(`^an admin "([^"]*)" exists with password "([^"]*)"$`, tc.anAdminExistsWithPassword)
+	ctx.Step(`^I log in as admin "([^"]*)" with password "([^"]*)"$`, tc.iLogInAsAdminWithPassword)
+	ctx.Step(`^the response sets a session cookie$`, tc.theCurrentResponseSetsSessionCookie)
+
+	// Sealed body steps
+	ctx.Step(`^client "([^"]*)" with keypair "([^"]*)" POSTs sealed "([^"]*)" with body '([^']*)'$`, tc.clientPOSTsSealed)
+	ctx.Step(`^client "([^"]*)" POSTs "([^"]*)" with raw sealed body "([^"]*)"$`, tc.clientPOSTsRawSealed)
+	ctx.Step(`^opening the response with keypair "([^"]*)" gives JSON with "([^"]*)" equal to "([^"]*)"$`, tc.openingResponseGivesJSONKeyEquals)
 }
 
 func TestFeatures(t *testing.T) {

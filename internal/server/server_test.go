@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,6 +15,9 @@ func testServer(t *testing.T) *Server {
 	dir := t.TempDir()
 	cfg := config.Defaults()
 	cfg.Storage.RepoRoot = dir
+	cfg.Crypto.PrivateKeyPath = filepath.Join(dir, "server.key")
+	cfg.Crypto.PublicKeyPath = filepath.Join(dir, "server.pub")
+	cfg.Crypto.DataDir = filepath.Join(dir, "data")
 	return New(cfg)
 }
 
