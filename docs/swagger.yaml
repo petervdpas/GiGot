@@ -20,6 +20,38 @@ definitions:
       message:
         type: string
     type: object
+  server.AdminLoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  server.AdminLoginResponse:
+    properties:
+      roles:
+        items:
+          type: string
+        type: array
+      username:
+        type: string
+    type: object
+  server.EnrollRequest:
+    properties:
+      client_id:
+        example: laptop-01
+        type: string
+      public_key:
+        example: base64-encoded-32-byte-key
+        type: string
+    type: object
+  server.EnrollResponse:
+    properties:
+      client_id:
+        type: string
+      server_public_key:
+        type: string
+    type: object
   server.ErrorResponse:
     properties:
       error:
@@ -89,6 +121,32 @@ definitions:
         example: a1b2c3d4...
         type: string
     type: object
+  server.ServerPubKeyResponse:
+    properties:
+      public_key:
+        example: base64-encoded-32-byte-key
+        type: string
+    type: object
+  server.TokenListItem:
+    properties:
+      roles:
+        items:
+          type: string
+        type: array
+      token:
+        type: string
+      username:
+        type: string
+    type: object
+  server.TokenListResponse:
+    properties:
+      count:
+        type: integer
+      tokens:
+        items:
+          $ref: '#/definitions/server.TokenListItem'
+        type: array
+    type: object
   server.TokenRequest:
     properties:
       roles:
@@ -128,6 +186,182 @@ info:
   title: GiGot API
   version: 0.1.0
 paths:
+  /admin/login:
+    post:
+      consumes:
+      - application/json
+      description: Exchanges username/password for a session cookie.
+      parameters:
+      - description: Credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.AdminLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.AdminLoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Admin login
+      tags:
+      - admin
+  /admin/logout:
+    post:
+      responses:
+        "204":
+          description: No Content
+      summary: Admin logout
+      tags:
+      - admin
+  /admin/session:
+    get:
+      description: |-
+        Returns the admin identity associated with the session cookie,
+        or 401 if no valid session exists. The admin UI polls this on
+        load to decide whether to show the login form.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.AdminLoginResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Current admin session
+      tags:
+      - admin
+  /admin/tokens:
+    delete:
+      consumes:
+      - application/json
+      description: |-
+        GET lists, POST issues, DELETE revokes. Requires a valid
+        admin session cookie (obtained via /admin/login).
+      parameters:
+      - description: Issue body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.TokenRequest'
+      - description: Revoke body (DELETE)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.RevokeTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: DELETE response
+          schema:
+            $ref: '#/definitions/server.MessageResponse'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.TokenResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage subscription keys (admin only)
+      tags:
+      - admin
+    get:
+      consumes:
+      - application/json
+      description: |-
+        GET lists, POST issues, DELETE revokes. Requires a valid
+        admin session cookie (obtained via /admin/login).
+      parameters:
+      - description: Issue body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.TokenRequest'
+      - description: Revoke body (DELETE)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.RevokeTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: DELETE response
+          schema:
+            $ref: '#/definitions/server.MessageResponse'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.TokenResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage subscription keys (admin only)
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      description: |-
+        GET lists, POST issues, DELETE revokes. Requires a valid
+        admin session cookie (obtained via /admin/login).
+      parameters:
+      - description: Issue body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.TokenRequest'
+      - description: Revoke body (DELETE)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.RevokeTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: DELETE response
+          schema:
+            $ref: '#/definitions/server.MessageResponse'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.TokenResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage subscription keys (admin only)
+      tags:
+      - admin
   /auth/token:
     delete:
       consumes:
@@ -215,6 +449,53 @@ paths:
       summary: Issue or revoke API tokens
       tags:
       - auth
+  /clients/enroll:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Registers a Formidable client so the server can seal responses
+        to it. Returns the server's public key for outgoing requests.
+      parameters:
+      - description: Enrollment request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.EnrollRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/server.EnrollResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Enroll a client's public key
+      tags:
+      - clients
+  /crypto/pubkey:
+    get:
+      description: |-
+        Returns the base64-encoded curve25519 public key that clients
+        use to seal request bodies.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.ServerPubKeyResponse'
+      summary: Fetch the server's NaCl public key
+      tags:
+      - crypto
   /git/{name}.git/git-receive-pack:
     post:
       consumes:

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/petervdpas/GiGot/internal/admins"
 	"github.com/petervdpas/GiGot/internal/auth"
@@ -97,7 +96,23 @@ func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *au
 	return id
 }
 
-// handleAdminTokens dispatches GET/POST/DELETE on /api/admin/tokens.
+// handleAdminTokens godoc
+// @Summary      Manage subscription keys (admin only)
+// @Description  GET lists, POST issues, DELETE revokes. Requires a valid
+// @Description  admin session cookie (obtained via /admin/login).
+// @Tags         admin
+// @Accept       json
+// @Produce      json
+// @Param        body  body      TokenRequest        false  "Issue body (POST)"
+// @Param        body  body      RevokeTokenRequest  false  "Revoke body (DELETE)"
+// @Success      200   {object}  TokenListResponse  "GET response"
+// @Success      201   {object}  TokenResponse      "POST response"
+// @Success      200   {object}  MessageResponse    "DELETE response"
+// @Failure      401   {object}  ErrorResponse
+// @Failure      405   {object}  ErrorResponse
+// @Router       /admin/tokens [get]
+// @Router       /admin/tokens [post]
+// @Router       /admin/tokens [delete]
 func (s *Server) handleAdminTokens(w http.ResponseWriter, r *http.Request) {
 	if s.requireAdminSession(w, r) == nil {
 		return
@@ -131,7 +146,16 @@ func (s *Server) adminListTokens(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// handleAdminSession returns the currently-authenticated admin or 401.
+// handleAdminSession godoc
+// @Summary      Current admin session
+// @Description  Returns the admin identity associated with the session cookie,
+// @Description  or 401 if no valid session exists. The admin UI polls this on
+// @Description  load to decide whether to show the login form.
+// @Tags         admin
+// @Produce      json
+// @Success      200  {object}  AdminLoginResponse
+// @Failure      401  {object}  ErrorResponse
+// @Router       /admin/session [get]
 func (s *Server) handleAdminSession(w http.ResponseWriter, r *http.Request) {
 	id := s.requireAdminSession(w, r)
 	if id == nil {
@@ -143,9 +167,3 @@ func (s *Server) handleAdminSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// isAdminPath reports whether a request targets an admin-only endpoint.
-// Used by the top-level auth middleware to skip the bearer-token check on
-// paths that use session cookies instead.
-func isAdminPath(p string) bool {
-	return strings.HasPrefix(p, "/admin") || strings.HasPrefix(p, "/api/admin/")
-}
