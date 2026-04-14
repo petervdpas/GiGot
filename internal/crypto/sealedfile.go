@@ -55,6 +55,29 @@ func (f *SealedFile) Load() ([]byte, error) {
 	return plain, nil
 }
 
+// Rewrap re-encrypts a sealed file from one Encryptor's key to another's,
+// atomically. Used by the key-rotation routine: decrypt every store with the
+// old key, re-encrypt with the new one, swap. Missing or empty source files
+// are a no-op (nothing to rewrap).
+func Rewrap(from, to *Encryptor, path string) error {
+	src, err := NewSealedFile(path, from)
+	if err != nil {
+		return err
+	}
+	plain, err := src.Load()
+	if err != nil {
+		return err
+	}
+	if plain == nil {
+		return nil
+	}
+	dst, err := NewSealedFile(path, to)
+	if err != nil {
+		return err
+	}
+	return dst.Save(plain)
+}
+
 // Save seals plaintext to the Encryptor's own public key and atomically
 // writes the result to the file with 0600 permissions.
 func (f *SealedFile) Save(plaintext []byte) error {

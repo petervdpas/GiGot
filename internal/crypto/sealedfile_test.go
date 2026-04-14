@@ -117,3 +117,75 @@ func TestNewSealedFile_RejectsNilEncryptor(t *testing.T) {
 		t.Fatal("expected error for nil encryptor")
 	}
 }
+
+func TestRewrap_SwitchesKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.enc")
+
+	priv1, _, _ := GenerateKeyPair()
+	enc1, _ := New(priv1)
+	src, _ := NewSealedFile(path, enc1)
+	payload := []byte("sensitive content that must survive rotation")
+	if err := src.Save(payload); err != nil {
+		t.Fatal(err)
+	}
+
+	priv2, _, _ := GenerateKeyPair()
+	enc2, _ := New(priv2)
+
+	if err := Rewrap(enc1, enc2, path); err != nil {
+		t.Fatal(err)
+	}
+
+	// New key can open it.
+	after, _ := NewSealedFile(path, enc2)
+	got, err := after.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("payload lost in rewrap: got %q", got)
+	}
+
+	// Old key must no longer open it.
+	stale, _ := NewSealedFile(path, enc1)
+	if _, err := stale.Load(); err == nil {
+		t.Fatal("expected old key to fail after rewrap")
+	}
+}
+
+func TestRewrap_MissingFileIsNoOp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "does-not-exist.enc")
+
+	priv1, _, _ := GenerateKeyPair()
+	enc1, _ := New(priv1)
+	priv2, _, _ := GenerateKeyPair()
+	enc2, _ := New(priv2)
+
+	if err := Rewrap(enc1, enc2, path); err != nil {
+		t.Fatalf("expected no-op on missing file, got %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("Rewrap should not create a file when source is missing")
+	}
+}
+
+func TestRewrap_WrongSourceKeyFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.enc")
+
+	priv1, _, _ := GenerateKeyPair()
+	enc1, _ := New(priv1)
+	src, _ := NewSealedFile(path, enc1)
+	_ = src.Save([]byte("sealed with enc1"))
+
+	wrongPriv, _, _ := GenerateKeyPair()
+	wrongEnc, _ := New(wrongPriv)
+	newPriv, _, _ := GenerateKeyPair()
+	newEnc, _ := New(newPriv)
+
+	if err := Rewrap(wrongEnc, newEnc, path); err == nil {
+		t.Fatal("expected Rewrap to fail when the source encryptor can't decrypt")
+	}
+}

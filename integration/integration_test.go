@@ -310,6 +310,37 @@ func (tc *testContext) theServerIsRunningWithAuthEnabled() error {
 	return tc.startServerWithAuth(true)
 }
 
+func (tc *testContext) theServerKeypairIsRotated() error {
+	if tc.ts == nil {
+		return fmt.Errorf("server must be running before rotation")
+	}
+	// Rotation must happen while the server is stopped — match production.
+	tc.ts.Close()
+	tc.ts = nil
+	_, err := crypto.Rotate(
+		tc.cfg.Crypto.PrivateKeyPath,
+		tc.cfg.Crypto.PublicKeyPath,
+		crypto.DefaultSealedFiles(tc.cfg.Crypto.DataDir),
+	)
+	return err
+}
+
+func (tc *testContext) theJSONResponseShouldDifferFromSaved(key, saveKey string) error {
+	saved, ok := tc.savedValues[saveKey]
+	if !ok {
+		return fmt.Errorf("no saved value for %q", saveKey)
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal([]byte(tc.respBody), &body); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	val, _ := body[key].(string)
+	if val == saved {
+		return fmt.Errorf("expected %s to differ from saved %q, but it matched", key, saveKey)
+	}
+	return nil
+}
+
 func (tc *testContext) thePolicyIsDenyAll() error {
 	if tc.srv == nil {
 		return fmt.Errorf("server must be running")
@@ -494,10 +525,12 @@ func (tc *testContext) theServerRestartsWithAuth(onOff string) error {
 }
 
 func (tc *testContext) restartServer(authEnabled bool) error {
-	if tc.ts == nil {
+	if tc.cfg == nil {
 		return fmt.Errorf("server was never started")
 	}
-	tc.ts.Close()
+	if tc.ts != nil {
+		tc.ts.Close()
+	}
 	// Reuse the same tmpDir so on-disk state (keypair, data dir) persists.
 	cfg := configInTempDir(tc.tmpDir)
 	cfg.Auth.Enabled = authEnabled
@@ -753,6 +786,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the server is running with auth enabled$`, tc.theServerIsRunningWithAuthEnabled)
 	ctx.Step(`^a token is issued for user "([^"]*)"$`, tc.aTokenIsIssuedForUser)
 	ctx.Step(`^the policy is deny-all$`, tc.thePolicyIsDenyAll)
+	ctx.Step(`^the server keypair is rotated$`, tc.theServerKeypairIsRotated)
+	ctx.Step(`^the JSON response "([^"]*)" should differ from saved "([^"]*)"$`, tc.theJSONResponseShouldDifferFromSaved)
 	ctx.Step(`^I request "([^"]*)" without a token$`, tc.iRequestWithoutAToken)
 	ctx.Step(`^I request "([^"]*)" with that token$`, tc.iRequestWithThatToken)
 	ctx.Step(`^I request "([^"]*)" with token "([^"]*)"$`, tc.iRequestWithToken)

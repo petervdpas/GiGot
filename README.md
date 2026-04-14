@@ -80,6 +80,7 @@ parsed via Go's standard `flag` package, so any order works.
 | `--config <path>`             | Path to a `gigot.json`. Defaults to `./gigot.json`. Missing file falls back to built-in defaults.             |
 | `--init`                      | Writes a default `gigot.json` into the current directory and exits. Will not overwrite by accident — you own the file. |
 | `--add-admin <username>`      | Creates (or overwrites) an admin account with the given username and exits. Prompts for a password on stdin. |
+| `--rotate-keys`               | Generates a fresh server keypair, re-encrypts all sealed stores under it, backs up the previous files as `.bak.{timestamp}`, and exits. **Stop the server first.**         |
 
 ### Examples
 
@@ -89,6 +90,10 @@ parsed via Go's standard `flag` package, so any order works.
 
 # Run with a non-default config path
 ./gigot --config /etc/gigot/gigot.json
+
+# Rotate the server keypair (e.g. after a suspected leak, or before making
+# the repo public). Stop the server first.
+./gigot --rotate-keys
 
 # Add an admin non-interactively (e.g. from a deploy script)
 printf 'hunter2\nhunter2\n' | ./gigot --add-admin ci-admin
@@ -523,6 +528,14 @@ login when you're already authenticated at the gateway.
 
 - **Server keypair is a single point of failure.** Losing `server.key` invalidates
   every encrypted store. Back it up, and preferably keep a copy offline.
+- **Rotation is a one-liner.** If you suspect a leak (or are about to flip a
+  previously-private repo public), stop the server and run
+  `./gigot --rotate-keys`. It generates a fresh keypair, decrypts every sealed
+  store with the old key in memory, re-encrypts under the new one, and backs up
+  the previous files as `.bak.{timestamp}` so you can inspect or roll back.
+  Admin accounts, subscription tokens, and enrolled client pubkeys all survive.
+  Formidable clients pick up the new server pubkey on their next
+  `/api/crypto/pubkey` fetch and keep working.
 - **In-memory sessions.** Admin sessions live in process memory and are lost on
   restart — admins re-log in. This is deliberate: it avoids persisting session
   tokens at all. It means the admin UI is not HA-friendly yet.
