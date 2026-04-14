@@ -95,6 +95,11 @@ parsed via Go's standard `flag` package, so any order works.
 # the repo public). Stop the server first.
 ./gigot --rotate-keys
 
+# After you've confirmed the rotated server works (admin login succeeds,
+# clients reconnect), purge the rollback backups. The old server.key.bak.*
+# is the leaked key you just rotated away from; do not leave it on disk.
+rm data/*.bak.*
+
 # Add an admin non-interactively (e.g. from a deploy script)
 printf 'hunter2\nhunter2\n' | ./gigot --add-admin ci-admin
 ```
@@ -536,6 +541,12 @@ login when you're already authenticated at the gateway.
   Admin accounts, subscription tokens, and enrolled client pubkeys all survive.
   Formidable clients pick up the new server pubkey on their next
   `/api/crypto/pubkey` fetch and keep working.
+- **Delete rotation backups once you're satisfied.** After `--rotate-keys`,
+  `data/server.key.bak.{timestamp}` still contains the *old* private key —
+  which is exactly the key material you rotated away from. Keeping it defeats
+  the rotation. Once the server comes back up, an admin can log in, and any
+  Formidable clients reconnect, run `rm data/*.bak.*` to purge the backups.
+  They are rollback-only insurance; they are not ongoing history.
 - **In-memory sessions.** Admin sessions live in process memory and are lost on
   restart — admins re-log in. This is deliberate: it avoids persisting session
   tokens at all. It means the admin UI is not HA-friendly yet.
