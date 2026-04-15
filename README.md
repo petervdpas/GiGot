@@ -383,7 +383,8 @@ The account is stored in `data/admins.enc` (sealed), so it survives restarts.
 | ------ | ----------------------- | ------------------------------------------------------------------------------------- |
 | GET    | `/api/admin/session`    | Returns the current admin identity or 401. The page polls this on load.               |
 | GET    | `/api/admin/tokens`     | Lists every issued subscription key.                                                  |
-| POST   | `/api/admin/tokens`     | Issues a new subscription key. Body: `{ "username" }`.                                |
+| POST   | `/api/admin/tokens`     | Issues a new subscription key. Body: `{ "username", "repos": [...] }`.                |
+| PATCH  | `/api/admin/tokens`     | Changes the repo allowlist on an existing key. Body: `{ "token", "repos": [...] }`.   |
 | DELETE | `/api/admin/tokens`     | Revokes a subscription key. Body: `{ "token": "<value>" }`.                            |
 
 The legacy unauthenticated `POST /api/auth/token` still exists for backward
@@ -552,8 +553,15 @@ login when you're already authenticated at the gateway.
   tokens at all. It means the admin UI is not HA-friendly yet.
 - **Bearer tokens are opaque, not JWTs.** GiGot issues random 32-byte tokens
   that are looked up server-side. They can be revoked. They do not carry claims.
-  GiGot is a git-repo proxy: a valid subscription key means "this client may
-  talk to the server." Per-repo access control is a planned follow-up.
+  Each token is bound to an **allowlist of repositories** the bearer may
+  access (see below); management actions (creating repos, issuing keys,
+  managing admins) are reserved for admin sessions.
+- **Per-repo scoping is enforced centrally.** `internal/policy.TokenRepoPolicy`
+  gates every `/api/repos/*` and `/git/*` route. A token with an empty
+  `repos` allowlist can authenticate but cannot read or clone anything. An
+  admin assigns the allowlist at issue time (`POST /api/admin/tokens`) or
+  later (`PATCH /api/admin/tokens`). Listing (`GET /api/repos`) returns
+  only the assigned set to token callers; admins see everything.
 - **bcrypt cost.** `bcrypt.DefaultCost` (10) is used for admin passwords. Adjust
   in `internal/admins/store.go` if your hardware warrants it.
 - **NaCl box, not OpenPGP.** Despite occasional shorthand, the crypto used is

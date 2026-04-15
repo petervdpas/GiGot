@@ -6,7 +6,11 @@
 // threading new fields through every DTO.
 package policy
 
-import "github.com/petervdpas/GiGot/internal/auth"
+import (
+	"context"
+
+	"github.com/petervdpas/GiGot/internal/auth"
+)
 
 // Action names a thing the caller wants to do. Add new actions as the server
 // grows; keep names stable because they appear in logs.
@@ -35,9 +39,10 @@ func Deny(reason string) Decision { return Decision{Allowed: false, Reason: reas
 // Evaluator decides whether an identity may perform an action on a resource.
 // A nil identity means "not authenticated"; evaluators decide how to treat it.
 // resource is the action-specific target (typically a repo name); pass "" if
-// not applicable.
+// not applicable. The context carries provider-specific attributes such as
+// the originating TokenEntry (see auth.TokenEntryFromContext).
 type Evaluator interface {
-	Decide(id *auth.Identity, action Action, resource string) Decision
+	Decide(ctx context.Context, id *auth.Identity, action Action, resource string) Decision
 }
 
 // AllowAuthenticated allows every action for any authenticated identity and
@@ -46,7 +51,7 @@ type Evaluator interface {
 type AllowAuthenticated struct{}
 
 // Decide implements Evaluator.
-func (AllowAuthenticated) Decide(id *auth.Identity, _ Action, _ string) Decision {
+func (AllowAuthenticated) Decide(_ context.Context, id *auth.Identity, _ Action, _ string) Decision {
 	if id == nil {
 		return Deny("not authenticated")
 	}
@@ -57,6 +62,79 @@ func (AllowAuthenticated) Decide(id *auth.Identity, _ Action, _ string) Decision
 type DenyAll struct{}
 
 // Decide implements Evaluator.
-func (DenyAll) Decide(*auth.Identity, Action, string) Decision {
+func (DenyAll) Decide(context.Context, *auth.Identity, Action, string) Decision {
 	return Deny("denied by policy")
+}
+
+// ProviderSession identifies session-authenticated admins. Kept here so the
+// evaluator doesn't need to import auth implementation details.
+const (
+	ProviderSession      = "session"
+	ProviderToken        = "token"
+	ProviderAuthDisabled = "auth-disabled"
+)
+
+// TokenRepos is the minimum interface a TokenRepoPolicy needs to consult the
+// repo allowlist of the token used for the request.
+type TokenRepos interface {
+	// Repos returns the allowlist of repository names for the authenticating
+	// token. Empty means no repos.
+	Repos() []string
+}
+
+// TokenRepoPolicy enforces per-repo access for token-authenticated callers.
+// Admin sessions and auth-disabled (dev) callers bypass the repo allowlist
+// and are allowed every action.
+//
+// For token callers:
+//   - ActionReadRepo / ActionWriteRepo with a specific repo: allow iff the
+//     token's Repos list contains the repo.
+//   - ActionReadRepo with no resource (listing): allow iff the token has at
+//     least one repo assigned. Handlers are expected to filter the result
+//     to the assigned set before returning it to the caller.
+//   - ActionManageRepos / ActionManageTokens / ActionManageAdmins: deny.
+//     These require an admin session.
+type TokenRepoPolicy struct{}
+
+// Decide implements Evaluator.
+func (TokenRepoPolicy) Decide(ctx context.Context, id *auth.Identity, action Action, resource string) Decision {
+	if id == nil {
+		return Deny("not authenticated")
+	}
+	switch id.Provider {
+	case ProviderSession, ProviderAuthDisabled:
+		return Allow()
+	case ProviderToken:
+		return decideTokenAccess(ctx, action, resource)
+	default:
+		return Deny("unknown identity provider: " + id.Provider)
+	}
+}
+
+func decideTokenAccess(ctx context.Context, action Action, resource string) Decision {
+	switch action {
+	case ActionManageRepos, ActionManageTokens, ActionManageAdmins:
+		return Deny("management actions require an admin session")
+	case ActionReadRepo, ActionWriteRepo:
+		entry := auth.TokenEntryFromContext(ctx)
+		if entry == nil {
+			return Deny("token entry missing from context")
+		}
+		if resource == "" {
+			// Listing: allow when at least one repo is assigned. Handler
+			// filters the returned set to those repos.
+			if len(entry.Repos) == 0 {
+				return Deny("no repos assigned to this token")
+			}
+			return Allow()
+		}
+		for _, r := range entry.Repos {
+			if r == resource {
+				return Allow()
+			}
+		}
+		return Deny("token not permitted for repo " + resource)
+	default:
+		return Deny("unhandled action: " + string(action))
+	}
 }

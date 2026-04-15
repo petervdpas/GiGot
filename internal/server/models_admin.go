@@ -13,8 +13,9 @@ type AdminLoginResponse struct {
 
 // TokenListItem describes one issued token in an admin listing.
 type TokenListItem struct {
-	Token    string `json:"token"`
-	Username string `json:"username"`
+	Token    string   `json:"token"`
+	Username string   `json:"username"`
+	Repos    []string `json:"repos"`
 }
 
 // TokenListResponse is the body of GET /api/admin/tokens.

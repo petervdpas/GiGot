@@ -97,7 +97,7 @@ func New(cfg *config.Config) *Server {
 		encryptor:       enc,
 		clients:         clientStore,
 		admins:          adminStore,
-		policy:          policy.AllowAuthenticated{},
+		policy:          policy.TokenRepoPolicy{},
 		mux:             http.NewServeMux(),
 	}
 	s.routes()

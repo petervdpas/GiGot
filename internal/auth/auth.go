@@ -16,7 +16,26 @@ var (
 
 type contextKey string
 
-const identityKey contextKey = "gigot-identity"
+const (
+	identityKey   contextKey = "gigot-identity"
+	tokenEntryKey contextKey = "gigot-token-entry"
+)
+
+// WithTokenEntry returns a context with the given TokenEntry attached, so
+// downstream consumers (primarily the policy evaluator) can read provider-
+// specific attributes (currently the repo allowlist) without the generic
+// Identity type needing to carry them.
+func WithTokenEntry(ctx context.Context, entry *TokenEntry) context.Context {
+	return context.WithValue(ctx, tokenEntryKey, entry)
+}
+
+// TokenEntryFromContext returns the TokenEntry the request was authenticated
+// with, if any. Returns nil for session-authenticated requests, anonymous
+// requests, and when the caller forgot to stash it.
+func TokenEntryFromContext(ctx context.Context) *TokenEntry {
+	e, _ := ctx.Value(tokenEntryKey).(*TokenEntry)
+	return e
+}
 
 // Identity represents an authenticated user or client.
 type Identity struct {

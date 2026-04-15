@@ -128,6 +128,14 @@ const docTemplate = `{
                         }
                     },
                     {
+                        "description": "Update-repos body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateTokenReposRequest"
+                        }
+                    },
+                    {
                         "description": "Revoke body (DELETE)",
                         "name": "body",
                         "in": "body",
@@ -138,7 +146,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "DELETE response",
+                        "description": "DELETE / PATCH response",
                         "schema": {
                             "$ref": "#/definitions/server.MessageResponse"
                         }
@@ -149,8 +157,20 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.TokenResponse"
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -185,6 +205,14 @@ const docTemplate = `{
                         }
                     },
                     {
+                        "description": "Update-repos body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateTokenReposRequest"
+                        }
+                    },
+                    {
                         "description": "Revoke body (DELETE)",
                         "name": "body",
                         "in": "body",
@@ -195,7 +223,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "DELETE response",
+                        "description": "DELETE / PATCH response",
                         "schema": {
                             "$ref": "#/definitions/server.MessageResponse"
                         }
@@ -206,8 +234,20 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.TokenResponse"
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -242,6 +282,14 @@ const docTemplate = `{
                         }
                     },
                     {
+                        "description": "Update-repos body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateTokenReposRequest"
+                        }
+                    },
+                    {
                         "description": "Revoke body (DELETE)",
                         "name": "body",
                         "in": "body",
@@ -252,7 +300,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "DELETE response",
+                        "description": "DELETE / PATCH response",
                         "schema": {
                             "$ref": "#/definitions/server.MessageResponse"
                         }
@@ -263,8 +311,97 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.TokenResponse"
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "GET lists, POST issues, DELETE revokes. Requires a valid\nadmin session cookie (obtained via /admin/login).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage subscription keys (admin only)",
+                "parameters": [
+                    {
+                        "description": "Issue body (POST)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.TokenRequest"
+                        }
+                    },
+                    {
+                        "description": "Update-repos body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateTokenReposRequest"
+                        }
+                    },
+                    {
+                        "description": "Revoke body (DELETE)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.RevokeTokenRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "DELETE / PATCH response",
+                        "schema": {
+                            "$ref": "#/definitions/server.MessageResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "POST response",
+                        "schema": {
+                            "$ref": "#/definitions/server.TokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -1156,6 +1293,12 @@ const docTemplate = `{
         "server.TokenListItem": {
             "type": "object",
             "properties": {
+                "repos": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "token": {
                     "type": "string"
                 },
@@ -1181,6 +1324,16 @@ const docTemplate = `{
         "server.TokenRequest": {
             "type": "object",
             "properties": {
+                "repos": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "my-templates",
+                        "shared-context"
+                    ]
+                },
                 "username": {
                     "type": "string",
                     "example": "alice"
@@ -1190,6 +1343,12 @@ const docTemplate = `{
         "server.TokenResponse": {
             "type": "object",
             "properties": {
+                "repos": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "token": {
                     "type": "string",
                     "example": "a1b2c3d4..."
@@ -1197,6 +1356,20 @@ const docTemplate = `{
                 "username": {
                     "type": "string",
                     "example": "alice"
+                }
+            }
+        },
+        "server.UpdateTokenReposRequest": {
+            "type": "object",
+            "properties": {
+                "repos": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "token": {
+                    "type": "string"
                 }
             }
         }

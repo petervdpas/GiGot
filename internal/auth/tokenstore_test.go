@@ -80,7 +80,7 @@ func TestTokenStrategy_PersistsAcrossRestart(t *testing.T) {
 	if err := s1.SetPersister(store1); err != nil {
 		t.Fatal(err)
 	}
-	token, err := s1.Issue("alice")
+	token, err := s1.Issue("alice", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestTokenStrategy_RevokeSurvivesRestart(t *testing.T) {
 	store, _ := NewSealedTokenStore(path, enc)
 	s := NewTokenStrategy()
 	_ = s.SetPersister(store)
-	token, _ := s.Issue("alice")
+	token, _ := s.Issue("alice", nil)
 	if !s.Revoke(token) {
 		t.Fatal("revoke returned false")
 	}

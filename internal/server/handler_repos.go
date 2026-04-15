@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/petervdpas/GiGot/internal/auth"
 	"github.com/petervdpas/GiGot/internal/policy"
 )
 
@@ -43,6 +44,13 @@ func (s *Server) listRepos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Token-authenticated callers only see their own assigned repos. Admin
+	// sessions and the auth-disabled dev identity see everything.
+	id := auth.IdentityFromContext(r.Context())
+	if id != nil && id.Provider == policy.ProviderToken {
+		names = s.filterReposForToken(r, names)
+	}
+
 	repos := make([]RepoInfo, 0, len(names))
 	for _, name := range names {
 		repos = append(repos, RepoInfo{
@@ -55,6 +63,26 @@ func (s *Server) listRepos(w http.ResponseWriter, r *http.Request) {
 		Repos: repos,
 		Count: len(repos),
 	})
+}
+
+// filterReposForToken narrows a repo-name list to just the entries the token
+// on the request is allowed to see. Empty allowlist → empty result.
+func (s *Server) filterReposForToken(r *http.Request, names []string) []string {
+	entry := s.tokenStrategy.EntryFromRequest(r)
+	if entry == nil || len(entry.Repos) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(entry.Repos))
+	for _, repo := range entry.Repos {
+		allowed[repo] = struct{}{}
+	}
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if _, ok := allowed[n]; ok {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {

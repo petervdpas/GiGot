@@ -9,10 +9,14 @@ import (
 	"sync"
 )
 
-// TokenEntry is a stored API token with its associated identity.
+// TokenEntry is a stored API token with its associated identity and the set
+// of repositories the bearer is allowed to access. Repos is an allowlist: an
+// empty slice grants access to no repositories. Wildcards are not supported
+// — admins add repo names explicitly.
 type TokenEntry struct {
-	Token    string `json:"token"`
-	Username string `json:"username"`
+	Token    string   `json:"token"`
+	Username string   `json:"username"`
+	Repos    []string `json:"repos,omitempty"`
 }
 
 // TokenPersister persists the token set to durable storage. Set via
@@ -105,8 +109,11 @@ func (s *TokenStrategy) Authenticate(r *http.Request) (*Identity, error) {
 	}, nil
 }
 
-// Issue creates and stores a new token for the given username.
-func (s *TokenStrategy) Issue(username string) (string, error) {
+// Issue creates and stores a new token for the given username, scoped to the
+// given set of repositories. Pass nil or an empty slice to issue a token with
+// no repo access (useful when the admin plans to attach repos later via an
+// Update call).
+func (s *TokenStrategy) Issue(username string, repos []string) (string, error) {
 	token, err := generateToken(32)
 	if err != nil {
 		return "", fmt.Errorf("generating token: %w", err)
@@ -115,6 +122,7 @@ func (s *TokenStrategy) Issue(username string) (string, error) {
 	entry := &TokenEntry{
 		Token:    token,
 		Username: username,
+		Repos:    repos,
 	}
 
 	s.mu.Lock()
@@ -151,6 +159,47 @@ func (s *TokenStrategy) Load(entry *TokenEntry) {
 	s.mu.Lock()
 	s.tokens[entry.Token] = entry
 	s.mu.Unlock()
+}
+
+// Get returns the TokenEntry for a bearer string, or nil if none exists. The
+// returned pointer is shared; do not mutate it — use UpdateRepos instead.
+func (s *TokenStrategy) Get(token string) *TokenEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.tokens[token]
+}
+
+// EntryFromRequest extracts the bearer token from the Authorization header
+// and returns the matching TokenEntry. Returns nil for non-token requests
+// (including admin session requests).
+func (s *TokenStrategy) EntryFromRequest(r *http.Request) *TokenEntry {
+	header := r.Header.Get("Authorization")
+	if header == "" {
+		return nil
+	}
+	parts := strings.SplitN(header, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return nil
+	}
+	return s.Get(strings.TrimSpace(parts[1]))
+}
+
+// UpdateRepos replaces the repo allowlist on an existing token. Returns
+// ErrInvalidToken if the token doesn't exist.
+func (s *TokenStrategy) UpdateRepos(token string, repos []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, ok := s.tokens[token]
+	if !ok {
+		return ErrInvalidToken
+	}
+	previous := entry.Repos
+	entry.Repos = repos
+	if err := s.persistLocked(); err != nil {
+		entry.Repos = previous
+		return fmt.Errorf("persist token repos: %w", err)
+	}
+	return nil
 }
 
 // Count returns the number of active tokens.

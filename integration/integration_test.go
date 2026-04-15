@@ -350,12 +350,39 @@ func (tc *testContext) thePolicyIsDenyAll() error {
 }
 
 func (tc *testContext) aTokenIsIssuedForUser(username string) error {
-	token, err := tc.tokenStrategy.Issue(username)
+	token, err := tc.tokenStrategy.Issue(username, nil)
 	if err != nil {
 		return err
 	}
 	tc.currentToken = token
 	return nil
+}
+
+func (tc *testContext) aTokenIsIssuedForUserWithRepos(username, reposCSV string) error {
+	var repos []string
+	for _, r := range strings.Split(reposCSV, ",") {
+		r = strings.TrimSpace(r)
+		if r != "" {
+			repos = append(repos, r)
+		}
+	}
+	token, err := tc.tokenStrategy.Issue(username, repos)
+	if err != nil {
+		return err
+	}
+	tc.currentToken = token
+	return nil
+}
+
+func (tc *testContext) adminRescopesThatTokenTo(reposCSV string) error {
+	var repos []string
+	for _, r := range strings.Split(reposCSV, ",") {
+		r = strings.TrimSpace(r)
+		if r != "" {
+			repos = append(repos, r)
+		}
+	}
+	return tc.tokenStrategy.UpdateRepos(tc.currentToken, repos)
 }
 
 func (tc *testContext) iRequestWithoutAToken(path string) error {
@@ -785,6 +812,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the server is running with auth disabled$`, tc.theServerIsRunningWithAuthDisabled)
 	ctx.Step(`^the server is running with auth enabled$`, tc.theServerIsRunningWithAuthEnabled)
 	ctx.Step(`^a token is issued for user "([^"]*)"$`, tc.aTokenIsIssuedForUser)
+	ctx.Step(`^a token is issued for user "([^"]*)" with repos "([^"]*)"$`, tc.aTokenIsIssuedForUserWithRepos)
+	ctx.Step(`^the admin rescopes that token to "([^"]*)"$`, tc.adminRescopesThatTokenTo)
 	ctx.Step(`^the policy is deny-all$`, tc.thePolicyIsDenyAll)
 	ctx.Step(`^the server keypair is rotated$`, tc.theServerKeypairIsRotated)
 	ctx.Step(`^the JSON response "([^"]*)" should differ from saved "([^"]*)"$`, tc.theJSONResponseShouldDifferFromSaved)

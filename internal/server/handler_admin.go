@@ -102,15 +102,19 @@ func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *au
 // @Tags         admin
 // @Accept       json
 // @Produce      json
-// @Param        body  body      TokenRequest        false  "Issue body (POST)"
-// @Param        body  body      RevokeTokenRequest  false  "Revoke body (DELETE)"
-// @Success      200   {object}  TokenListResponse  "GET response"
+// @Param        body  body      TokenRequest             false  "Issue body (POST)"
+// @Param        body  body      UpdateTokenReposRequest  false  "Update-repos body (PATCH)"
+// @Param        body  body      RevokeTokenRequest       false  "Revoke body (DELETE)"
+// @Success      200   {object}  TokenListResponse  "GET / PATCH response"
 // @Success      201   {object}  TokenResponse      "POST response"
-// @Success      200   {object}  MessageResponse    "DELETE response"
+// @Success      200   {object}  MessageResponse    "DELETE / PATCH response"
+// @Failure      400   {object}  ErrorResponse
 // @Failure      401   {object}  ErrorResponse
+// @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Router       /admin/tokens [get]
 // @Router       /admin/tokens [post]
+// @Router       /admin/tokens [patch]
 // @Router       /admin/tokens [delete]
 func (s *Server) handleAdminTokens(w http.ResponseWriter, r *http.Request) {
 	if s.requireAdminSession(w, r) == nil {
@@ -122,11 +126,35 @@ func (s *Server) handleAdminTokens(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		// Reuse the existing issuance path.
 		s.issueToken(w, r)
+	case http.MethodPatch:
+		s.adminUpdateTokenRepos(w, r)
 	case http.MethodDelete:
 		s.revokeToken(w, r)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func (s *Server) adminUpdateTokenRepos(w http.ResponseWriter, r *http.Request) {
+	var req UpdateTokenReposRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Token == "" {
+		writeError(w, http.StatusBadRequest, "token is required")
+		return
+	}
+	repos := normalizeRepos(req.Repos)
+	if err := s.validateRepos(repos); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.tokenStrategy.UpdateRepos(req.Token, repos); err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, MessageResponse{Message: "repos updated"})
 }
 
 func (s *Server) adminListTokens(w http.ResponseWriter, _ *http.Request) {
@@ -136,6 +164,7 @@ func (s *Server) adminListTokens(w http.ResponseWriter, _ *http.Request) {
 		items = append(items, TokenListItem{
 			Token:    e.Token,
 			Username: e.Username,
+			Repos:    e.Repos,
 		})
 	}
 	writeJSON(w, http.StatusOK, TokenListResponse{

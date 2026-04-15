@@ -95,7 +95,7 @@ func TestMiddlewareEnabledAllowsAuthenticated(t *testing.T) {
 	p.SetEnabled(true)
 
 	ts := NewTokenStrategy()
-	token, _ := ts.Issue("alice")
+	token, _ := ts.Issue("alice", nil)
 	p.Register(ts)
 
 	var gotIdentity *Identity

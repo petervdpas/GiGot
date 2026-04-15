@@ -125,6 +125,10 @@ definitions:
     type: object
   server.TokenListItem:
     properties:
+      repos:
+        items:
+          type: string
+        type: array
       token:
         type: string
       username:
@@ -141,17 +145,37 @@ definitions:
     type: object
   server.TokenRequest:
     properties:
+      repos:
+        example:
+        - my-templates
+        - shared-context
+        items:
+          type: string
+        type: array
       username:
         example: alice
         type: string
     type: object
   server.TokenResponse:
     properties:
+      repos:
+        items:
+          type: string
+        type: array
       token:
         example: a1b2c3d4...
         type: string
       username:
         example: alice
+        type: string
+    type: object
+  server.UpdateTokenReposRequest:
+    properties:
+      repos:
+        items:
+          type: string
+        type: array
+      token:
         type: string
     type: object
 host: localhost:3417
@@ -235,6 +259,11 @@ paths:
         name: body
         schema:
           $ref: '#/definitions/server.TokenRequest'
+      - description: Update-repos body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateTokenReposRequest'
       - description: Revoke body (DELETE)
         in: body
         name: body
@@ -244,15 +273,23 @@ paths:
       - application/json
       responses:
         "200":
-          description: DELETE response
+          description: DELETE / PATCH response
           schema:
             $ref: '#/definitions/server.MessageResponse'
         "201":
           description: POST response
           schema:
             $ref: '#/definitions/server.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "405":
@@ -274,6 +311,11 @@ paths:
         name: body
         schema:
           $ref: '#/definitions/server.TokenRequest'
+      - description: Update-repos body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateTokenReposRequest'
       - description: Revoke body (DELETE)
         in: body
         name: body
@@ -283,15 +325,75 @@ paths:
       - application/json
       responses:
         "200":
-          description: DELETE response
+          description: DELETE / PATCH response
           schema:
             $ref: '#/definitions/server.MessageResponse'
         "201":
           description: POST response
           schema:
             $ref: '#/definitions/server.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage subscription keys (admin only)
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        GET lists, POST issues, DELETE revokes. Requires a valid
+        admin session cookie (obtained via /admin/login).
+      parameters:
+      - description: Issue body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.TokenRequest'
+      - description: Update-repos body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateTokenReposRequest'
+      - description: Revoke body (DELETE)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.RevokeTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: DELETE / PATCH response
+          schema:
+            $ref: '#/definitions/server.MessageResponse'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "405":
@@ -313,6 +415,11 @@ paths:
         name: body
         schema:
           $ref: '#/definitions/server.TokenRequest'
+      - description: Update-repos body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateTokenReposRequest'
       - description: Revoke body (DELETE)
         in: body
         name: body
@@ -322,15 +429,23 @@ paths:
       - application/json
       responses:
         "200":
-          description: DELETE response
+          description: DELETE / PATCH response
           schema:
             $ref: '#/definitions/server.MessageResponse'
         "201":
           description: POST response
           schema:
             $ref: '#/definitions/server.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "405":
