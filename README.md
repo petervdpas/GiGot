@@ -59,9 +59,12 @@ tracker and is the source of truth for "what's next."
       identity header forwarded by a fronting gateway (e.g. Azure APIM).
       Lets the admin UI skip server-side login when deployed behind a
       gateway that already authenticates the caller.
-- [ ] **Formidable context marker file.** Once we pick an idiomatic marker
-      (`.formidablerc`?), emit it from the scaffold so Formidable clients
-      can recognise a gigot-managed context without guessing.
+- [ ] **Structured sync API (multi-phase).** Move Formidable clients off
+      direct `git push/pull` onto an HTTP-only content API so non-technical
+      teammates cannot brick a repo with a stale push. Design and phased
+      plan live in [`docs/design/structured-sync-api.md`](docs/design/structured-sync-api.md).
+      The previously-listed "Formidable context marker file" task is folded
+      into Phase 0 of that plan.
 - [ ] **NaCl-challenge admin login.** Replace the password+session login
       with curve25519 challenge/response, admin keypair held in the
       browser (passphrase-encrypted in localStorage). Password path stays
