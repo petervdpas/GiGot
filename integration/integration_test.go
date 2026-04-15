@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"net/http/cookiejar"
+	"os/exec"
 
 	"github.com/cucumber/godog"
 	"github.com/petervdpas/GiGot/internal/auth"
@@ -140,6 +141,47 @@ func (tc *testContext) theResponseBodyShouldContain(text string) error {
 
 func (tc *testContext) aRepositoryExists(name string) error {
 	return tc.git.InitBare(name)
+}
+
+func (tc *testContext) theRepositoryHasCommits(name string, expected string) error {
+	path := tc.git.RepoPath(name)
+	out, err := exec.Command("git", "-C", path, "rev-list", "--all", "--max-count=1").Output()
+	if err != nil {
+		return fmt.Errorf("rev-list %s: %w", name, err)
+	}
+	has := len(out) > 0
+	want := expected == "has commits"
+	if has != want {
+		return fmt.Errorf("repo %q has-commits = %v, want %v", name, has, want)
+	}
+	return nil
+}
+
+func (tc *testContext) theRepositoryContainsFile(repo, file string) error {
+	path := tc.git.RepoPath(repo)
+	out, err := exec.Command("git", "-C", path, "ls-tree", "-r", "HEAD", "--name-only").Output()
+	if err != nil {
+		return fmt.Errorf("ls-tree %s: %w", repo, err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.TrimSpace(line) == file {
+			return nil
+		}
+	}
+	return fmt.Errorf("repo %q does not contain %q (tree: %s)", repo, file, string(out))
+}
+
+func (tc *testContext) theRepositoryHeadCommitAuthor(repo, author string) error {
+	path := tc.git.RepoPath(repo)
+	out, err := exec.Command("git", "-C", path, "log", "-1", "--pretty=format:%an").Output()
+	if err != nil {
+		return fmt.Errorf("log %s: %w", repo, err)
+	}
+	got := strings.TrimSpace(string(out))
+	if got != author {
+		return fmt.Errorf("repo %q head author = %q, want %q", repo, got, author)
+	}
+	return nil
 }
 
 // --- Config steps ---
@@ -784,6 +826,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the response content type should contain "([^"]*)"$`, tc.theResponseContentTypeShouldContain)
 	ctx.Step(`^the response body should contain "([^"]*)"$`, tc.theResponseBodyShouldContain)
 	ctx.Step(`^a repository "([^"]*)" exists$`, tc.aRepositoryExists)
+	ctx.Step(`^the repository "([^"]*)" (has commits|has no commits)$`, tc.theRepositoryHasCommits)
+	ctx.Step(`^the repository "([^"]*)" contains file "([^"]*)"$`, tc.theRepositoryContainsFile)
+	ctx.Step(`^the repository "([^"]*)" head commit is authored by "([^"]*)"$`, tc.theRepositoryHeadCommitAuthor)
 
 	// Config steps
 	ctx.Step(`^no config file exists$`, tc.noConfigFileExists)

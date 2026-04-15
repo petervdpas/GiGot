@@ -1,0 +1,14 @@
+name: Basic
+filename: basic.yaml
+enable_collection: true
+fields:
+  - key: id
+    type: guid
+    label: GUID
+    description: ''
+    primary_key: true
+  - key: name
+    type: text
+    label: Name
+    description: Short identifier or title for this entry.
+    collection: entries

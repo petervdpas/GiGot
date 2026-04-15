@@ -25,6 +25,7 @@ the sealed bodies of GiGot requests and responses.
 
 ## Table of Contents
 
+0. [Roadmap / TODO](#roadmap--todo)
 1. [Quick Start](#quick-start)
 2. [Command-Line Interface](#command-line-interface)
 3. [Configuration Reference (`gigot.json`)](#configuration-reference-gigotjson)
@@ -39,6 +40,53 @@ the sealed bodies of GiGot requests and responses.
 12. [Security Model and Tradeoffs](#security-model-and-tradeoffs)
 13. [Development and Testing](#development-and-testing)
 14. [Project Structure](#project-structure)
+
+---
+
+## Roadmap / TODO
+
+Open work, in rough priority order. This list mirrors the in-project task
+tracker and is the source of truth for "what's next."
+
+- [ ] **Mirror-sync gigot repos to external remotes.** Per-repo upstream URL
+      + credential (e.g. GitHub / Azure DevOps PAT) stored in an encrypted
+      store. Post-receive hook installed in each bare repo that fires
+      `git push upstream` after every accepted push. Admin UI: add/edit
+      upstream per repo, show last-sync status.
+- [ ] **Gateway-trusted identity strategy.** A third `auth.Strategy`
+      alongside `TokenStrategy` and `SessionStrategy` that trusts a signed
+      identity header forwarded by a fronting gateway (e.g. Azure APIM).
+      Lets the admin UI skip server-side login when deployed behind a
+      gateway that already authenticates the caller.
+- [ ] **Graceful SIGTERM shutdown + stale-port diagnostics.** Catch
+      SIGINT/SIGTERM, call `http.Server.Shutdown` so the port is always
+      released cleanly. On startup, if the port is already in use, print a
+      clearer error pointing at `lsof -iTCP:3417`.
+- [ ] **Formidable context marker file.** Once we pick an idiomatic marker
+      (`.formidablerc`?), emit it from the scaffold so Formidable clients
+      can recognise a gigot-managed context without guessing.
+- [ ] **NaCl-challenge admin login.** Replace the password+session login
+      with curve25519 challenge/response, admin keypair held in the
+      browser (passphrase-encrypted in localStorage). Password path stays
+      available as a fallback. Requires vendoring `tweetnacl-js`.
+- [ ] **HA-friendly admin sessions.** Persist sessions in a sealed store
+      instead of in-memory so admins don't re-login after every restart.
+
+Done and shipping:
+
+- [x] Leaf `internal/crypto` NaCl-box package + on-disk keypair bootstrap
+- [x] Client enrollment endpoint
+- [x] Sealed-body middleware for `/api/*`
+- [x] Encrypted persistent token store
+- [x] Admin page + password/session login
+- [x] Per-repo access on subscription keys (enforced via `internal/policy`)
+- [x] `./gigot --rotate-keys` with atomic rewrap + backups
+- [x] Central `policy.Evaluator` + `DenyAll` / `AllowAuthenticated` /
+      `TokenRepoPolicy`
+- [x] Models split per concern (`models_*.go`)
+- [x] Roles ripped out end-to-end
+- [x] Sidebar-layout admin UI with deep-linkable panels
+- [x] Optional Formidable-context scaffold on repo creation
 
 ---
 

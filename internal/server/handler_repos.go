@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/petervdpas/GiGot/internal/auth"
+	gitmanager "github.com/petervdpas/GiGot/internal/git"
 	"github.com/petervdpas/GiGot/internal/policy"
 )
 
@@ -105,9 +106,28 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, MessageResponse{
-		Message: "repository " + req.Name + " created",
-	})
+	if req.ScaffoldFormidable {
+		files, err := formidableScaffoldFiles()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "scaffold payload: "+err.Error())
+			return
+		}
+		if err := s.git.Scaffold(req.Name, gitmanager.ScaffoldOptions{
+			CommitterName:  scaffoldCommitterName,
+			CommitterEmail: scaffoldCommitterEmail,
+			Message:        scaffoldCommitMessage,
+			Files:          files,
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, "scaffolding failed: "+err.Error())
+			return
+		}
+	}
+
+	msg := "repository " + req.Name + " created"
+	if req.ScaffoldFormidable {
+		msg += " (scaffolded as Formidable context)"
+	}
+	writeJSON(w, http.StatusCreated, MessageResponse{Message: msg})
 }
 
 // handleRepo godoc

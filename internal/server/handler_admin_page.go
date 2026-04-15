@@ -120,6 +120,10 @@ var adminPageTmpl = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
           <h2>Create repository</h2>
           <form id="create-repo-form" class="row">
             <input name="name" placeholder="New repo name" required>
+            <label class="muted" style="display:flex; align-items:center; gap:0.3rem;">
+              <input type="checkbox" name="scaffold" style="min-width:0;">
+              Scaffold as Formidable context
+            </label>
             <button type="submit">Create repo</button>
           </form>
           <div id="repo-msg" class="muted"></div>
@@ -182,12 +186,12 @@ const api = {
     if (!r.ok) throw new Error('list repos failed');
     return r.json();
   },
-  async createRepo(name) {
+  async createRepo(name, scaffoldFormidable) {
     const r = await fetch('/api/repos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, scaffold_formidable: !!scaffoldFormidable }),
     });
     if (!r.ok) throw new Error((await r.json()).error || 'create failed');
     return r.json();
@@ -434,7 +438,7 @@ document.getElementById('create-repo-form').addEventListener('submit', async e =
   const msg = document.getElementById('repo-msg');
   msg.textContent = '';
   try {
-    await api.createRepo(f.name.value);
+    await api.createRepo(f.name.value, f.scaffold.checked);
     f.reset();
     await refreshRepos();
   } catch (ex) {
