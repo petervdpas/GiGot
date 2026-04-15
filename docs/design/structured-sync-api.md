@@ -1,8 +1,8 @@
 # Structured Sync API — Design & Execution Plan
 
-**Status:** accepted, not yet implemented
+**Status:** accepted, not yet implemented. Formidable-first layer (§10–§11) added 2026-04-16.
 **Owner:** Peter
-**Last updated:** 2026-04-15
+**Last updated:** 2026-04-16
 
 This document is the source of truth for moving GiGot from "dumb git remote +
 sealed bodies" toward a **structured sync API** that lets Formidable clients
@@ -63,6 +63,43 @@ Concrete rule: `author = client_supplied_name <client_supplied_email>` if
 present and the subscription key has permission; otherwise
 `<subscription_username>@gigot.local`. Committer is always the
 scaffolder identity so the server's role is auditable in `git log`.
+
+---
+
+## 2.5 Server modes
+
+GiGot runs in one of two modes, selected by a single server-config key:
+
+```
+formidable_first: bool   # default: false
+```
+
+**Generic mode (`formidable_first: false`, default)** — the protocol
+described in the rest of this document. File bodies are opaque; merges are
+line-based via `git merge-tree`; conflict shape is blob-triples. Any client
+that speaks the HTTP protocol works — Formidable, a CI script, a
+third-party editor.
+
+**Formidable-first mode (`formidable_first: true`)** — same endpoints, same
+wire format, smarter behaviour. The server parses `templates/*.yaml` and
+`storage/**/*.meta.json`, applies field-level merges driven by the template
+schema, validates records against their templates on commit, enforces
+referential integrity for image fields, and exposes a record-query
+endpoint. See §10 for capabilities and §11 for the execution phases.
+
+**Per-repo opt-in.** On a `formidable_first` server, a repo only gets the
+smart behaviour if it carries the marker file `.formidable/context.json`
+(see Phase 0). Non-marker repos on the same server fall back to generic
+mode. This keeps the two worlds coexisting on one binary: a
+Formidable-first deployment can still host a plain structured-sync repo
+without the server choking on non-conforming content.
+
+**Why two modes at all.** GiGot's protocol is useful beyond Formidable —
+structured sync with conflict auto-resolution is a generic need. Keeping
+the generic path first-class protects that optionality and keeps it honest
+as a test surface; the Formidable layer is *additive*, not replacement.
+Every Formidable-first capability is built on top of an already-shipped
+generic counterpart (see §11).
 
 ---
 
@@ -239,6 +276,12 @@ would falsely flag as a conflict.
 The sealed-body middleware already covers `/api/*`, so new endpoints inherit
 E2E encryption automatically.
 
+On a `formidable_first` server with the marker file present in a repo, the
+same `/api/repos/{name}/*` endpoints gain Formidable-aware behaviour
+(schema-driven merges, referential checks, a record-query endpoint — see
+§10). The wire format is unchanged; only the server's interpretation of
+payloads and conflict shape changes.
+
 ---
 
 ## 6. Execution phases
@@ -339,10 +382,15 @@ Do not pre-build these. Revisit after Phase 4 ships and there's usage data.
 
 ## 7. Open questions (cross-phase)
 
-- **Binary files.** `storage/` may contain attachments. Base64 in JSON is fine
-  up to ~a few MB. If Formidable stores large binaries, we need a streaming
-  path (`multipart/form-data` or raw body) before Phase 1 declares done.
-  Decide early; retrofitting later churns the client.
+- **Binary files in generic mode.** `storage/` may contain attachments.
+  Base64 in JSON is fine up to ~a few MB. If a generic-mode client stores
+  large binaries, we need a streaming path (`multipart/form-data` or raw
+  body) before Phase 1 declares done. In Formidable-first mode the picture
+  is sharper — images live under `storage/<template>/images/` and are
+  referenced by `type: image` fields; Phase F3 defines the upload path and
+  referential-integrity rules, which may also be the point where we settle
+  the generic streaming story. Decide early; retrofitting later churns the
+  client.
 - **Branch model.** MVP assumes the repo has a single writable branch
   (`default_branch`, typically `main`). Multi-branch workflows are out of
   scope — call this out in the README so nobody ships a feature that depends
@@ -366,6 +414,11 @@ Do not pre-build these. Revisit after Phase 4 ships and there's usage data.
 - Per-file locking as a hard constraint. Phase 5 may add cooperative locks;
   hard locking is explicitly not happening.
 - Replacing the smart-HTTP endpoints. They stay. This is additive.
+- Scaling GiGot as a multi-tenant generic structured-sync backend for
+  non-Formidable clients. Technically possible — the generic mode is
+  first-class — but not the design target. Formidable is the primary
+  customer, and capacity/roadmap decisions resolve in its favour when
+  they conflict.
 
 ---
 
@@ -382,3 +435,275 @@ Future Claude sessions picking up sync work:
    "Done and shipping" block) and this document's status line. If a design
    choice here turns out wrong mid-phase, **update this doc before writing
    more code** so the next session isn't working from a stale plan.
+5. Formidable-first phases (F1–F4, §11) layer on top of their generic
+   counterparts. A server running generic Phase N + Formidable Phase F(N-1)
+   is a supported configuration. Do not start an F-phase before its
+   underlying generic phase has shipped — the generic path is the fallback
+   and the test surface.
+
+---
+
+## 10. Formidable-first mode
+
+Activated when `formidable_first: true` is set server-side **and**
+`.formidable/context.json` is present in the target repo. The protocol
+endpoints from §3 stay unchanged; the server's behaviour on top of them
+changes.
+
+### 10.1 What the server parses
+
+On every write (and lazily on reads that benefit from it), the server
+parses:
+
+- `templates/*.yaml` — form definitions. Relevant keys: `filename`,
+  `fields` (ordered list of typed field defs), `item_field`,
+  `enable_collection`, `markdown_template`, `sidebar_expression`.
+- `storage/<template>/*.meta.json` — records with shape
+  `{ meta: {...}, data: {...} }`. `meta.template` names the governing
+  template filename.
+
+Field types come from Formidable's known set: `text`, `textarea`,
+`boolean`, `number`, `range`, `date`, `dropdown`, `radio`, `multioption`,
+`list`, `table`, `image`, `link`, `tags`, `guid`, `code`, `latex`, `api`,
+plus `loopstart`/`loopstop` as structural brackets. Unknown field types
+are treated as opaque text — forward-compatibility by default.
+
+### 10.2 Record merge semantics
+
+When both client and server have modified the same
+`storage/**/*.meta.json` since `parent_version`, the server merges per
+JSON key instead of per line. Rules, top to bottom:
+
+- **`meta.updated`** — pick `max(updated_theirs, updated_yours)`. This
+  field regenerates on every save; line-based merge would conflict here
+  *every time*, defeating the whole design. Explicitly never a conflict.
+- **`meta.tags`** — set union over the normalised (lowercased, trimmed)
+  values, re-sorted. Matches Formidable's own `sanitize` behaviour.
+- **`meta.flagged`** — if divergent, prefer `true`. Flagging is loud;
+  unflagging is cheap to redo.
+- **`meta.created`, `meta.id`, `meta.template`** — must not change after
+  creation. If either side has altered them, return 409 — this is a
+  corrupt client, not a real conflict.
+- **`meta.author_name`, `meta.author_email`** — follow the winning
+  `meta.updated` (last-writer-wins on attribution).
+- **`data.<field-key>`** — resolved per field type (§10.3).
+
+If every key resolves without conflict, the server produces a single
+merge commit whose tree is the merged JSON, re-serialised canonically
+(sorted keys for maps the schema doesn't order; preserved order for
+arrays that are positional, like `table` rows).
+
+### 10.3 Type-aware field resolution
+
+Per `data.*` key, the server consults the template's `fields[]` entry
+and applies:
+
+| Field type | Merge rule |
+| ---------- | ---------- |
+| `text`, `number`, `boolean`, `date`, `range`, `dropdown`, `radio`, `guid`, `link` | If one side unchanged, take the changed side. If both changed to the same value, no-op. Otherwise 409. |
+| `textarea` (`plain` or `markdown`) | Line-based 3-way merge — this is prose. Clean ⇒ ok; dirty ⇒ 409 with blob-triple under this field. |
+| `latex`, `code` | Line-based 3-way merge, same as `textarea`. |
+| `tags` | Set union (same rule as `meta.tags`). |
+| `multioption` | Set union on selected values. |
+| `list` | Element-level merge if the list has a `primary_key` field declared; otherwise line-based over canonical-serialised list. |
+| `table` | Row-level merge keyed by the row's `primary_key` column if any; otherwise by row index (positional). Cell conflicts within a row bubble up as field-level 409s on that cell. |
+| `image` | Last-writer-wins on `meta.updated`. The referenced filename is just a string; the actual blob lives in `images/` and is merged separately (§10.5). |
+| `api` | Treat the cached value as opaque JSON; deep-merge objects, conflict on scalar disagreement. |
+| Unknown type | Fall back to line-based merge. |
+
+Loop groups (`loopstart`/`loopstop`) merge per iteration, keyed by the
+loop entry's `guid` field if present, otherwise positional.
+
+### 10.4 Schema validation on commit
+
+Before writing any record, the server checks:
+
+1. `meta.template` names an existing `templates/<name>.yaml` in the
+   target version. Missing ⇒ 422.
+2. Every `data.*` key appears in the template's `fields[]`. Extraneous
+   keys ⇒ 422 by default; can be downgraded to a warning via config for
+   forward-compat during template edits (open question — decide in F2).
+3. Each field's value matches its declared type's coarse shape (string
+   for text, array for list/table, ISO8601 for date, etc.). Mismatch ⇒
+   422.
+
+This catches corrupt clients and cross-file rename drift (template
+renames a field, record still uses old key) at commit time rather than
+at render time.
+
+### 10.5 Referential integrity for image fields
+
+For every `data.*` whose template field has `type: image`, the value is
+expected to be a path relative to `storage/<template>/images/`. On
+commit, the server checks:
+
+- If a record references an image, that image exists in the target tree
+  (either unchanged from the parent, or added in this same commit).
+  Missing ⇒ 422.
+- On merge, if one side deletes an image the other side still
+  references, the deletion is held back — a 409 is returned naming the
+  dangling reference, so the client can decide (drop the reference, or
+  restore the image).
+
+This is the only merge rule that crosses file boundaries. It's cheap:
+the server already has both trees parsed for record merging.
+
+### 10.6 Per-field conflict shape
+
+When a record merge hits a real conflict, the 409 response is richer
+than §3.5's blob-triple:
+
+```
+409 {
+  "current_version": "<sha>",
+  "path": "storage/addresses/baker-residence.meta.json",
+  "record_id": "b8498b24-...",
+  "template": "addresses.yaml",
+  "field_conflicts": [
+    {
+      "key": "postal",
+      "field_type": "text",
+      "base":   "NW1 6XE",
+      "theirs": "NW1 6XF",
+      "yours":  "NW1 6XG"
+    }
+  ],
+  "auto_merged_fields": ["city", "owners"]
+}
+```
+
+Line-based conflicts inside `textarea`/`latex`/`code` fields keep the
+blob-triple shape nested under the field entry. The client renders a
+field-specific dialog, not a whole-file diff.
+
+### 10.7 Template writes
+
+Templates are YAML. The server merges:
+
+- Top-level scalar keys (`name`, `item_field`, `enable_collection`,
+  `sidebar_expression`) — last-writer-wins at commit time if both
+  changed.
+- `markdown_template` — line-based merge. It's Handlebars prose; line
+  merge is the right tool. Conflict ⇒ 409 with blob-triple for this key
+  only.
+- `fields[]` — structural merge keyed by field `key`. Additions from
+  both sides interleave in commit-time order. A removal from one side
+  plus an edit on the other on the same key ⇒ 409. Reorderings are a
+  no-op for keys both sides kept; if both sides reordered differently,
+  409.
+
+Field *rename* (same semantics, different `key`) is not auto-detected.
+A rename on one side plus an edit on the other side will 409 as
+"delete-vs-edit" — mirrors git's own behaviour on file renames.
+
+### 10.8 Record query endpoint
+
+Layered on top of Phase 4 (`GET /changes`):
+
+```
+GET /api/repos/{name}/records/{template}?where=<expr>&sort=<field>&limit=<n>
+→ 200 { "version": "<sha>", "records": [ { ... full meta.json ... } ] }
+```
+
+`<expr>` is a small filter DSL over `data.*` keys (MVP: equality and
+simple range on scalar fields — `where=city=London`, `where=range>5`).
+Larger query needs can come later.
+
+The server maintains an in-memory index per repo, invalidated on
+commit. Cold-start cost is proportional to `storage/**/*.meta.json`
+count, amortised by the parse the server already does for merges.
+
+### 10.9 What stays out
+
+- **Live updates** — still the Phase 5 / §3.8 story, out of initial
+  scope in both modes. SSE via a small Go library (e.g. `r3labs/sse`)
+  is the likely primitive when we get there; long-polling on `/head`
+  is the dumb fallback that works today.
+- **Cross-repo queries** — not planned.
+- **Full-text search / JMESPath** — overkill for MVP query needs; add
+  only if usage demands.
+
+---
+
+## 11. Formidable-first execution phases
+
+Each phase layers on top of a generic phase — the generic behaviour
+ships first, the Formidable behaviour is an upgrade. A server can run
+at any combination (e.g. generic Phase 2 only, or Phase 2 + F1, or
+Phase 4 + F1 + F2 without F3/F4).
+
+### Phase F1 — Schema parsing + per-field record merge
+
+**Layers on:** Phase 2 (generic single-file write).
+
+Scope:
+- YAML template parser (reuse an existing Go YAML lib; no custom
+  parser).
+- Record JSON parser + validator keyed by `meta.template`.
+- Field-level merge engine covering all types in §10.3.
+- Per-field 409 response shape (§10.6).
+- Configurable strictness for extraneous `data` keys (warn vs reject).
+
+Acceptance:
+- Two clients edit different fields on the same record with stale
+  parents ⇒ auto-merge succeeds, one merge commit, no human
+  intervention.
+- Two clients edit the same scalar field ⇒ 409 naming the field only.
+- `updated` never triggers a conflict.
+- Corrupt record (missing template, wrong type) is rejected at commit.
+
+### Phase F2 — Template writes + validation at commit
+
+**Layers on:** Phase 2/3 (generic single-file + multi-file writes).
+
+Scope:
+- Structural `fields[]` merge for templates (§10.7).
+- Cross-file check on commit: if a template is edited and records of
+  that template are also touched in the same commit, verify record
+  `data.*` keys still match the new `fields[]`.
+- Warn (not reject) if an existing record elsewhere in the repo is now
+  invalid after a template edit — surface this in the commit response
+  so the client can prompt a migration flow.
+
+Acceptance:
+- Two template designers add different fields to the same template ⇒
+  auto-merge with both fields present, preserving order.
+- Template rename of a field key plus a record edit using the old key
+  ⇒ 409 with a clear "template/record drift" message.
+
+### Phase F3 — Referential integrity for image fields
+
+**Layers on:** Phase 3 (multi-file commits).
+
+Scope:
+- On commit: parse records for `type: image` values, check referents
+  exist.
+- On merge: hold back image deletions that would orphan references;
+  409 with named dangling references.
+- Define the image-upload path — either `POST /commits` with binary
+  blobs base64'd in the `changes[]` entry (MVP), or a streaming path
+  (`multipart/form-data`) if blob sizes warrant it. Decide at phase
+  start; this is where §7's "binary files" open question resolves for
+  both modes.
+
+Acceptance:
+- Commit that deletes an image still referenced by a record is
+  rejected.
+- Merge that would orphan an image returns 409 with the offending
+  record and field named.
+
+### Phase F4 — Record query endpoint
+
+**Layers on:** Phase 4 (generic `/changes`).
+
+Scope:
+- In-memory record index per repo, invalidated on commit.
+- `GET /records/{template}` with the minimal filter DSL in §10.8.
+- Index rebuild on server restart; no persistence (rebuild cost is
+  cheap for realistic repo sizes — benchmark during phase).
+
+Acceptance:
+- Listing all records of a template returns them in ≤100ms for 10k
+  records on a dev machine.
+- Equality filter on a scalar field returns correct subset.
+- Commit invalidates and rebuilds the affected template's slice only.
