@@ -13,14 +13,12 @@ var adminPageTmpl = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-         background: #0d1117; color: #c9d1d9; min-height: 100vh; padding: 2rem; }
-  header { display: flex; justify-content: space-between; align-items: center;
-           border-bottom: 1px solid #30363d; padding-bottom: 1rem; margin-bottom: 1.5rem; }
-  h1 { color: #f0f6fc; font-size: 1.6rem; }
-  h2 { color: #f0f6fc; font-size: 1.1rem; margin: 1.25rem 0 0.75rem; }
+         background: #0d1117; color: #c9d1d9; min-height: 100vh; }
+  h1 { color: #f0f6fc; font-size: 1.4rem; }
+  h2 { color: #f0f6fc; font-size: 1.1rem; margin-bottom: 0.75rem; }
   button { background: #238636; border: 0; color: white; padding: 0.5rem 1rem;
            border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
-  button.secondary { background: #21262d; border: 1px solid #30363d; }
+  button.secondary { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; }
   button.danger { background: #da3633; }
   button.small { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
   input { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9;
@@ -40,7 +38,7 @@ var adminPageTmpl = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
   .success { color: #3fb950; font-size: 0.9rem; margin-top: 0.5rem; }
   .hidden { display: none; }
   form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-  .login-wrap { max-width: 380px; margin: 4rem auto; }
+  .login-wrap { max-width: 380px; margin: 4rem auto; padding: 0 1rem; }
   .repo-picker { display: flex; flex-direction: column; gap: 0.25rem;
                  max-height: 140px; overflow-y: auto; padding: 0.5rem;
                  border: 1px solid #30363d; border-radius: 6px; min-width: 260px; }
@@ -54,6 +52,30 @@ var adminPageTmpl = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
   a:hover { text-decoration: underline; }
   .footer-link { display: block; text-align: center; margin-top: 1rem;
                  font-size: 0.85rem; color: #8b949e; }
+
+  /* Layout: left sidebar + main content. */
+  .shell { display: flex; min-height: 100vh; }
+  .sidebar { width: 240px; flex-shrink: 0; background: #0a0d12;
+             border-right: 1px solid #30363d; display: flex; flex-direction: column;
+             padding: 1.25rem 0; position: sticky; top: 0; height: 100vh; }
+  .sidebar .brand { padding: 0 1.25rem 1.25rem; border-bottom: 1px solid #21262d;
+                    margin-bottom: 0.5rem; }
+  .sidebar nav { display: flex; flex-direction: column; flex: 1; gap: 2px;
+                 padding: 0.5rem 0.5rem; }
+  .sidebar nav a { display: flex; align-items: center; gap: 0.5rem;
+                   padding: 0.6rem 0.75rem; border-radius: 6px; color: #c9d1d9;
+                   font-size: 0.9rem; cursor: pointer; }
+  .sidebar nav a:hover { background: #161b22; text-decoration: none; }
+  .sidebar nav a.active { background: #1f6feb33; color: #f0f6fc; }
+  .sidebar nav .spacer { flex: 1; }
+  .sidebar .me { padding: 1rem 1.25rem; border-top: 1px solid #21262d;
+                 font-size: 0.85rem; color: #8b949e; }
+  .sidebar .me strong { color: #c9d1d9; display: block; }
+  .main { flex: 1; padding: 2rem; overflow-x: auto; }
+  .page-header { display: flex; justify-content: space-between; align-items: baseline;
+                 margin-bottom: 1.5rem; }
+  .panel { display: none; }
+  .panel.active { display: block; }
 </style>
 </head>
 <body>
@@ -70,44 +92,69 @@ var adminPageTmpl = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
 </div>
 
 <div id="app" class="hidden">
-  <header>
-    <h1>GiGot Admin</h1>
-    <div class="row">
-      <a href="/swagger/index.html" class="muted">API docs</a>
-      <span class="muted">signed in as <strong id="me-name"></strong></span>
-      <button class="secondary" id="logout">Sign out</button>
-    </div>
-  </header>
-
-  <div class="card">
-    <h2>Repositories (<span id="repo-count">0</span>)</h2>
-    <form id="create-repo-form" class="row">
-      <input name="name" placeholder="New repo name" required>
-      <button type="submit">Create repo</button>
-    </form>
-    <div id="repo-msg" class="muted"></div>
-    <ul id="repo-list" style="margin-top:0.75rem; list-style:none;"></ul>
-  </div>
-
-  <div class="card">
-    <h2>Issue subscription key</h2>
-    <form id="issue-form" class="row" style="align-items:flex-start;">
-      <input name="username" placeholder="Client username" required>
-      <div>
-        <div class="muted" style="margin-bottom:0.25rem;">Repos this key can access:</div>
-        <div id="issue-repos" class="repo-picker"></div>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>GiGot</h1>
+        <div class="muted">Admin console</div>
       </div>
-      <button type="submit">Issue key</button>
-    </form>
-    <div id="issue-msg" class="success"></div>
-  </div>
+      <nav>
+        <a data-panel="repos" class="active">Repositories</a>
+        <a data-panel="keys">Subscription keys</a>
+        <div class="spacer"></div>
+        <a href="/swagger/index.html" target="_blank" rel="noopener">API documentation</a>
+        <a id="logout">Sign out</a>
+      </nav>
+      <div class="me">
+        signed in as
+        <strong id="me-name"></strong>
+      </div>
+    </aside>
 
-  <div class="card">
-    <h2>Active subscription keys (<span id="count">0</span>)</h2>
-    <table>
-      <thead><tr><th>Username</th><th>Repos</th><th>Token</th><th></th></tr></thead>
-      <tbody id="token-rows"></tbody>
-    </table>
+    <main class="main">
+      <div id="panel-repos" class="panel active">
+        <div class="page-header">
+          <h1>Repositories <span class="muted">(<span id="repo-count">0</span>)</span></h1>
+        </div>
+        <div class="card">
+          <h2>Create repository</h2>
+          <form id="create-repo-form" class="row">
+            <input name="name" placeholder="New repo name" required>
+            <button type="submit">Create repo</button>
+          </form>
+          <div id="repo-msg" class="muted"></div>
+        </div>
+        <div class="card">
+          <h2>Existing repositories</h2>
+          <ul id="repo-list" style="list-style:none;"></ul>
+        </div>
+      </div>
+
+      <div id="panel-keys" class="panel">
+        <div class="page-header">
+          <h1>Subscription keys <span class="muted">(<span id="count">0</span>)</span></h1>
+        </div>
+        <div class="card">
+          <h2>Issue subscription key</h2>
+          <form id="issue-form" class="row" style="align-items:flex-start;">
+            <input name="username" placeholder="Client username" required>
+            <div>
+              <div class="muted" style="margin-bottom:0.25rem;">Repos this key can access:</div>
+              <div id="issue-repos" class="repo-picker"></div>
+            </div>
+            <button type="submit">Issue key</button>
+          </form>
+          <div id="issue-msg" class="success"></div>
+        </div>
+        <div class="card">
+          <h2>Active keys</h2>
+          <table>
+            <thead><tr><th>Username</th><th>Repos</th><th>Token</th><th></th></tr></thead>
+            <tbody id="token-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
   </div>
 </div>
 
@@ -339,6 +386,30 @@ function show(who) {
   }
 }
 
+function activatePanel(name) {
+  document.querySelectorAll('.panel').forEach(p => {
+    p.classList.toggle('active', p.id === 'panel-' + name);
+  });
+  document.querySelectorAll('.sidebar nav a[data-panel]').forEach(a => {
+    a.classList.toggle('active', a.dataset.panel === name);
+  });
+  if (location.hash !== '#' + name) {
+    history.replaceState(null, '', '#' + name);
+  }
+}
+
+document.querySelectorAll('.sidebar nav a[data-panel]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    activatePanel(a.dataset.panel);
+  });
+});
+
+window.addEventListener('hashchange', () => {
+  const name = (location.hash || '#repos').slice(1);
+  if (document.getElementById('panel-' + name)) activatePanel(name);
+});
+
 document.getElementById('login-form').addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target;
@@ -392,6 +463,10 @@ document.getElementById('issue-form').addEventListener('submit', async e => {
 (async () => {
   const who = await api.session();
   show(who);
+  if (who && who.username) {
+    const initial = (location.hash || '#repos').slice(1);
+    if (document.getElementById('panel-' + initial)) activatePanel(initial);
+  }
 })();
 </script>
 </body>
