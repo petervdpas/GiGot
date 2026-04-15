@@ -782,7 +782,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "GET lists all repositories, POST creates a new one",
+                "description": "GET lists all repositories, POST creates a new one. Set\nscaffold_formidable: true to seed the fresh repo with a\nstarter Formidable context (README, templates/basic.yaml,\nstorage/.gitkeep) in an initial commit.",
                 "consumes": [
                     "application/json"
                 ],
@@ -793,6 +793,16 @@ const docTemplate = `{
                     "repos"
                 ],
                 "summary": "List or create repositories",
+                "parameters": [
+                    {
+                        "description": "Create-repo body (POST)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateRepoRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -820,6 +830,12 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -832,7 +848,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "GET lists all repositories, POST creates a new one",
+                "description": "GET lists all repositories, POST creates a new one. Set\nscaffold_formidable: true to seed the fresh repo with a\nstarter Formidable context (README, templates/basic.yaml,\nstorage/.gitkeep) in an initial commit.",
                 "consumes": [
                     "application/json"
                 ],
@@ -843,6 +859,16 @@ const docTemplate = `{
                     "repos"
                 ],
                 "summary": "List or create repositories",
+                "parameters": [
+                    {
+                        "description": "Create-repo body (POST)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateRepoRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -870,6 +896,12 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -1152,6 +1184,19 @@ const docTemplate = `{
             "properties": {
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "server.CreateRepoRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "example": "my-templates"
+                },
+                "scaffold_formidable": {
+                    "type": "boolean",
+                    "example": false
                 }
             }
         },

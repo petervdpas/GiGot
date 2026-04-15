@@ -12,15 +12,20 @@ import (
 
 // handleRepos godoc
 // @Summary      List or create repositories
-// @Description  GET lists all repositories, POST creates a new one
+// @Description  GET lists all repositories, POST creates a new one. Set
+// @Description  scaffold_formidable: true to seed the fresh repo with a
+// @Description  starter Formidable context (README, templates/basic.yaml,
+// @Description  storage/.gitkeep) in an initial commit.
 // @Tags         repos
 // @Accept       json
 // @Produce      json
+// @Param        body  body      CreateRepoRequest  false  "Create-repo body (POST)"
 // @Success      200  {object}  RepoListResponse
 // @Success      201  {object}  MessageResponse
 // @Failure      400  {object}  ErrorResponse
 // @Failure      405  {object}  ErrorResponse
 // @Failure      409  {object}  ErrorResponse
+// @Failure      500  {object}  ErrorResponse
 // @Security     BearerAuth
 // @Router       /repos [get]
 // @Router       /repos [post]

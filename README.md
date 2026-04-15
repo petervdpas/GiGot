@@ -27,6 +27,7 @@ the sealed bodies of GiGot requests and responses.
 
 0. [Roadmap / TODO](#roadmap--todo)
 1. [Quick Start](#quick-start)
+2. [Formidable-Context Scaffolding](#formidable-context-scaffolding)
 2. [Command-Line Interface](#command-line-interface)
 3. [Configuration Reference (`gigot.json`)](#configuration-reference-gigotjson)
 4. [On-Disk Data Layout](#on-disk-data-layout)
@@ -115,6 +116,52 @@ go build -o gigot .
 
 Now point a browser at `http://127.0.0.1:3417/admin`, log in as `alice`, and
 issue a subscription key. Hand that key to a Formidable client to grant access.
+
+---
+
+## Formidable-Context Scaffolding
+
+When you create a new repo on the admin page, you can tick **Scaffold as
+Formidable context**. The checkbox defaults **off** — a vanilla empty bare
+repo is what you get without it. With the box ticked, the fresh repo is
+seeded with one initial commit containing the directory layout
+[Formidable](https://github.com/petervdpas/Formidable) expects:
+
+```
+README.md
+templates/
+  basic.yaml    # minimal starter: GUID + text with `collection: entries`
+storage/
+  .gitkeep      # empty placeholder so the dir is tracked
+```
+
+The files live as real files in the GiGot source tree under
+`internal/server/scaffold/formidable/` and are embedded into the binary via
+`//go:embed all:scaffold/formidable`. To change the starter content, edit
+those files and rebuild — no Go string literals to maintain.
+
+The scaffold commit is authored and committed by
+`GiGot Scaffolder <scaffold@gigot.local>` (hardcoded). Every subsequent
+commit comes from whichever Formidable client pushed it, carrying that
+client's real git identity — GiGot does not rewrite pushed commits.
+
+You can also trigger scaffolding from the API directly:
+
+```bash
+curl -X POST http://localhost:3417/api/repos \
+  -H 'Content-Type: application/json' \
+  -b /tmp/gigot-admin-cookie \
+  -d '{"name":"my-templates","scaffold_formidable":true}'
+```
+
+Verify what landed in a new repo (bare, so you need ls-tree or a clone):
+
+```bash
+git -C repos/my-templates.git ls-tree -r HEAD --name-only
+# README.md
+# storage/.gitkeep
+# templates/basic.yaml
+```
 
 ---
 
