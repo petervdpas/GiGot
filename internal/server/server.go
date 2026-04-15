@@ -1,11 +1,17 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 	"time"
 
 	"path/filepath"
@@ -134,10 +140,44 @@ func (s *Server) Handler() http.Handler {
 	return s.sealedMiddleware(s.auth.Middleware(s.mux))
 }
 
-// Start begins listening for HTTP requests.
+// Start begins listening for HTTP requests and blocks until SIGINT/SIGTERM
+// triggers a graceful shutdown. The listening socket is always released on
+// exit so a restart never trips over a stale port.
 func (s *Server) Start() error {
 	addr := fmt.Sprintf("%s:%d", s.cfg.Server.Host, s.cfg.Server.Port)
-	return http.ListenAndServe(addr, s.Handler())
+
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		if errors.Is(err, syscall.EADDRINUSE) {
+			return fmt.Errorf("port %d already in use — inspect with: lsof -iTCP:%d -sTCP:LISTEN", s.cfg.Server.Port, s.cfg.Server.Port)
+		}
+		return err
+	}
+
+	httpSrv := &http.Server{Handler: s.Handler()}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	shutdownErr := make(chan error, 1)
+	go func() {
+		sig := <-sigCh
+		log.Printf("server: received %s, shutting down...", sig)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		shutdownErr <- httpSrv.Shutdown(ctx)
+	}()
+
+	if err := httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+
+	if err := <-shutdownErr; err != nil {
+		return fmt.Errorf("graceful shutdown: %w", err)
+	}
+	log.Println("server: stopped cleanly")
+	return nil
 }
 
 // routes registers all HTTP handlers.

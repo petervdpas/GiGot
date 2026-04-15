@@ -59,10 +59,6 @@ tracker and is the source of truth for "what's next."
       identity header forwarded by a fronting gateway (e.g. Azure APIM).
       Lets the admin UI skip server-side login when deployed behind a
       gateway that already authenticates the caller.
-- [ ] **Graceful SIGTERM shutdown + stale-port diagnostics.** Catch
-      SIGINT/SIGTERM, call `http.Server.Shutdown` so the port is always
-      released cleanly. On startup, if the port is already in use, print a
-      clearer error pointing at `lsof -iTCP:3417`.
 - [ ] **Formidable context marker file.** Once we pick an idiomatic marker
       (`.formidablerc`?), emit it from the scaffold so Formidable clients
       can recognise a gigot-managed context without guessing.
@@ -88,6 +84,8 @@ Done and shipping:
 - [x] Roles ripped out end-to-end
 - [x] Sidebar-layout admin UI with deep-linkable panels
 - [x] Optional Formidable-context scaffold on repo creation
+- [x] Graceful SIGINT/SIGTERM shutdown via `http.Server.Shutdown`, with a
+      stale-port startup error pointing at `lsof -iTCP:<port>`
 
 ---
 
