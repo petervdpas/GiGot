@@ -1,6 +1,6 @@
 # Structured Sync API — Design & Execution Plan
 
-**Status:** accepted, not yet implemented. Formidable-first layer (§10–§11) added 2026-04-16.
+**Status:** accepted, not yet implemented. Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16.
 **Owner:** Peter
 **Last updated:** 2026-04-16
 
@@ -100,6 +100,40 @@ the generic path first-class protects that optionality and keeps it honest
 as a test surface; the Formidable layer is *additive*, not replacement.
 Every Formidable-first capability is built on top of an already-shipped
 generic counterpart (see §11).
+
+---
+
+## 2.6 Formidable-side opt-in (informational)
+
+§2.5 describes the *server's* switches. The *client* has its own opt-in
+hierarchy. This is informational — the server does not gate on it —
+but worth documenting so future sessions don't conflate "is gigot
+active on this server?" with "is this template being synced by the
+client?".
+
+- **App level** — never. There is no single "Formidable is
+  gigot-enabled" switch, and there won't be one.
+- **Profile level** — deferred. A profile-level boolean will come
+  online once the gigot service described in this document exists in
+  full; it does not exist in Formidable today (no `gigot_*` keys in
+  `schemas/config.schema.js`).
+- **Template level** — `gigot_enabled: bool` on the template YAML
+  (Formidable `schemas/template.schema.js`). **Exists today** as a
+  designer-side intent marker, surfaced in the template editor as a
+  switch. Not yet wired to any sync behaviour on the client.
+- **Record level** — `meta.gigot_enabled: bool` on every
+  `storage/**/*.meta.json`, stamped from the governing template at
+  create time (Formidable `modules/formActions.js`). **Exists today**,
+  travels with the record.
+
+**What this means for the server.** The server treats `gigot_enabled`
+as opaque payload, but must merge and preserve it correctly (§10.2,
+§10.7) because it is schema-load-bearing client data. The server
+**does not** gate acceptance on `meta.gigot_enabled: false` while the
+flag is still a forward-looking marker with no client-side
+enforcement. Revisit once the Formidable profile-level toggle lands:
+at that point, strict rejection of records whose template is not
+sync-enabled becomes a reasonable invariant to check.
 
 ---
 
@@ -486,6 +520,11 @@ JSON key instead of per line. Rules, top to bottom:
   corrupt client, not a real conflict.
 - **`meta.author_name`, `meta.author_email`** — follow the winning
   `meta.updated` (last-writer-wins on attribution).
+- **`meta.gigot_enabled`** — re-stamp from the governing template's
+  merged `gigot_enabled` value in the target tree. Cross-file
+  dependency (same style as §10.5 for images); the server already has
+  both template and record trees parsed for record merging. Never a
+  conflict on its own.
 - **`data.<field-key>`** — resolved per field type (§10.3).
 
 If every key resolves without conflict, the server produces a single
@@ -581,8 +620,8 @@ field-specific dialog, not a whole-file diff.
 Templates are YAML. The server merges:
 
 - Top-level scalar keys (`name`, `item_field`, `enable_collection`,
-  `sidebar_expression`) — last-writer-wins at commit time if both
-  changed.
+  `gigot_enabled`, `sidebar_expression`) — last-writer-wins at commit
+  time if both changed.
 - `markdown_template` — line-based merge. It's Handlebars prose; line
   merge is the right tool. Conflict ⇒ 409 with blob-triple for this key
   only.
