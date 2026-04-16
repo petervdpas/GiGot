@@ -9,6 +9,22 @@ definitions:
       name:
         type: string
     type: object
+  git.FileInfo:
+    properties:
+      content_b64:
+        type: string
+      path:
+        type: string
+      version:
+        type: string
+    type: object
+  git.HeadInfo:
+    properties:
+      default_branch:
+        type: string
+      version:
+        type: string
+    type: object
   git.LogEntry:
     properties:
       author:
@@ -18,6 +34,40 @@ definitions:
       hash:
         type: string
       message:
+        type: string
+    type: object
+  git.SnapshotFile:
+    properties:
+      content_b64:
+        type: string
+      path:
+        type: string
+    type: object
+  git.SnapshotInfo:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/git.SnapshotFile'
+        type: array
+      version:
+        type: string
+    type: object
+  git.TreeEntry:
+    properties:
+      blob:
+        type: string
+      path:
+        type: string
+      size:
+        type: integer
+    type: object
+  git.TreeInfo:
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/git.TreeEntry'
+        type: array
+      version:
         type: string
     type: object
   server.AdminLoginRequest:
@@ -884,6 +934,83 @@ paths:
       summary: List branches
       tags:
       - sync
+  /repos/{name}/files/{path}:
+    get:
+      description: |-
+        Returns one file's content at the given version (default HEAD),
+        base64-encoded. 404 covers both missing repo and path not in
+        version; 422 covers an unresolvable version.
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: File path inside the repo
+        in: path
+        name: path
+        required: true
+        type: string
+      - description: Commit SHA (defaults to HEAD)
+        in: query
+        name: version
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/git.FileInfo'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Single-file read
+      tags:
+      - sync
+  /repos/{name}/head:
+    get:
+      description: |-
+        Returns the current commit SHA and default branch name. Clients
+        use this as a cheap probe before pulling tree or snapshot. Returns
+        409 if the repo exists but has no commits yet.
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/git.HeadInfo'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Repository HEAD pointer
+      tags:
+      - sync
   /repos/{name}/log:
     get:
       description: Returns recent commits from a repository
@@ -914,6 +1041,47 @@ paths:
       summary: Commit log
       tags:
       - sync
+  /repos/{name}/snapshot:
+    get:
+      description: |-
+        Returns every blob at the given version with content
+        base64-encoded. Intended for initial client populate and
+        disaster recovery; prefer /tree + /files/{path} for
+        incremental syncing.
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Commit SHA (defaults to HEAD)
+        in: query
+        name: version
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/git.SnapshotInfo'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Repository snapshot
+      tags:
+      - sync
   /repos/{name}/status:
     get:
       description: Returns branches and status of a repository
@@ -937,6 +1105,47 @@ paths:
       security:
       - BearerAuth: []
       summary: Repository status
+      tags:
+      - sync
+  /repos/{name}/tree:
+    get:
+      description: |-
+        Returns the recursive blob listing at the given version (or
+        HEAD when omitted). Clients diff this against their local
+        snapshot before pulling content. Returns 409 if the repo has
+        no commits yet, 422 if version does not resolve.
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Commit SHA (defaults to HEAD)
+        in: query
+        name: version
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/git.TreeInfo'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Repository tree listing
       tags:
       - sync
 securityDefinitions:

@@ -1048,6 +1048,117 @@ const docTemplate = `{
                 }
             }
         },
+        "/repos/{name}/files/{path}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns one file's content at the given version (default HEAD),\nbase64-encoded. 404 covers both missing repo and path not in\nversion; 422 covers an unresolvable version.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sync"
+                ],
+                "summary": "Single-file read",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path inside the repo",
+                        "name": "path",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commit SHA (defaults to HEAD)",
+                        "name": "version",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/git.FileInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/repos/{name}/head": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the current commit SHA and default branch name. Clients\nuse this as a cheap probe before pulling tree or snapshot. Returns\n409 if the repo exists but has no commits yet.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sync"
+                ],
+                "summary": "Repository HEAD pointer",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/git.HeadInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/repos/{name}/log": {
             "get": {
                 "security": [
@@ -1095,6 +1206,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/repos/{name}/snapshot": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns every blob at the given version with content\nbase64-encoded. Intended for initial client populate and\ndisaster recovery; prefer /tree + /files/{path} for\nincremental syncing.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sync"
+                ],
+                "summary": "Repository snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commit SHA (defaults to HEAD)",
+                        "name": "version",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/git.SnapshotInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/repos/{name}/status": {
             "get": {
                 "security": [
@@ -1134,6 +1303,64 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/repos/{name}/tree": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the recursive blob listing at the given version (or\nHEAD when omitted). Clients diff this against their local\nsnapshot before pulling content. Returns 409 if the repo has\nno commits yet, 422 if version does not resolve.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sync"
+                ],
+                "summary": "Repository tree listing",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commit SHA (defaults to HEAD)",
+                        "name": "version",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/git.TreeInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1151,6 +1378,31 @@ const docTemplate = `{
                 }
             }
         },
+        "git.FileInfo": {
+            "type": "object",
+            "properties": {
+                "content_b64": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "git.HeadInfo": {
+            "type": "object",
+            "properties": {
+                "default_branch": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
         "git.LogEntry": {
             "type": "object",
             "properties": {
@@ -1164,6 +1416,59 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "git.SnapshotFile": {
+            "type": "object",
+            "properties": {
+                "content_b64": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
+        "git.SnapshotInfo": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/git.SnapshotFile"
+                    }
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "git.TreeEntry": {
+            "type": "object",
+            "properties": {
+                "blob": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "size": {
+                    "type": "integer"
+                }
+            }
+        },
+        "git.TreeInfo": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/git.TreeEntry"
+                    }
+                },
+                "version": {
                     "type": "string"
                 }
             }

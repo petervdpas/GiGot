@@ -1,6 +1,6 @@
 # Structured Sync API — Design & Execution Plan
 
-**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 not yet started. Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16.
+**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 not yet started. Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16.
 **Owner:** Peter
 **Last updated:** 2026-04-16
 
@@ -366,6 +366,13 @@ Scope:
 
 Acceptance: `curl` walkthroughs from README pass against a fresh repo
 scaffolded with `scaffold_formidable: true`.
+
+**Shipped 2026-04-16.** All four endpoints live in
+`internal/server/handler_sync.go`; manager methods (`Head`, `Tree`,
+`Snapshot`, `File`) live in `internal/git/manager.go` with sentinel errors
+`ErrRepoEmpty`, `ErrVersionNotFound`, `ErrPathNotFound` mapped centrally by
+`writeSyncError`. Unit tests, handler tests, and `integration/features/sync.feature`
+scenarios cover 404/409/422/200-with-content paths for every endpoint.
 
 ### Phase 2 — Single-file write path
 

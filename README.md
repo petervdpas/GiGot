@@ -65,6 +65,13 @@ tracker and is the source of truth for "what's next."
       plan live in [`docs/design/structured-sync-api.md`](docs/design/structured-sync-api.md).
       The previously-listed "Formidable context marker file" task is folded
       into Phase 0 of that plan.
+- [ ] **Clone-as-Formidable.** Today `POST /api/repos` rejects `source_url`
+      + `scaffold_formidable: true` as mutually exclusive. Lift that
+      restriction so an external repo can be cloned and stamped with
+      `.formidable/context.json` in one request (second commit on top of
+      the clone, authored by the scaffolder identity). Needed before any
+      Formidable-first F-phase starts gating on the marker; harmless to
+      defer until then.
 - [ ] **NaCl-challenge admin login.** Replace the password+session login
       with curve25519 challenge/response, admin keypair held in the
       browser (passphrase-encrypted in localStorage). Password path stays

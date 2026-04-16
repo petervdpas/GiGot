@@ -1,6 +1,7 @@
 package git
 
 import (
+	"encoding/base64"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -223,5 +224,227 @@ func TestCloneBareInvalidSource(t *testing.T) {
 	}
 	if m.Exists("x") {
 		t.Error("repo should not exist after failed clone")
+	}
+}
+
+func TestHeadEmptyRepo(t *testing.T) {
+	m := NewManager(t.TempDir())
+	if err := m.InitBare("fresh"); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	_, err := m.Head("fresh")
+	if err == nil {
+		t.Fatal("expected ErrRepoEmpty on empty repo")
+	}
+	if err != ErrRepoEmpty {
+		t.Fatalf("want ErrRepoEmpty, got %v", err)
+	}
+}
+
+func TestHeadPopulatedRepo(t *testing.T) {
+	source := seedSourceRepo(t, filepath.Join(t.TempDir(), "source"))
+	m := NewManager(t.TempDir())
+	if err := m.CloneBare("cloned", source); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+
+	info, err := m.Head("cloned")
+	if err != nil {
+		t.Fatalf("head: %v", err)
+	}
+	if len(info.Version) != 40 {
+		t.Errorf("version should be a 40-char SHA, got %q", info.Version)
+	}
+	if info.DefaultBranch == "" {
+		t.Error("default_branch should not be empty")
+	}
+}
+
+func TestHeadMissingRepo(t *testing.T) {
+	m := NewManager(t.TempDir())
+	_, err := m.Head("nope")
+	if err == nil {
+		t.Fatal("expected error for missing repo")
+	}
+	if err == ErrRepoEmpty {
+		t.Fatal("missing-repo error must not be ErrRepoEmpty")
+	}
+}
+
+func TestTreeEmptyRepo(t *testing.T) {
+	m := NewManager(t.TempDir())
+	if err := m.InitBare("fresh"); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	_, err := m.Tree("fresh", "")
+	if err != ErrRepoEmpty {
+		t.Fatalf("want ErrRepoEmpty, got %v", err)
+	}
+}
+
+func TestTreePopulated(t *testing.T) {
+	source := seedSourceRepo(t, filepath.Join(t.TempDir(), "source"))
+	m := NewManager(t.TempDir())
+	if err := m.CloneBare("cloned", source); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+
+	info, err := m.Tree("cloned", "")
+	if err != nil {
+		t.Fatalf("tree: %v", err)
+	}
+	if len(info.Version) != 40 {
+		t.Errorf("version should be a 40-char SHA, got %q", info.Version)
+	}
+	if len(info.Files) != 1 {
+		t.Fatalf("want 1 file, got %d: %+v", len(info.Files), info.Files)
+	}
+	e := info.Files[0]
+	if e.Path != "README.md" {
+		t.Errorf("path: want README.md, got %q", e.Path)
+	}
+	if e.Size != int64(len("hello\n")) {
+		t.Errorf("size: want %d, got %d", len("hello\n"), e.Size)
+	}
+	if len(e.Blob) != 40 {
+		t.Errorf("blob should be a 40-char SHA, got %q", e.Blob)
+	}
+}
+
+func TestTreeBadVersion(t *testing.T) {
+	source := seedSourceRepo(t, filepath.Join(t.TempDir(), "source"))
+	m := NewManager(t.TempDir())
+	if err := m.CloneBare("cloned", source); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	_, err := m.Tree("cloned", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	if err != ErrVersionNotFound {
+		t.Fatalf("want ErrVersionNotFound, got %v", err)
+	}
+}
+
+func TestTreeMissingRepo(t *testing.T) {
+	m := NewManager(t.TempDir())
+	_, err := m.Tree("nope", "")
+	if err == nil {
+		t.Fatal("expected error for missing repo")
+	}
+	if err == ErrRepoEmpty || err == ErrVersionNotFound {
+		t.Fatalf("missing-repo must not be one of the sentinel errors; got %v", err)
+	}
+}
+
+func TestSnapshotEmptyRepo(t *testing.T) {
+	m := NewManager(t.TempDir())
+	if err := m.InitBare("fresh"); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	_, err := m.Snapshot("fresh", "")
+	if err != ErrRepoEmpty {
+		t.Fatalf("want ErrRepoEmpty, got %v", err)
+	}
+}
+
+func TestSnapshotPopulated(t *testing.T) {
+	source := seedSourceRepo(t, filepath.Join(t.TempDir(), "source"))
+	m := NewManager(t.TempDir())
+	if err := m.CloneBare("cloned", source); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+
+	info, err := m.Snapshot("cloned", "")
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	if len(info.Files) != 1 {
+		t.Fatalf("want 1 file, got %d", len(info.Files))
+	}
+	got, err := base64.StdEncoding.DecodeString(info.Files[0].ContentB64)
+	if err != nil {
+		t.Fatalf("decode content: %v", err)
+	}
+	if string(got) != "hello\n" {
+		t.Errorf("content: want %q, got %q", "hello\n", got)
+	}
+}
+
+func TestSnapshotBadVersion(t *testing.T) {
+	source := seedSourceRepo(t, filepath.Join(t.TempDir(), "source"))
+	m := NewManager(t.TempDir())
+	if err := m.CloneBare("cloned", source); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	_, err := m.Snapshot("cloned", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	if err != ErrVersionNotFound {
+		t.Fatalf("want ErrVersionNotFound, got %v", err)
+	}
+}
+
+func TestFileEmptyRepo(t *testing.T) {
+	m := NewManager(t.TempDir())
+	if err := m.InitBare("fresh"); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	_, err := m.File("fresh", "", "README.md")
+	if err != ErrRepoEmpty {
+		t.Fatalf("want ErrRepoEmpty, got %v", err)
+	}
+}
+
+func TestFilePopulated(t *testing.T) {
+	source := seedSourceRepo(t, filepath.Join(t.TempDir(), "source"))
+	m := NewManager(t.TempDir())
+	if err := m.CloneBare("cloned", source); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+
+	info, err := m.File("cloned", "", "README.md")
+	if err != nil {
+		t.Fatalf("file: %v", err)
+	}
+	if info.Path != "README.md" {
+		t.Errorf("path: want README.md, got %q", info.Path)
+	}
+	got, err := base64.StdEncoding.DecodeString(info.ContentB64)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if string(got) != "hello\n" {
+		t.Errorf("content: want %q, got %q", "hello\n", got)
+	}
+}
+
+func TestFileBadVersion(t *testing.T) {
+	source := seedSourceRepo(t, filepath.Join(t.TempDir(), "source"))
+	m := NewManager(t.TempDir())
+	if err := m.CloneBare("cloned", source); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	_, err := m.File("cloned", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "README.md")
+	if err != ErrVersionNotFound {
+		t.Fatalf("want ErrVersionNotFound, got %v", err)
+	}
+}
+
+func TestFilePathNotFound(t *testing.T) {
+	source := seedSourceRepo(t, filepath.Join(t.TempDir(), "source"))
+	m := NewManager(t.TempDir())
+	if err := m.CloneBare("cloned", source); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	_, err := m.File("cloned", "", "does/not/exist.txt")
+	if err != ErrPathNotFound {
+		t.Fatalf("want ErrPathNotFound, got %v", err)
+	}
+}
+
+func TestFileMissingRepo(t *testing.T) {
+	m := NewManager(t.TempDir())
+	_, err := m.File("nope", "", "README.md")
+	if err == nil {
+		t.Fatal("expected error for missing repo")
+	}
+	if err == ErrRepoEmpty || err == ErrVersionNotFound || err == ErrPathNotFound {
+		t.Fatalf("missing-repo must not be a sentinel error; got %v", err)
 	}
 }

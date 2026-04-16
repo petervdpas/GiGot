@@ -10,6 +10,14 @@ func (s *Server) handleRepoRouter(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/repos/")
 
 	switch {
+	case strings.HasSuffix(path, "/head"):
+		s.handleRepoHead(w, r)
+	case strings.HasSuffix(path, "/tree"):
+		s.handleRepoTree(w, r)
+	case strings.HasSuffix(path, "/snapshot"):
+		s.handleRepoSnapshot(w, r)
+	case strings.Contains(path, "/files/"):
+		s.handleRepoFile(w, r)
 	case strings.HasSuffix(path, "/status"):
 		s.handleRepoStatus(w, r)
 	case strings.HasSuffix(path, "/branches"):
