@@ -40,11 +40,36 @@ func (m *Manager) InitBare(name string) error {
 		return fmt.Errorf("git init --bare: %s: %w", string(out), err)
 	}
 
-	// Enable the http.receivepack config so push over HTTP works.
-	cfg := exec.Command("git", "-C", path, "config", "http.receivepack", "true")
-	cfg.Run()
-
+	m.enableReceivePack(path)
 	return nil
+}
+
+// CloneBare clones an external git repository as a bare repo under the
+// manager's root. sourceURL is passed to `git clone` as-is, so any form git
+// accepts (http(s), git, ssh, local path) works; transport restrictions on
+// the host git still apply (e.g. file:// is blocked by default on git ≥2.38).
+func (m *Manager) CloneBare(name, sourceURL string) error {
+	if sourceURL == "" {
+		return fmt.Errorf("source URL is required")
+	}
+	path := m.RepoPath(name)
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("repository %q already exists", name)
+	}
+
+	cmd := exec.Command("git", "clone", "--bare", sourceURL, path)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git clone --bare: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+
+	m.enableReceivePack(path)
+	return nil
+}
+
+// enableReceivePack flips http.receivepack on so push over HTTP works. Best-
+// effort — failure here is non-fatal for the caller.
+func (m *Manager) enableReceivePack(path string) {
+	exec.Command("git", "-C", path, "config", "http.receivepack", "true").Run()
 }
 
 // List returns the names of all repositories.

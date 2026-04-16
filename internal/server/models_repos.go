@@ -18,7 +18,12 @@ type RepoListResponse struct {
 // commit that lays out a Formidable context (templates/ with a starter
 // basic.yaml, an empty storage/, and a README). Otherwise the repo is left
 // empty — a raw bare git repository with no commits.
+//
+// When SourceURL is set, the repo is created by cloning the given git URL
+// instead of initialising an empty bare repo. SourceURL and ScaffoldFormidable
+// are mutually exclusive — a clone already has its own content.
 type CreateRepoRequest struct {
 	Name               string `json:"name"                example:"my-templates"`
 	ScaffoldFormidable bool   `json:"scaffold_formidable" example:"false"`
+	SourceURL          string `json:"source_url"          example:"https://github.com/owner/repo.git"`
 }

@@ -106,9 +106,21 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.git.InitBare(req.Name); err != nil {
-		writeError(w, http.StatusConflict, err.Error())
+	if req.SourceURL != "" && req.ScaffoldFormidable {
+		writeError(w, http.StatusBadRequest, "source_url and scaffold_formidable are mutually exclusive")
 		return
+	}
+
+	if req.SourceURL != "" {
+		if err := s.git.CloneBare(req.Name, req.SourceURL); err != nil {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+	} else {
+		if err := s.git.InitBare(req.Name); err != nil {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
 	}
 
 	if req.ScaffoldFormidable {
@@ -128,9 +140,14 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	msg := "repository " + req.Name + " created"
-	if req.ScaffoldFormidable {
-		msg += " (scaffolded as Formidable context)"
+	msg := "repository " + req.Name
+	switch {
+	case req.SourceURL != "":
+		msg += " cloned from " + req.SourceURL
+	case req.ScaffoldFormidable:
+		msg += " created (scaffolded as Formidable context)"
+	default:
+		msg += " created"
 	}
 	writeJSON(w, http.StatusCreated, MessageResponse{Message: msg})
 }

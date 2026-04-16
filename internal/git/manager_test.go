@@ -2,9 +2,36 @@ package git
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// seedSourceRepo creates a non-bare git repo at dir with one committed file.
+// Returns the repo path, suitable as a sourceURL for CloneBare.
+func seedSourceRepo(t *testing.T, dir string) string {
+	t.Helper()
+	if err := exec.Command("git", "init", dir).Run(); err != nil {
+		t.Fatalf("git init source: %v", err)
+	}
+	readme := filepath.Join(dir, "README.md")
+	if err := os.WriteFile(readme, []byte("hello\n"), 0644); err != nil {
+		t.Fatalf("write readme: %v", err)
+	}
+	cmds := [][]string{
+		{"-C", dir, "config", "user.email", "test@example.com"},
+		{"-C", dir, "config", "user.name", "Test"},
+		{"-C", dir, "add", "README.md"},
+		{"-C", dir, "commit", "-m", "initial"},
+	}
+	for _, args := range cmds {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+		}
+	}
+	return dir
+}
 
 func TestNewManager(t *testing.T) {
 	m := NewManager("/tmp/repos")
@@ -145,5 +172,56 @@ func TestExists(t *testing.T) {
 	m.InitBare("yep")
 	if !m.Exists("yep") {
 		t.Error("should exist after init")
+	}
+}
+
+func TestCloneBare(t *testing.T) {
+	source := seedSourceRepo(t, filepath.Join(t.TempDir(), "source"))
+	dest := t.TempDir()
+	m := NewManager(dest)
+
+	if err := m.CloneBare("mirror", source); err != nil {
+		t.Fatalf("CloneBare: %v", err)
+	}
+	if !m.Exists("mirror") {
+		t.Fatal("repo should exist after clone")
+	}
+
+	out, err := exec.Command("git", "-C", m.RepoPath("mirror"), "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("cloned repo should have HEAD: %v", err)
+	}
+	if strings.TrimSpace(string(out)) == "" {
+		t.Fatal("cloned repo HEAD should be non-empty")
+	}
+}
+
+func TestCloneBareEmptyURL(t *testing.T) {
+	m := NewManager(t.TempDir())
+	if err := m.CloneBare("x", ""); err == nil {
+		t.Fatal("expected error for empty source URL")
+	}
+}
+
+func TestCloneBareDuplicate(t *testing.T) {
+	source := seedSourceRepo(t, filepath.Join(t.TempDir(), "source"))
+	m := NewManager(t.TempDir())
+
+	if err := m.CloneBare("dup", source); err != nil {
+		t.Fatalf("first clone should succeed: %v", err)
+	}
+	if err := m.CloneBare("dup", source); err == nil {
+		t.Fatal("expected error for duplicate clone")
+	}
+}
+
+func TestCloneBareInvalidSource(t *testing.T) {
+	m := NewManager(t.TempDir())
+	err := m.CloneBare("x", filepath.Join(t.TempDir(), "does-not-exist"))
+	if err == nil {
+		t.Fatal("expected error cloning from nonexistent source")
+	}
+	if m.Exists("x") {
+		t.Error("repo should not exist after failed clone")
 	}
 }
