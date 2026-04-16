@@ -596,6 +596,18 @@ func TestRepoFilePutMissingParent(t *testing.T) {
 	}
 }
 
+func TestRepoFilePutInvalidPath(t *testing.T) {
+	srv := testServer(t)
+	parent := seedBareWith(t, srv, "ip-put", "a.txt", "A\n")
+
+	// Go's http.ServeMux cleans `..` out of the request path before we see
+	// it, so use a different form git also rejects — anything under .git/.
+	rec := putFile(t, srv, "ip-put", ".git/config", parent, "x\n")
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 on invalid path, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
 func TestRepoFilePutBadBase64(t *testing.T) {
 	srv := testServer(t)
 	parent := seedBareWith(t, srv, "badb64", "a.txt", "x\n")

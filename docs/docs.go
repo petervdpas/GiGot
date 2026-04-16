@@ -1098,6 +1098,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "409": {
                         "description": "Conflict",
                         "schema": {
@@ -1169,6 +1175,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }

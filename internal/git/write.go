@@ -16,6 +16,12 @@ import (
 // The write never attempts a merge in this case; the client must re-fetch.
 var ErrStaleParent = errors.New("parent version is not an ancestor of current head")
 
+// ErrInvalidPath is returned when the target path is rejected by git
+// (traversal outside the repo, absolute paths, ".."). Git's own
+// update-index catches these, which is plenty for security; we surface a
+// sentinel so the HTTP layer can map it to 400 instead of 500.
+var ErrInvalidPath = errors.New("path is not valid inside the repository")
+
 // WriteConflict carries the blob triple for a real merge conflict on a single
 // path. Any of BaseB64/TheirsB64/YoursB64 may be empty to express add/add or
 // delete/modify shapes.
@@ -49,15 +55,19 @@ type WriteResult struct {
 // plus the server-supplied committer identity. Committer stays the
 // scaffolder (or equivalent server identity) so git log makes the server's
 // role auditable even when authors are forged (design §2 authoring identity).
+// SubscriptionUsername, when non-empty, is appended as a
+// `Subscription-Username:` trailer on every commit the manager creates
+// (fast-forward, client, and merge) so audit survives a forged author.
 type WriteOptions struct {
-	ParentVersion  string
-	Path           string
-	Content        []byte
-	AuthorName     string
-	AuthorEmail    string
-	CommitterName  string
-	CommitterEmail string
-	Message        string
+	ParentVersion        string
+	Path                 string
+	Content              []byte
+	AuthorName           string
+	AuthorEmail          string
+	CommitterName        string
+	CommitterEmail       string
+	Message              string
+	SubscriptionUsername string
 }
 
 // WriteFile performs a single-file write against the named bare repo,
@@ -88,8 +98,10 @@ func (m *Manager) WriteFile(name string, opts WriteOptions) (WriteResult, error)
 
 	repoPath := m.RepoPath(name)
 
-	head, err := m.Head(name)
-	if err != nil {
+	// Probe HEAD once up front so an empty repo surfaces as ErrRepoEmpty
+	// before we try to resolve parent_version (which would otherwise fail
+	// as ErrVersionNotFound and mask the real cause).
+	if _, err := m.Head(name); err != nil {
 		return WriteResult{}, err
 	}
 
@@ -105,58 +117,88 @@ func (m *Manager) WriteFile(name string, opts WriteOptions) (WriteResult, error)
 
 	clientTree, err := treeWithFile(repoPath, parent, opts.Path, blobSHA)
 	if err != nil {
-		return WriteResult{}, fmt.Errorf("build client tree: %w", err)
+		return WriteResult{}, err
 	}
 
-	clientCommit, err := commitTree(repoPath, clientTree, []string{parent}, opts, opts.Message)
+	clientMessage := withSubscriptionTrailer(opts.Message, opts.SubscriptionUsername)
+	clientCommit, err := commitTree(repoPath, clientTree, []string{parent}, commitIdentity{
+		AuthorName:     opts.AuthorName,
+		AuthorEmail:    opts.AuthorEmail,
+		CommitterName:  opts.CommitterName,
+		CommitterEmail: opts.CommitterEmail,
+	}, clientMessage)
 	if err != nil {
 		return WriteResult{}, fmt.Errorf("client commit-tree: %w", err)
 	}
 
-	if parent == head.Version {
-		if err := updateRefCAS(repoPath, head.DefaultBranch, clientCommit, head.Version); err != nil {
-			return WriteResult{}, fmt.Errorf("fast-forward update-ref: %w", err)
+	// The race window is between reading HEAD and winning the CAS — if a
+	// concurrent writer advances HEAD first, update-ref fails and we must
+	// re-evaluate (a fast-forward may now need to become a merge). Cap the
+	// loop so a pathological contention storm surfaces as an error rather
+	// than spinning forever.
+	const maxAttempts = 5
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		head, err := m.Head(name)
+		if err != nil {
+			return WriteResult{}, err
 		}
-		return WriteResult{Version: clientCommit, FastForward: true}, nil
-	}
 
-	if !isAncestor(repoPath, parent, head.Version) {
-		return WriteResult{}, &WriteConflictError{Conflict: WriteConflict{
-			CurrentVersion: head.Version,
-			Path:           opts.Path,
-			YoursB64:       base64.StdEncoding.EncodeToString(opts.Content),
-		}}
-	}
+		if parent == head.Version {
+			err := updateRefCAS(repoPath, head.DefaultBranch, clientCommit, head.Version)
+			if err == nil {
+				return WriteResult{Version: clientCommit, FastForward: true}, nil
+			}
+			continue // lost the CAS race — someone advanced HEAD
+		}
 
-	mergedTree, clean, err := mergeTree(repoPath, head.Version, clientCommit)
-	if err != nil {
-		return WriteResult{}, fmt.Errorf("merge-tree: %w", err)
-	}
-	if !clean {
-		base, _ := catBlob(repoPath, parent, opts.Path)
-		theirs, _ := catBlob(repoPath, head.Version, opts.Path)
-		return WriteResult{}, &WriteConflictError{Conflict: WriteConflict{
-			CurrentVersion: head.Version,
-			Path:           opts.Path,
-			BaseB64:        maybeB64(base),
-			TheirsB64:      maybeB64(theirs),
-			YoursB64:       base64.StdEncoding.EncodeToString(opts.Content),
-		}}
-	}
+		if !isAncestor(repoPath, parent, head.Version) {
+			return WriteResult{}, &WriteConflictError{Conflict: WriteConflict{
+				CurrentVersion: head.Version,
+				Path:           opts.Path,
+				YoursB64:       base64.StdEncoding.EncodeToString(opts.Content),
+			}}
+		}
 
-	mergeMsg := fmt.Sprintf("Merge client change to %s", opts.Path)
-	mergeCommit, err := commitTree(repoPath, mergedTree, []string{head.Version, clientCommit}, opts, mergeMsg)
-	if err != nil {
-		return WriteResult{}, fmt.Errorf("merge commit-tree: %w", err)
+		mergedTree, clean, err := mergeTree(repoPath, head.Version, clientCommit)
+		if err != nil {
+			return WriteResult{}, fmt.Errorf("merge-tree: %w", err)
+		}
+		if !clean {
+			base, _ := catBlob(repoPath, parent, opts.Path)
+			theirs, _ := catBlob(repoPath, head.Version, opts.Path)
+			return WriteResult{}, &WriteConflictError{Conflict: WriteConflict{
+				CurrentVersion: head.Version,
+				Path:           opts.Path,
+				BaseB64:        maybeB64(base),
+				TheirsB64:      maybeB64(theirs),
+				YoursB64:       base64.StdEncoding.EncodeToString(opts.Content),
+			}}
+		}
+
+		// Server-authored merge commit: both author and committer are the
+		// scaffolder identity (design §2). The subscription username still
+		// goes in a trailer so audit survives a forged client author on the
+		// underlying client commit.
+		mergeMsg := withSubscriptionTrailer(fmt.Sprintf("Merge client change to %s", opts.Path), opts.SubscriptionUsername)
+		mergeCommit, err := commitTree(repoPath, mergedTree, []string{head.Version, clientCommit}, commitIdentity{
+			AuthorName:     opts.CommitterName,
+			AuthorEmail:    opts.CommitterEmail,
+			CommitterName:  opts.CommitterName,
+			CommitterEmail: opts.CommitterEmail,
+		}, mergeMsg)
+		if err != nil {
+			return WriteResult{}, fmt.Errorf("merge commit-tree: %w", err)
+		}
+		if err := updateRefCAS(repoPath, head.DefaultBranch, mergeCommit, head.Version); err == nil {
+			return WriteResult{
+				Version:    mergeCommit,
+				MergedFrom: parent,
+				MergedWith: head.Version,
+			}, nil
+		}
+		// CAS lost again — loop and re-evaluate against the new HEAD.
 	}
-	if err := updateRefCAS(repoPath, head.DefaultBranch, mergeCommit, head.Version); err != nil {
-		return WriteResult{}, fmt.Errorf("merge update-ref: %w", err)
-	}
-	return WriteResult{
-		Version:    mergeCommit,
-		MergedFrom: parent,
-		MergedWith: head.Version,
-	}, nil
+	return WriteResult{}, fmt.Errorf("write: gave up after %d contention retries", maxAttempts)
 }
 
 // resolveCommit returns the 40-char SHA for rev or an error if it does not
@@ -203,6 +245,9 @@ func treeWithFile(repoPath, baseCommit, path, blobSHA string) (string, error) {
 		"--cacheinfo", "100644,"+blobSHA+","+filepath.ToSlash(path))
 	upd.Env = env
 	if out, err := upd.CombinedOutput(); err != nil {
+		if strings.Contains(string(out), "Invalid path") {
+			return "", ErrInvalidPath
+		}
 		return "", fmt.Errorf("update-index: %s: %w", string(out), err)
 	}
 
@@ -215,9 +260,20 @@ func treeWithFile(repoPath, baseCommit, path, blobSHA string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// commitIdentity is the author/committer pair for one commit-tree call.
+// Split from WriteOptions because merge commits use a different author
+// (scaffolder) than client commits (client-supplied), and threading a second
+// WriteOptions through just for this would be noisier than the split.
+type commitIdentity struct {
+	AuthorName     string
+	AuthorEmail    string
+	CommitterName  string
+	CommitterEmail string
+}
+
 // commitTree creates a commit object with the given tree and parents,
-// stamping author and committer identities separately per opts.
-func commitTree(repoPath, tree string, parents []string, opts WriteOptions, message string) (string, error) {
+// stamping author and committer identities separately.
+func commitTree(repoPath, tree string, parents []string, id commitIdentity, message string) (string, error) {
 	args := []string{"-C", repoPath, "commit-tree", tree}
 	for _, p := range parents {
 		args = append(args, "-p", p)
@@ -226,16 +282,28 @@ func commitTree(repoPath, tree string, parents []string, opts WriteOptions, mess
 
 	cmd := exec.Command("git", args...)
 	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME="+opts.AuthorName,
-		"GIT_AUTHOR_EMAIL="+opts.AuthorEmail,
-		"GIT_COMMITTER_NAME="+opts.CommitterName,
-		"GIT_COMMITTER_EMAIL="+opts.CommitterEmail,
+		"GIT_AUTHOR_NAME="+id.AuthorName,
+		"GIT_AUTHOR_EMAIL="+id.AuthorEmail,
+		"GIT_COMMITTER_NAME="+id.CommitterName,
+		"GIT_COMMITTER_EMAIL="+id.CommitterEmail,
 	)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// withSubscriptionTrailer appends a `Subscription-Username:` trailer to a
+// commit message. Preserves audit context regardless of what author the
+// client supplied; the trailer is what survives a forged/compromised client
+// (design §6 Phase 2). When username is empty (e.g. auth disabled in dev),
+// the message is returned unchanged.
+func withSubscriptionTrailer(msg, username string) string {
+	if username == "" {
+		return msg
+	}
+	return strings.TrimRight(msg, "\n") + "\n\nSubscription-Username: " + username + "\n"
 }
 
 // updateRefCAS moves refs/heads/<branch> from expect → next, failing if the

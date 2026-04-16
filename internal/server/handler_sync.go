@@ -126,6 +126,7 @@ func (s *Server) handleRepoSnapshot(w http.ResponseWriter, r *http.Request) {
 // @Param        version  query     string  false  "Commit SHA (defaults to HEAD)"
 // @Success      200      {object}  git.FileInfo
 // @Failure      404      {object}  ErrorResponse
+// @Failure      405      {object}  ErrorResponse
 // @Failure      409      {object}  ErrorResponse
 // @Failure      422      {object}  ErrorResponse
 // @Security     BearerAuth
@@ -201,6 +202,7 @@ type WriteFileConflictResponse struct {
 // @Success      200   {object}  git.WriteResult
 // @Failure      400   {object}  ErrorResponse
 // @Failure      404   {object}  ErrorResponse
+// @Failure      405   {object}  ErrorResponse
 // @Failure      409   {object}  WriteFileConflictResponse
 // @Failure      422   {object}  ErrorResponse
 // @Security     BearerAuth
@@ -232,15 +234,21 @@ func (s *Server) handleRepoFilePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	subUsername := ""
+	if id := auth.IdentityFromContext(r.Context()); id != nil {
+		subUsername = id.Username
+	}
+
 	res, err := s.git.WriteFile(name, gitmanager.WriteOptions{
-		ParentVersion:  req.ParentVersion,
-		Path:           filePath,
-		Content:        content,
-		AuthorName:     authorName,
-		AuthorEmail:    authorEmail,
-		CommitterName:  scaffoldCommitterName,
-		CommitterEmail: scaffoldCommitterEmail,
-		Message:        req.Message,
+		ParentVersion:        req.ParentVersion,
+		Path:                 filePath,
+		Content:              content,
+		AuthorName:           authorName,
+		AuthorEmail:          authorEmail,
+		CommitterName:        scaffoldCommitterName,
+		CommitterEmail:       scaffoldCommitterEmail,
+		Message:              req.Message,
+		SubscriptionUsername: subUsername,
 	})
 	if err != nil {
 		var ce *gitmanager.WriteConflictError
@@ -286,6 +294,8 @@ func writeSyncError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnprocessableEntity, "version not found")
 	case errors.Is(err, gitmanager.ErrPathNotFound):
 		writeError(w, http.StatusNotFound, "path not found at this version")
+	case errors.Is(err, gitmanager.ErrInvalidPath):
+		writeError(w, http.StatusBadRequest, "path is not valid inside the repository")
 	default:
 		writeError(w, http.StatusInternalServerError, err.Error())
 	}

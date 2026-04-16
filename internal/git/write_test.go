@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -281,6 +282,137 @@ func TestWriteFileMissingRepo(t *testing.T) {
 	}
 	if err == ErrRepoEmpty || err == ErrVersionNotFound {
 		t.Fatalf("missing-repo must not be a sentinel; got %v", err)
+	}
+}
+
+func TestWriteFileInvalidPath(t *testing.T) {
+	m := NewManager(t.TempDir())
+	parent := seedBareWithFile(t, m, "ip", "a.txt", "A\n")
+
+	for _, p := range []string{"../escape.txt", "/abs.txt", "a/../../b.txt"} {
+		_, err := m.WriteFile("ip", makeWriteOpts(parent, p, "x\n", "m"))
+		if !errors.Is(err, ErrInvalidPath) {
+			t.Errorf("path %q: want ErrInvalidPath, got %v", p, err)
+		}
+	}
+}
+
+func TestWriteFileSubscriptionTrailer(t *testing.T) {
+	m := NewManager(t.TempDir())
+	parent := seedBareWithFile(t, m, "tr", "a.txt", "A\n")
+
+	opts := makeWriteOpts(parent, "a.txt", "B\n", "edit")
+	opts.SubscriptionUsername = "alice"
+	res, err := m.WriteFile("tr", opts)
+	if err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	out, err := exec.Command("git", "-C", m.RepoPath("tr"),
+		"log", "-1", "--format=%B", res.Version).Output()
+	if err != nil {
+		t.Fatalf("log: %v", err)
+	}
+	if !strings.Contains(string(out), "Subscription-Username: alice") {
+		t.Errorf("commit message missing trailer; got:\n%s", out)
+	}
+}
+
+func TestWriteFileMergeCommitAuthorIsScaffolder(t *testing.T) {
+	m := NewManager(t.TempDir())
+	parent := seedBareWithFile(t, m, "ma", "a.txt", "A\n")
+	pushBareCommit(t, m, "ma", map[string]string{"b.txt": "B\n"}, "server")
+
+	opts := makeWriteOpts(parent, "a.txt", "A edited\n", "edit")
+	opts.SubscriptionUsername = "alice"
+	res, err := m.WriteFile("ma", opts)
+	if err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if res.MergedWith == "" {
+		t.Fatal("expected a merge commit")
+	}
+	out, err := exec.Command("git", "-C", m.RepoPath("ma"),
+		"log", "-1", "--format=%an|%ae|%cn|%ce", res.Version).Output()
+	if err != nil {
+		t.Fatalf("log: %v", err)
+	}
+	fields := strings.Split(strings.TrimSpace(string(out)), "|")
+	if len(fields) != 4 {
+		t.Fatalf("unexpected format: %q", out)
+	}
+	an, ae, cn, ce := fields[0], fields[1], fields[2], fields[3]
+	if an != testCommitter || ae != testCommEmail {
+		t.Errorf("merge author should be scaffolder, got %s <%s>", an, ae)
+	}
+	if cn != testCommitter || ce != testCommEmail {
+		t.Errorf("merge committer should be scaffolder, got %s <%s>", cn, ce)
+	}
+}
+
+// TestWriteFileConcurrent races two writers against the same parent on
+// different files. Exactly one fast-forwards; the other's CAS loses, so it
+// must take the auto-merge path. The final HEAD holds both edits and is a
+// merge commit with two parents — matching the Phase 2 acceptance criterion
+// in docs/design/structured-sync-api.md §6.
+func TestWriteFileConcurrent(t *testing.T) {
+	m := NewManager(t.TempDir())
+	parent := seedBareWithFile(t, m, "race", "seed.txt", "seed\n")
+
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	results := make([]WriteResult, 2)
+	start := make(chan struct{})
+
+	for i, path := range []string{"a.txt", "b.txt"} {
+		i, path := i, path
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			opts := makeWriteOpts(parent, path, "content\n", "edit "+path)
+			opts.SubscriptionUsername = "writer" + path
+			results[i], errs[i] = m.WriteFile("race", opts)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("writer %d failed: %v", i, err)
+		}
+	}
+	// Exactly one fast-forward, exactly one merge.
+	ffCount, mergeCount := 0, 0
+	for _, r := range results {
+		if r.FastForward {
+			ffCount++
+		}
+		if r.MergedWith != "" {
+			mergeCount++
+		}
+	}
+	if ffCount != 1 || mergeCount != 1 {
+		t.Fatalf("want 1 ff + 1 merge, got ff=%d merge=%d (%+v)", ffCount, mergeCount, results)
+	}
+
+	// Final HEAD should be the merge commit with two parents.
+	head, _ := m.Head("race")
+	parentsOut, err := exec.Command("git", "-C", m.RepoPath("race"),
+		"rev-list", "--parents", "-n", "1", head.Version).Output()
+	if err != nil {
+		t.Fatalf("rev-list: %v", err)
+	}
+	parts := strings.Fields(strings.TrimSpace(string(parentsOut)))
+	if len(parts) != 3 {
+		t.Errorf("HEAD should have exactly 2 parents, got %d: %v", len(parts)-1, parts)
+	}
+
+	// Both files must exist, no data loss.
+	for _, path := range []string{"a.txt", "b.txt", "seed.txt"} {
+		if _, err := m.File("race", "", path); err != nil {
+			t.Errorf("file %s missing at HEAD: %v", path, err)
+		}
 	}
 }
 
