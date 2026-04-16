@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -507,6 +508,48 @@ func TestRepoFilePutConflict(t *testing.T) {
 	}
 	if body.BaseB64 == "" || body.TheirsB64 == "" || body.YoursB64 == "" {
 		t.Errorf("all three blob fields should be populated; got %+v", body)
+	}
+}
+
+func TestRepoFilePutStaleParent(t *testing.T) {
+	srv := testServer(t)
+	seedBareWith(t, srv, "sp-put", "a.txt", "v1\n")
+
+	// Plant an unrelated commit so a non-ancestor parent_version still
+	// resolves. Same trick as TestWriteFileStaleParent in the manager tests.
+	otherDir := t.TempDir() + "/other"
+	run(t, "git", "init", otherDir)
+	run(t, "git", "-C", otherDir, "config", "user.email", "x@y.z")
+	run(t, "git", "-C", otherDir, "config", "user.name", "x")
+	os.WriteFile(otherDir+"/x.txt", []byte("x\n"), 0644)
+	run(t, "git", "-C", otherDir, "add", "x.txt")
+	run(t, "git", "-C", otherDir, "commit", "-m", "orphan")
+	shaOut, err := exec.Command("git", "-C", otherDir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse orphan: %v", err)
+	}
+	orphanSHA := strings.TrimSpace(string(shaOut))
+	out, err := exec.Command("git", "-C", srv.git.RepoPath("sp-put"), "fetch", otherDir, orphanSHA).CombinedOutput()
+	if err != nil {
+		t.Fatalf("fetch orphan: %s: %v", out, err)
+	}
+
+	rec := putFile(t, srv, "sp-put", "a.txt", orphanSHA, "client\n")
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 stale-parent, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	var body WriteFileConflictResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.BaseB64 != "" || body.TheirsB64 != "" {
+		t.Errorf("stale-parent 409 must not carry base/theirs; got %+v", body)
+	}
+	if body.YoursB64 == "" {
+		t.Error("stale-parent 409 should echo yours_b64")
+	}
+	if body.CurrentVersion == "" {
+		t.Error("stale-parent 409 should include current_version")
 	}
 }
 

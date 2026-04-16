@@ -143,3 +143,27 @@ Feature: Structured sync API
     When I PUT "/api/repos/put-ff/files/templates/basic.yaml" with body '{"parent_version":"${head}","content_b64":"bmV3Cg=="}'
     Then the response status should be 200
     And the response body should contain "\"version\":\""
+
+  Scenario: File write auto-merges when parent is a strict ancestor of HEAD
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"put-am","scaffold_formidable":true}'
+    And I GET "/api/repos/put-am/head"
+    And I save the JSON response "version" as "head0"
+    And I PUT "/api/repos/put-am/files/other.txt" with body '{"parent_version":"${head0}","content_b64":"c2VydmVyCg=="}'
+    When I PUT "/api/repos/put-am/files/templates/basic.yaml" with body '{"parent_version":"${head0}","content_b64":"Y2xpZW50Cg=="}'
+    Then the response status should be 200
+    And the response body should contain "\"merged_from\":\""
+    And the response body should contain "\"merged_with\":\""
+
+  Scenario: File write with a conflicting stale parent returns 409 with blob triple
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"put-cf","scaffold_formidable":true}'
+    And I GET "/api/repos/put-cf/head"
+    And I save the JSON response "version" as "head0"
+    And I PUT "/api/repos/put-cf/files/templates/basic.yaml" with body '{"parent_version":"${head0}","content_b64":"c2VydmVyLWVkaXQK"}'
+    When I PUT "/api/repos/put-cf/files/templates/basic.yaml" with body '{"parent_version":"${head0}","content_b64":"Y2xpZW50LWVkaXQK"}'
+    Then the response status should be 409
+    And the response body should contain "\"path\":\"templates/basic.yaml\""
+    And the response body should contain "\"base_b64\":\""
+    And the response body should contain "\"theirs_b64\":\""
+    And the response body should contain "\"yours_b64\":\""
