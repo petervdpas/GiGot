@@ -1,11 +1,14 @@
 package server
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/petervdpas/GiGot/internal/auth"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
 	"github.com/petervdpas/GiGot/internal/policy"
 )
@@ -128,7 +131,18 @@ func (s *Server) handleRepoSnapshot(w http.ResponseWriter, r *http.Request) {
 // @Security     BearerAuth
 // @Router       /repos/{name}/files/{path} [get]
 func (s *Server) handleRepoFile(w http.ResponseWriter, r *http.Request) {
-	name, filePath, ok := s.resolveReadableRepoFile(w, r)
+	switch r.Method {
+	case http.MethodGet:
+		s.handleRepoFileGet(w, r)
+	case http.MethodPut:
+		s.handleRepoFilePut(w, r)
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) handleRepoFileGet(w http.ResponseWriter, r *http.Request) {
+	name, filePath, ok := s.resolveRepoFile(w, r, policy.ActionReadRepo)
 	if !ok {
 		return
 	}
@@ -139,6 +153,126 @@ func (s *Server) handleRepoFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, info)
+}
+
+// WriteFileRequest is the body of PUT /repos/{name}/files/{path}. ParentVersion
+// is the commit SHA the client last saw; ContentB64 is the new file body.
+// Author is optional — when omitted, the server stamps the subscription-key
+// username as author. Committer is always the server's scaffolder identity.
+type WriteFileRequest struct {
+	ParentVersion string      `json:"parent_version" example:"abc123..."`
+	ContentB64    string      `json:"content_b64" example:"aGVsbG8K"`
+	Author        *AuthorInfo `json:"author,omitempty"`
+	Message       string      `json:"message,omitempty" example:"Update basic template"`
+}
+
+// AuthorInfo is the optional author block on a write request.
+type AuthorInfo struct {
+	Name  string `json:"name" example:"Alice"`
+	Email string `json:"email" example:"alice@example.com"`
+}
+
+// WriteFileConflictResponse is the 409 body when a write cannot be merged.
+// Matches docs/design/structured-sync-api.md §3.5 — base/theirs may be empty
+// for add/add or delete/modify shapes, and are both empty on a stale-parent
+// 409 where the server did not attempt a merge.
+type WriteFileConflictResponse struct {
+	CurrentVersion string `json:"current_version" example:"def456..."`
+	Path           string `json:"path" example:"templates/basic.yaml"`
+	BaseB64        string `json:"base_b64,omitempty"`
+	TheirsB64      string `json:"theirs_b64,omitempty"`
+	YoursB64       string `json:"yours_b64"`
+}
+
+// handleRepoFilePut godoc
+// @Summary      Single-file write
+// @Description  Commits one file against the given parent_version. Returns
+// @Description  200 with the new version for a fast-forward or auto-merged
+// @Description  commit (merged_from/merged_with populated on auto-merge).
+// @Description  Returns 409 with base/theirs/yours blobs on a real conflict,
+// @Description  or 409 with only current_version + yours when parent_version
+// @Description  is not an ancestor of HEAD.
+// @Tags         sync
+// @Accept       json
+// @Produce      json
+// @Param        name  path      string              true  "Repository name"
+// @Param        path  path      string              true  "File path inside the repo"
+// @Param        body  body      WriteFileRequest    true  "Write request"
+// @Success      200   {object}  git.WriteResult
+// @Failure      400   {object}  ErrorResponse
+// @Failure      404   {object}  ErrorResponse
+// @Failure      409   {object}  WriteFileConflictResponse
+// @Failure      422   {object}  ErrorResponse
+// @Security     BearerAuth
+// @Router       /repos/{name}/files/{path} [put]
+func (s *Server) handleRepoFilePut(w http.ResponseWriter, r *http.Request) {
+	name, filePath, ok := s.resolveRepoFile(w, r, policy.ActionWriteRepo)
+	if !ok {
+		return
+	}
+
+	var req WriteFileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.ParentVersion == "" {
+		writeError(w, http.StatusBadRequest, "parent_version is required")
+		return
+	}
+	content, err := base64.StdEncoding.DecodeString(req.ContentB64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "content_b64 is not valid base64")
+		return
+	}
+
+	authorName, authorEmail := s.resolveAuthor(r, req.Author)
+	if authorName == "" || authorEmail == "" {
+		writeError(w, http.StatusBadRequest, "author identity could not be determined")
+		return
+	}
+
+	res, err := s.git.WriteFile(name, gitmanager.WriteOptions{
+		ParentVersion:  req.ParentVersion,
+		Path:           filePath,
+		Content:        content,
+		AuthorName:     authorName,
+		AuthorEmail:    authorEmail,
+		CommitterName:  scaffoldCommitterName,
+		CommitterEmail: scaffoldCommitterEmail,
+		Message:        req.Message,
+	})
+	if err != nil {
+		var ce *gitmanager.WriteConflictError
+		if errors.As(err, &ce) {
+			writeJSON(w, http.StatusConflict, WriteFileConflictResponse{
+				CurrentVersion: ce.Conflict.CurrentVersion,
+				Path:           ce.Conflict.Path,
+				BaseB64:        ce.Conflict.BaseB64,
+				TheirsB64:      ce.Conflict.TheirsB64,
+				YoursB64:       ce.Conflict.YoursB64,
+			})
+			return
+		}
+		writeSyncError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// resolveAuthor picks the author identity for a write: client-supplied
+// values win when present; otherwise fall back to "<username>@gigot.local"
+// derived from the authenticated identity. Returns empty strings when no
+// identity is attached — the caller rejects that as a 400.
+func (s *Server) resolveAuthor(r *http.Request, supplied *AuthorInfo) (string, string) {
+	if supplied != nil && supplied.Name != "" && supplied.Email != "" {
+		return supplied.Name, supplied.Email
+	}
+	id := auth.IdentityFromContext(r.Context())
+	if id == nil || id.Username == "" {
+		return "", ""
+	}
+	return id.Username, id.Username + "@gigot.local"
 }
 
 // writeSyncError maps the sentinel errors returned by sync manager methods
@@ -259,37 +393,37 @@ func (s *Server) extractRepoSubPath(path, suffix string) string {
 // success; on failure writes the appropriate error response and returns
 // ("", false).
 func (s *Server) resolveReadableRepo(w http.ResponseWriter, r *http.Request, suffix string) (string, bool) {
-	return s.authorizeReadRepo(w, r, s.extractRepoSubPath(r.URL.Path, suffix))
+	return s.authorizeRepo(w, r, s.extractRepoSubPath(r.URL.Path, suffix), policy.ActionReadRepo)
 }
 
-// resolveReadableRepoFile extracts the repo name and sub-path from
+// resolveRepoFile extracts the repo name and sub-path from
 // /api/repos/{name}/files/{path} (path may contain slashes) and runs the
-// read-policy + existence checks. On any failure writes an error response
-// and returns ("", "", false).
-func (s *Server) resolveReadableRepoFile(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+// policy + existence checks for the given action. On any failure writes an
+// error response and returns ("", "", false).
+func (s *Server) resolveRepoFile(w http.ResponseWriter, r *http.Request, action policy.Action) (string, string, bool) {
 	trimmed := strings.TrimPrefix(r.URL.Path, "/api/repos/")
 	name, filePath, found := strings.Cut(trimmed, "/files/")
 	if !found || filePath == "" {
 		writeError(w, http.StatusBadRequest, "file path is required")
 		return "", "", false
 	}
-	name, ok := s.authorizeReadRepo(w, r, name)
+	name, ok := s.authorizeRepo(w, r, name, action)
 	if !ok {
 		return "", "", false
 	}
 	return name, filePath, true
 }
 
-// authorizeReadRepo validates a repo name and runs the read-policy +
-// existence checks. On failure writes the error response and returns
+// authorizeRepo validates a repo name and runs the policy + existence checks
+// for the given action. On failure writes the error response and returns
 // ("", false). Factored out so URL-shape-specific helpers only differ in how
 // they parse the name.
-func (s *Server) authorizeReadRepo(w http.ResponseWriter, r *http.Request, name string) (string, bool) {
+func (s *Server) authorizeRepo(w http.ResponseWriter, r *http.Request, name string, action policy.Action) (string, bool) {
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "repository name is required")
 		return "", false
 	}
-	if !s.requireAllow(w, r, policy.ActionReadRepo, name) {
+	if !s.requireAllow(w, r, action, name) {
 		return "", false
 	}
 	if !s.git.Exists(name) {

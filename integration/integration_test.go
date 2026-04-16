@@ -516,6 +516,20 @@ func (tc *testContext) iPOSTWithBody(path, body string) error {
 	return tc.doRequest(http.MethodPost, path, body)
 }
 
+// iPUTWithBody sends a PUT with JSON body. Tokens of the form ${key} in the
+// body are expanded from the savedValues map, so scenarios can chain a GET
+// /head → save → PUT cycle without hardcoding SHAs.
+func (tc *testContext) iPUTWithBody(path, body string) error {
+	return tc.doRequest(http.MethodPut, path, tc.expandSaved(body))
+}
+
+func (tc *testContext) expandSaved(s string) string {
+	for k, v := range tc.savedValues {
+		s = strings.ReplaceAll(s, "${"+k+"}", v)
+	}
+	return s
+}
+
 func (tc *testContext) iDELETE(path string) error {
 	return tc.doRequest(http.MethodDelete, path, "")
 }
@@ -900,6 +914,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	// API steps
 	ctx.Step(`^I GET "([^"]*)"$`, tc.iGET)
 	ctx.Step(`^I POST "([^"]*)" with body '([^']*)'$`, tc.iPOSTWithBody)
+	ctx.Step(`^I PUT "([^"]*)" with body '([^']*)'$`, tc.iPUTWithBody)
 	ctx.Step(`^I DELETE "([^"]*)"$`, tc.iDELETE)
 	ctx.Step(`^I DELETE "([^"]*)" with saved token "([^"]*)"$`, tc.iDELETEWithSavedToken)
 	ctx.Step(`^the JSON response "([^"]*)" should be (\d+)$`, tc.theJSONResponseShouldBe)

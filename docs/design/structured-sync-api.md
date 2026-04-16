@@ -1,8 +1,8 @@
 # Structured Sync API — Design & Execution Plan
 
-**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 not yet started. Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16.
+**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 not yet started. Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16.
 **Owner:** Peter
-**Last updated:** 2026-04-16
+**Last updated:** 2026-04-17
 
 This document is the source of truth for moving GiGot from "dumb git remote +
 sealed bodies" toward a **structured sync API** that lets Formidable clients
@@ -393,6 +393,22 @@ Scope:
 
 Acceptance: a scripted concurrency test (two clients, same file, non-overlapping
 edits) produces a single merge commit with two parents and no data loss.
+
+**Shipped 2026-04-17.** Write primitive lives in
+`internal/git/write.go:WriteFile`; plumbing uses `git hash-object`,
+`read-tree`/`update-index`/`write-tree` against a temp `GIT_INDEX_FILE`,
+`commit-tree`, and `git merge-tree --write-tree` for auto-merge. Ref
+updates are CAS via `git update-ref <next> <expect>` so concurrent writers
+race safely. Handler is `handleRepoFilePut` in
+`internal/server/handler_sync.go`; 409 conflict body matches §3.5 and
+`ErrStaleParent` is surfaced as an ancestor-not-found 409 with only
+`yours_b64` populated. Author defaults to the authenticated identity's
+username (`<username>@gigot.local`) when the client omits an author block;
+committer is always the scaffolder identity so `git log` keeps the
+server's role auditable. Unit tests cover the five scenarios listed above
+plus bad-parent/empty-repo/missing-repo sentinels; handler tests cover
+the HTTP surface; `integration/features/sync.feature` has seven PUT
+scenarios (404/409/400×2/422/200 fast-forward).
 
 ### Phase 3 — Multi-file atomic commits
 

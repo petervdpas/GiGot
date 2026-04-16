@@ -70,6 +70,15 @@ definitions:
       version:
         type: string
     type: object
+  git.WriteResult:
+    properties:
+      merged_from:
+        type: string
+      merged_with:
+        type: string
+      version:
+        type: string
+    type: object
   server.AdminLoginRequest:
     properties:
       password:
@@ -80,6 +89,15 @@ definitions:
   server.AdminLoginResponse:
     properties:
       username:
+        type: string
+    type: object
+  server.AuthorInfo:
+    properties:
+      email:
+        example: alice@example.com
+        type: string
+      name:
+        example: Alice
         type: string
     type: object
   server.CreateRepoRequest:
@@ -238,6 +256,35 @@ definitions:
           type: string
         type: array
       token:
+        type: string
+    type: object
+  server.WriteFileConflictResponse:
+    properties:
+      base_b64:
+        type: string
+      current_version:
+        example: def456...
+        type: string
+      path:
+        example: templates/basic.yaml
+        type: string
+      theirs_b64:
+        type: string
+      yours_b64:
+        type: string
+    type: object
+  server.WriteFileRequest:
+    properties:
+      author:
+        $ref: '#/definitions/server.AuthorInfo'
+      content_b64:
+        example: aGVsbG8K
+        type: string
+      message:
+        example: Update basic template
+        type: string
+      parent_version:
+        example: abc123...
         type: string
     type: object
 host: localhost:3417
@@ -977,6 +1024,61 @@ paths:
       security:
       - BearerAuth: []
       summary: Single-file read
+      tags:
+      - sync
+    put:
+      consumes:
+      - application/json
+      description: |-
+        Commits one file against the given parent_version. Returns
+        200 with the new version for a fast-forward or auto-merged
+        commit (merged_from/merged_with populated on auto-merge).
+        Returns 409 with base/theirs/yours blobs on a real conflict,
+        or 409 with only current_version + yours when parent_version
+        is not an ancestor of HEAD.
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: File path inside the repo
+        in: path
+        name: path
+        required: true
+        type: string
+      - description: Write request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.WriteFileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/git.WriteResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.WriteFileConflictResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Single-file write
       tags:
       - sync
   /repos/{name}/head:

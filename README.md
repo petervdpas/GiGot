@@ -530,6 +530,11 @@ everything.
 | GET    | `/api/repos/{name}/status`         | bearer | Working status                        |
 | GET    | `/api/repos/{name}/branches`       | bearer | List branches                         |
 | GET    | `/api/repos/{name}/log`            | bearer | Commit log                            |
+| GET    | `/api/repos/{name}/head`           | bearer | Current HEAD SHA + default branch     |
+| GET    | `/api/repos/{name}/tree`           | bearer | Recursive blob listing at a version   |
+| GET    | `/api/repos/{name}/snapshot`       | bearer | All blobs at a version (base64)       |
+| GET    | `/api/repos/{name}/files/{path}`   | bearer | One blob at a version (base64)        |
+| PUT    | `/api/repos/{name}/files/{path}`   | bearer | Write one file with fast-forward/auto-merge/409-conflict semantics |
 
 ### Tokens (legacy)
 

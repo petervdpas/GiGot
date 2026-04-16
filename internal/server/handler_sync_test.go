@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
@@ -413,6 +414,157 @@ func seedFile(t *testing.T, srv *Server, repo, path, content, message string) {
 	run(t, "git", "-C", work, "add", path)
 	run(t, "git", "-C", work, "commit", "-m", message)
 	run(t, "git", "-C", work, "push", "origin", "master")
+}
+
+// putFile builds and dispatches a PUT /files/{path} request and returns the
+// recorder. Shared across the write-path tests.
+func putFile(t *testing.T, srv *Server, repo, path, parent, content string) *httptest.ResponseRecorder {
+	t.Helper()
+	body := map[string]any{
+		"parent_version": parent,
+		"content_b64":    base64.StdEncoding.EncodeToString([]byte(content)),
+		"message":        "test",
+	}
+	raw, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPut, "/api/repos/"+repo+"/files/"+path, strings.NewReader(string(raw)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+// seedBareWith creates a bare repo plus a single seed file so the handler
+// tests have a well-known HEAD to write against.
+func seedBareWith(t *testing.T, srv *Server, repo, path, content string) string {
+	t.Helper()
+	if err := srv.git.InitBare(repo); err != nil {
+		t.Fatalf("init %s: %v", repo, err)
+	}
+	seedFile(t, srv, repo, path, content, "seed")
+	head, err := srv.git.Head(repo)
+	if err != nil {
+		t.Fatalf("head %s: %v", repo, err)
+	}
+	return head.Version
+}
+
+func TestRepoFilePutFastForward(t *testing.T) {
+	srv := testServer(t)
+	parent := seedBareWith(t, srv, "ff-put", "a.txt", "one\n")
+
+	rec := putFile(t, srv, "ff-put", "a.txt", parent, "two\n")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	var res gitmanager.WriteResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if res.Version == parent || len(res.Version) != 40 {
+		t.Errorf("Version should advance to new 40-char SHA, got %q", res.Version)
+	}
+	if res.MergedFrom != "" || res.MergedWith != "" {
+		t.Errorf("fast-forward should not set merge fields: %+v", res)
+	}
+}
+
+func TestRepoFilePutAutoMerge(t *testing.T) {
+	srv := testServer(t)
+	parent := seedBareWith(t, srv, "am-put", "a.txt", "A\n")
+	// Server advances on a different file → client's parent is now stale
+	// but a clean merge is possible.
+	seedFile(t, srv, "am-put", "b.txt", "B\n", "server adds b")
+
+	rec := putFile(t, srv, "am-put", "a.txt", parent, "A edited\n")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	var res gitmanager.WriteResult
+	json.Unmarshal(rec.Body.Bytes(), &res)
+	if res.MergedFrom != parent {
+		t.Errorf("MergedFrom: want %s, got %s", parent, res.MergedFrom)
+	}
+	if res.MergedWith == "" {
+		t.Error("MergedWith should be populated on auto-merge")
+	}
+}
+
+func TestRepoFilePutConflict(t *testing.T) {
+	srv := testServer(t)
+	parent := seedBareWith(t, srv, "cf-put", "a.txt", "original\n")
+	seedFile(t, srv, "cf-put", "a.txt", "server-change\n", "server edit")
+
+	rec := putFile(t, srv, "cf-put", "a.txt", parent, "client-change\n")
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	var body WriteFileConflictResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Path != "a.txt" {
+		t.Errorf("Path: want a.txt, got %q", body.Path)
+	}
+	if body.BaseB64 == "" || body.TheirsB64 == "" || body.YoursB64 == "" {
+		t.Errorf("all three blob fields should be populated; got %+v", body)
+	}
+}
+
+func TestRepoFilePutBadParent(t *testing.T) {
+	srv := testServer(t)
+	seedBareWith(t, srv, "bad-put", "a.txt", "x\n")
+
+	rec := putFile(t, srv, "bad-put", "a.txt",
+		"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "y\n")
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("expected 422 on bad parent, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRepoFilePutMissingRepo(t *testing.T) {
+	srv := testServer(t)
+	rec := putFile(t, srv, "ghost", "a.txt", "HEAD", "x\n")
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestRepoFilePutEmptyRepo(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("empty-put")
+	rec := putFile(t, srv, "empty-put", "a.txt", "HEAD", "x\n")
+	if rec.Code != http.StatusConflict {
+		t.Errorf("expected 409 on empty repo, got %d", rec.Code)
+	}
+}
+
+func TestRepoFilePutMissingParent(t *testing.T) {
+	srv := testServer(t)
+	seedBareWith(t, srv, "noparent", "a.txt", "x\n")
+
+	req := httptest.NewRequest(http.MethodPut, "/api/repos/noparent/files/a.txt",
+		strings.NewReader(`{"content_b64":""}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestRepoFilePutBadBase64(t *testing.T) {
+	srv := testServer(t)
+	parent := seedBareWith(t, srv, "badb64", "a.txt", "x\n")
+	body := `{"parent_version":"` + parent + `","content_b64":"not base64!!"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/repos/badb64/files/a.txt", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 on bad base64, got %d", rec.Code)
+	}
 }
 
 func TestRepoLogWithCommits(t *testing.T) {

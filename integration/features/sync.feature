@@ -103,3 +103,43 @@ Feature: Structured sync API
     And I POST "/api/repos" with body '{"name":"file-badver","scaffold_formidable":true}'
     When I GET "/api/repos/file-badver/files/templates/basic.yaml?version=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
     Then the response status should be 422
+
+  Scenario: File write on missing repo returns 404
+    Given the server is running
+    When I PUT "/api/repos/ghost-repo/files/a.txt" with body '{"parent_version":"HEAD","content_b64":"eA=="}'
+    Then the response status should be 404
+
+  Scenario: File write on empty repo returns 409
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"put-empty"}'
+    When I PUT "/api/repos/put-empty/files/a.txt" with body '{"parent_version":"HEAD","content_b64":"eA=="}'
+    Then the response status should be 409
+
+  Scenario: File write missing parent_version returns 400
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"put-noparent","scaffold_formidable":true}'
+    When I PUT "/api/repos/put-noparent/files/a.txt" with body '{"content_b64":"eA=="}'
+    Then the response status should be 400
+
+  Scenario: File write with bad base64 returns 400
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"put-badb64","scaffold_formidable":true}'
+    And I GET "/api/repos/put-badb64/head"
+    And I save the JSON response "version" as "head"
+    When I PUT "/api/repos/put-badb64/files/a.txt" with body '{"parent_version":"${head}","content_b64":"not base64!!"}'
+    Then the response status should be 400
+
+  Scenario: File write with unresolvable parent_version returns 422
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"put-badparent","scaffold_formidable":true}'
+    When I PUT "/api/repos/put-badparent/files/a.txt" with body '{"parent_version":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","content_b64":"eA=="}'
+    Then the response status should be 422
+
+  Scenario: File write fast-forwards when parent equals HEAD
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"put-ff","scaffold_formidable":true}'
+    And I GET "/api/repos/put-ff/head"
+    And I save the JSON response "version" as "head"
+    When I PUT "/api/repos/put-ff/files/templates/basic.yaml" with body '{"parent_version":"${head}","content_b64":"bmV3Cg=="}'
+    Then the response status should be 200
+    And the response body should contain "\"version\":\""

@@ -1111,6 +1111,81 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Commits one file against the given parent_version. Returns\n200 with the new version for a fast-forward or auto-merged\ncommit (merged_from/merged_with populated on auto-merge).\nReturns 409 with base/theirs/yours blobs on a real conflict,\nor 409 with only current_version + yours when parent_version\nis not an ancestor of HEAD.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sync"
+                ],
+                "summary": "Single-file write",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File path inside the repo",
+                        "name": "path",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Write request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.WriteFileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/git.WriteResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/server.WriteFileConflictResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/repos/{name}/head": {
@@ -1473,6 +1548,20 @@ const docTemplate = `{
                 }
             }
         },
+        "git.WriteResult": {
+            "type": "object",
+            "properties": {
+                "merged_from": {
+                    "type": "string"
+                },
+                "merged_with": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
         "server.AdminLoginRequest": {
             "type": "object",
             "properties": {
@@ -1489,6 +1578,19 @@ const docTemplate = `{
             "properties": {
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "server.AuthorInfo": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "alice@example.com"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Alice"
                 }
             }
         },
@@ -1724,6 +1826,48 @@ const docTemplate = `{
                 },
                 "token": {
                     "type": "string"
+                }
+            }
+        },
+        "server.WriteFileConflictResponse": {
+            "type": "object",
+            "properties": {
+                "base_b64": {
+                    "type": "string"
+                },
+                "current_version": {
+                    "type": "string",
+                    "example": "def456..."
+                },
+                "path": {
+                    "type": "string",
+                    "example": "templates/basic.yaml"
+                },
+                "theirs_b64": {
+                    "type": "string"
+                },
+                "yours_b64": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.WriteFileRequest": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/server.AuthorInfo"
+                },
+                "content_b64": {
+                    "type": "string",
+                    "example": "aGVsbG8K"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Update basic template"
+                },
+                "parent_version": {
+                    "type": "string",
+                    "example": "abc123..."
                 }
             }
         }
