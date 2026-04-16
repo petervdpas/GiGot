@@ -782,7 +782,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "GET lists all repositories, POST creates a new one. Set\nscaffold_formidable: true to seed the fresh repo with a\nstarter Formidable context (README, templates/basic.yaml,\nstorage/.gitkeep) in an initial commit.",
+                "description": "GET lists all repositories, POST creates a new one. Set\nscaffold_formidable: true to seed the fresh repo with a\nstarter Formidable context (README, templates/basic.yaml,\nstorage/.gitkeep, and the .formidable/context.json marker)\nin an initial commit.",
                 "consumes": [
                     "application/json"
                 ],
@@ -848,7 +848,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "GET lists all repositories, POST creates a new one. Set\nscaffold_formidable: true to seed the fresh repo with a\nstarter Formidable context (README, templates/basic.yaml,\nstorage/.gitkeep) in an initial commit.",
+                "description": "GET lists all repositories, POST creates a new one. Set\nscaffold_formidable: true to seed the fresh repo with a\nstarter Formidable context (README, templates/basic.yaml,\nstorage/.gitkeep, and the .formidable/context.json marker)\nin an initial commit.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1197,6 +1197,10 @@ const docTemplate = `{
                 "scaffold_formidable": {
                     "type": "boolean",
                     "example": false
+                },
+                "source_url": {
+                    "type": "string",
+                    "example": "https://github.com/owner/repo.git"
                 }
             }
         },

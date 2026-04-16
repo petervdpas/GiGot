@@ -17,4 +17,7 @@ Feature: Formidable-context scaffolding on repo creation
     And the repository "context-repo" contains file "README.md"
     And the repository "context-repo" contains file "templates/basic.yaml"
     And the repository "context-repo" contains file "storage/.gitkeep"
+    And the repository "context-repo" contains file ".formidable/context.json"
+    And the repository "context-repo" file ".formidable/context.json" is valid JSON with field "version" equal to "1"
+    And the repository "context-repo" file ".formidable/context.json" is valid JSON with field "scaffolded_by" equal to "gigot"
     And the repository "context-repo" head commit is authored by "GiGot Scaffolder"

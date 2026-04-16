@@ -171,6 +171,34 @@ func (tc *testContext) theRepositoryContainsFile(repo, file string) error {
 	return fmt.Errorf("repo %q does not contain %q (tree: %s)", repo, file, string(out))
 }
 
+func (tc *testContext) theRepositoryFileIsJSONWithField(repo, file, key, want string) error {
+	path := tc.git.RepoPath(repo)
+	out, err := exec.Command("git", "-C", path, "show", "HEAD:"+file).Output()
+	if err != nil {
+		return fmt.Errorf("show HEAD:%s in %q: %w", file, repo, err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(out, &decoded); err != nil {
+		return fmt.Errorf("file %q in %q is not valid JSON: %v (raw: %s)", file, repo, err, string(out))
+	}
+	got, ok := decoded[key]
+	if !ok {
+		return fmt.Errorf("file %q in %q: key %q missing (keys: %v)", file, repo, key, keysOfAny(decoded))
+	}
+	if fmt.Sprintf("%v", got) != want {
+		return fmt.Errorf("file %q in %q: field %q = %v, want %q", file, repo, key, got, want)
+	}
+	return nil
+}
+
+func keysOfAny(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
 func (tc *testContext) theRepositoryHeadCommitAuthor(repo, author string) error {
 	path := tc.git.RepoPath(repo)
 	out, err := exec.Command("git", "-C", path, "log", "-1", "--pretty=format:%an").Output()
@@ -828,6 +856,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^a repository "([^"]*)" exists$`, tc.aRepositoryExists)
 	ctx.Step(`^the repository "([^"]*)" (has commits|has no commits)$`, tc.theRepositoryHasCommits)
 	ctx.Step(`^the repository "([^"]*)" contains file "([^"]*)"$`, tc.theRepositoryContainsFile)
+	ctx.Step(`^the repository "([^"]*)" file "([^"]*)" is valid JSON with field "([^"]*)" equal to "([^"]*)"$`, tc.theRepositoryFileIsJSONWithField)
 	ctx.Step(`^the repository "([^"]*)" head commit is authored by "([^"]*)"$`, tc.theRepositoryHeadCommitAuthor)
 
 	// Config steps

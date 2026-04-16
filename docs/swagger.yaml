@@ -40,6 +40,9 @@ definitions:
       scaffold_formidable:
         example: false
         type: boolean
+      source_url:
+        example: https://github.com/owner/repo.git
+        type: string
     type: object
   server.EnrollRequest:
     properties:
@@ -706,7 +709,8 @@ paths:
         GET lists all repositories, POST creates a new one. Set
         scaffold_formidable: true to seed the fresh repo with a
         starter Formidable context (README, templates/basic.yaml,
-        storage/.gitkeep) in an initial commit.
+        storage/.gitkeep, and the .formidable/context.json marker)
+        in an initial commit.
       parameters:
       - description: Create-repo body (POST)
         in: body
@@ -752,7 +756,8 @@ paths:
         GET lists all repositories, POST creates a new one. Set
         scaffold_formidable: true to seed the fresh repo with a
         starter Formidable context (README, templates/basic.yaml,
-        storage/.gitkeep) in an initial commit.
+        storage/.gitkeep, and the .formidable/context.json marker)
+        in an initial commit.
       parameters:
       - description: Create-repo body (POST)
         in: body

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/petervdpas/GiGot/internal/auth"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
@@ -15,7 +16,8 @@ import (
 // @Description  GET lists all repositories, POST creates a new one. Set
 // @Description  scaffold_formidable: true to seed the fresh repo with a
 // @Description  starter Formidable context (README, templates/basic.yaml,
-// @Description  storage/.gitkeep) in an initial commit.
+// @Description  storage/.gitkeep, and the .formidable/context.json marker)
+// @Description  in an initial commit.
 // @Tags         repos
 // @Accept       json
 // @Produce      json
@@ -124,7 +126,7 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.ScaffoldFormidable {
-		files, err := formidableScaffoldFiles()
+		files, err := formidableScaffoldFiles(time.Now())
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "scaffold payload: "+err.Error())
 			return

@@ -134,12 +134,19 @@ templates/
   basic.yaml    # minimal starter: GUID + text with `collection: entries`
 storage/
   .gitkeep      # empty placeholder so the dir is tracked
+.formidable/
+  context.json  # marker: { version, scaffolded_by, scaffolded_at }
 ```
 
-The files live as real files in the GiGot source tree under
+The static files live as real files in the GiGot source tree under
 `internal/server/scaffold/formidable/` and are embedded into the binary via
-`//go:embed all:scaffold/formidable`. To change the starter content, edit
-those files and rebuild — no Go string literals to maintain.
+`//go:embed all:scaffold/formidable`. The marker file `.formidable/context.json`
+is generated at scaffold time so its `scaffolded_at` timestamp is accurate;
+a `formidable_first: true` server reads it to decide whether a given repo
+gets schema-aware sync behaviour (see
+[`docs/design/structured-sync-api.md`](docs/design/structured-sync-api.md) §2.5).
+To change the static starter content, edit the embedded files and rebuild —
+no Go string literals to maintain.
 
 The scaffold commit is authored and committed by
 `GiGot Scaffolder <scaffold@gigot.local>` (hardcoded). Every subsequent

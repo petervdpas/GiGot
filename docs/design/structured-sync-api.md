@@ -1,6 +1,6 @@
 # Structured Sync API — Design & Execution Plan
 
-**Status:** accepted, not yet implemented. Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16.
+**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 not yet started. Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16.
 **Owner:** Peter
 **Last updated:** 2026-04-16
 
@@ -329,20 +329,29 @@ phases; shipping one cleanly before starting the next is the point.
 **Goal:** settle the pieces that all later phases depend on.
 
 Scope:
-- Decide the Formidable context marker file (the deferred roadmap task). The
-  marker lives inside the scaffold and is what lets the client recognise a
-  gigot-managed context. Recommendation (not yet accepted): `.formidable/context.json`
-  with `{ "version": 1, "scaffolded_by": "gigot", "scaffolded_at": "<RFC3339>" }`.
-  Resolve this *before* the client starts reading it.
-- Pick a single internal package for the new handlers (proposal:
+- **Marker file — accepted & wired 2026-04-16.** `.formidable/context.json`
+  with `{ "version": 1, "scaffolded_by": "gigot", "scaffolded_at":
+  "<RFC3339>" }`. Written by the scaffolder at repo-creation time when
+  `scaffold_formidable: true`
+  (`internal/server/formidable_scaffold.go:buildFormidableMarker`); read
+  by a `formidable_first: true` server to decide whether to apply the
+  schema-aware behaviour of §10 to a given repo. Existing repos
+  scaffolded before this wiring landed do not have the marker; they can
+  be stamped manually or re-scaffolded.
+- **Handler package — settled.** New sync handlers live in
   `internal/server/handler_sync.go` alongside existing handlers; DTOs in
-  `models_sync.go`). Avoid a sub-router if flat routes read cleanly.
-- Confirm the `git merge-tree` command shape we'll shell out to (or decide
-  whether to use a Go library like `go-git` for merges — spike both before
-  committing).
+  `models_sync.go`. Flat routes, no sub-router.
+- **Merge engine — accepted 2026-04-16: shell out to `git merge-tree`.**
+  Matches the existing style of `internal/git/manager.go` (every git
+  operation is already a subprocess), assumes git ≥ 2.38 on the service
+  host which is fine for our deployment targets, and avoids pulling in
+  `go-git` — whose merge support has historically lagged real git and
+  would be a large new dependency for one feature. Command shape will be
+  confirmed when Phase 2 implements the wrapper.
 
-Acceptance: marker file decided + one test repo scaffolded with it; choice
-between shell-out vs go-git written up here with the reasoning.
+Acceptance: all three decisions recorded ✓; marker file embedded in the
+scaffold payload and covered by `TestFormidableScaffoldFiles_ExpectedPayload`
+plus the `scaffold.feature` integration scenario. Phase 0 closed.
 
 ### Phase 1 — Read path (head, tree, snapshot, single-file read)
 
