@@ -128,7 +128,8 @@ var adminPageTmpl = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
             <button type="submit">Create repo</button>
           </form>
           <div class="muted" style="margin-top:0.5rem; font-size:0.8rem;">
-            Leave URL empty to create an empty bare repo. URL + scaffold are mutually exclusive.
+            Leave URL empty to create an empty bare repo. URL + scaffold clones and stamps the Formidable marker on top.
+            On a Formidable-first server (server.formidable_first) every create stamps by default.
           </div>
           <div id="repo-msg" class="muted"></div>
         </div>
@@ -191,7 +192,13 @@ const api = {
     return r.json();
   },
   async createRepo(name, scaffoldFormidable, sourceURL) {
-    const body = { name, scaffold_formidable: !!scaffoldFormidable };
+    const body = { name };
+    // Only send scaffold_formidable when the admin explicitly ticked the
+    // box. Omitting it lets the server apply its configured default
+    // (server.formidable_first, see design doc §2.7) — sending a hard
+    // false would override the default and silently defeat a Formidable-
+    // first deployment.
+    if (scaffoldFormidable) body.scaffold_formidable = true;
     if (sourceURL) body.source_url = sourceURL;
     const r = await fetch('/api/repos', {
       method: 'POST',

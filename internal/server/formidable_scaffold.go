@@ -2,7 +2,9 @@ package server
 
 import (
 	"embed"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"strings"
@@ -94,4 +96,63 @@ const (
 	scaffoldCommitterName  = "GiGot Scaffolder"
 	scaffoldCommitterEmail = "scaffold@gigot.local"
 	scaffoldCommitMessage  = "Initialize Formidable context"
+	markerStampMessage     = "Add Formidable context marker"
 )
+
+// isValidFormidableMarker decides whether a blob already at
+// formidableMarkerPath should be treated as "marker already present" —
+// making stampFormidableMarker a no-op. The rule is deliberately narrow
+// (parse as JSON + non-zero version field) so a corrupt marker gets
+// replaced rather than preserved. See
+// docs/design/structured-sync-api.md §2.7.
+func isValidFormidableMarker(data []byte) bool {
+	var m struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return false
+	}
+	return m.Version >= 1
+}
+
+// stampFormidableMarker idempotently ensures the target repo carries a
+// valid .formidable/context.json on HEAD. Returns (true, nil) when a
+// stamp commit was written, (false, nil) when a valid marker was already
+// present. Caller (handleCreateRepo) guarantees the repo exists and is
+// non-empty — empty-repo callers should use the scaffold path instead.
+//
+// Composition only: reuses Manager.File for the absence check and
+// Manager.WriteFile for the write, so ref-update semantics (CAS, author
+// identity, message trailer handling) stay in one place per §2.7.1.
+func stampFormidableMarker(git *gitmanager.Manager, name string, scaffoldedAt time.Time) (bool, error) {
+	existing, err := git.File(name, "", formidableMarkerPath)
+	if err == nil {
+		raw, decodeErr := base64.StdEncoding.DecodeString(existing.ContentB64)
+		if decodeErr == nil && isValidFormidableMarker(raw) {
+			return false, nil
+		}
+		// Broken or unparseable marker — fall through and overwrite.
+	} else if !errors.Is(err, gitmanager.ErrPathNotFound) {
+		return false, err
+	}
+
+	marker, err := buildFormidableMarker(scaffoldedAt)
+	if err != nil {
+		return false, err
+	}
+
+	_, err = git.WriteFile(name, gitmanager.WriteOptions{
+		ParentVersion:  "HEAD",
+		Path:           formidableMarkerPath,
+		Content:        marker,
+		AuthorName:     scaffoldCommitterName,
+		AuthorEmail:    scaffoldCommitterEmail,
+		CommitterName:  scaffoldCommitterName,
+		CommitterEmail: scaffoldCommitterEmail,
+		Message:        markerStampMessage,
+	})
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}

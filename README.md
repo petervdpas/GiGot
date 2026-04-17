@@ -49,6 +49,17 @@ the sealed bodies of GiGot requests and responses.
 Open work, in rough priority order. This list mirrors the in-project task
 tracker and is the source of truth for "what's next."
 
+- [ ] **Cucumber coverage for server-mode-driven behavior.** Feature
+      tests today only exercise handlers with explicit request
+      flags; server-level switches like `server.formidable_first`
+      have no step definition to flip them mid-scenario, so the
+      config-driven marker-provisioning default (design doc §2.7)
+      is covered only at the unit/handler layer. Add a
+      `the server has formidable_first enabled` step and
+      corresponding scenarios for init/clone × default/omitted.
+      Low priority — handler-level matrix test already verifies the
+      decision cells — but worth closing for symmetry with other
+      endpoints.
 - [ ] **Mirror-sync gigot repos to external remotes.** Per-repo upstream URL
       + credential (e.g. GitHub / Azure DevOps PAT) stored in an encrypted
       store. Post-receive hook installed in each bare repo that fires
@@ -65,21 +76,6 @@ tracker and is the source of truth for "what's next."
       plan live in [`docs/design/structured-sync-api.md`](docs/design/structured-sync-api.md).
       The previously-listed "Formidable context marker file" task is folded
       into Phase 0 of that plan.
-- [ ] **Config-driven marker provisioning.** On a `formidable_first:
-      true` server, both `POST /api/repos` paths (init and clone)
-      stamp `.formidable/context.json` by default — idempotent on
-      clones whose upstream already carries the marker. On the
-      default `formidable_first: false` server, per-request
-      `scaffold_formidable: true` stays the explicit opt-in and
-      clones are never auto-stamped; `scaffold_formidable: false` on a
-      Formidable-first server is the per-request escape hatch for
-      hosting a plain repo (e.g. a mirror). Supersedes the earlier
-      narrower "lift the `source_url` + `scaffold_formidable` mutex"
-      task. Full rule, matrix, and implementation surface live in
-      [`docs/design/structured-sync-api.md`](docs/design/structured-sync-api.md)
-      §2.7. Needed before any F-phase can gate on the marker; also
-      the insertion point for the `server.formidable_first` config
-      key (currently absent).
 - [ ] **NaCl-challenge admin login.** Replace the password+session login
       with curve25519 challenge/response, admin keypair held in the
       browser (passphrase-encrypted in localStorage). Password path stays
@@ -89,6 +85,7 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Config-driven marker provisioning** (design doc §2.7): `server.formidable_first` flips the default so both init and clone stamp `.formidable/context.json`; per-request `scaffold_formidable: true`/`false` overrides either direction. Clone-stamp is idempotent when the upstream already carries a valid marker.
 - [x] Leaf `internal/crypto` NaCl-box package + on-disk keypair bootstrap
 - [x] Client enrollment endpoint
 - [x] Sealed-body middleware for `/api/*`
@@ -237,7 +234,8 @@ A full `gigot.json` looks like this:
 {
   "server": {
     "host": "127.0.0.1",
-    "port": 3417
+    "port": 3417,
+    "formidable_first": false
   },
   "storage": {
     "repo_root": "./repos"
@@ -263,10 +261,11 @@ config file, not the process's working directory. This makes it safe to invoke
 
 ### `server`
 
-| Field | Type   | Default       | Description                                               |
-| ----- | ------ | ------------- | --------------------------------------------------------- |
-| host  | string | `"127.0.0.1"` | Bind address. Set to `0.0.0.0` to accept external traffic. |
-| port  | int    | `3417`        | TCP port.                                                  |
+| Field            | Type   | Default       | Description                                                                                                                      |
+| ---------------- | ------ | ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| host             | string | `"127.0.0.1"` | Bind address. Set to `0.0.0.0` to accept external traffic.                                                                        |
+| port             | int    | `3417`        | TCP port.                                                                                                                         |
+| formidable_first | bool   | `false`       | Deployment-level Formidable-mode switch (design doc §2.5/§2.7). When `true`, `POST /api/repos` stamps `.formidable/context.json` on both init and clone by default (idempotent on clones that already carry a valid marker). Per-request `scaffold_formidable: true`/`false` overrides this — `false` is the escape hatch for hosting a plain repo or mirroring a plain upstream. |
 
 ### `storage`
 

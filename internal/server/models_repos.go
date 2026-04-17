@@ -14,16 +14,20 @@ type RepoListResponse struct {
 
 // CreateRepoRequest is the body for creating a repository.
 //
-// When ScaffoldFormidable is true, the new repo is seeded with an initial
-// commit that lays out a Formidable context (templates/ with a starter
-// basic.yaml, an empty storage/, and a README). Otherwise the repo is left
-// empty — a raw bare git repository with no commits.
+// ScaffoldFormidable is tri-state (see docs/design/structured-sync-api.md
+// §2.7). Omitted (nil) ⇒ use the server-level default from
+// server.formidable_first. true ⇒ always stamp .formidable/context.json
+// (on init as the initial scaffold commit, on clone as a single commit on
+// top, idempotent if the cloned tree already carries a valid marker).
+// false ⇒ never stamp, regardless of server mode — the escape hatch for
+// hosting a plain repo on a Formidable-first server or mirroring a plain
+// upstream.
 //
 // When SourceURL is set, the repo is created by cloning the given git URL
-// instead of initialising an empty bare repo. SourceURL and ScaffoldFormidable
-// are mutually exclusive — a clone already has its own content.
+// instead of initialising an empty bare repo. Combining SourceURL with
+// ScaffoldFormidable=true is explicitly supported — clone then stamp.
 type CreateRepoRequest struct {
 	Name               string `json:"name"                example:"my-templates"`
-	ScaffoldFormidable bool   `json:"scaffold_formidable" example:"false"`
+	ScaffoldFormidable *bool  `json:"scaffold_formidable,omitempty" example:"false"`
 	SourceURL          string `json:"source_url"          example:"https://github.com/owner/repo.git"`
 }

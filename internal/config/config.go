@@ -20,6 +20,12 @@ type Config struct {
 type ServerConfig struct {
 	Host string `json:"host"`
 	Port int    `json:"port"`
+	// FormidableFirst flips the deployment-level stamping default per
+	// docs/design/structured-sync-api.md §2.7. When true, both `POST
+	// /api/repos` init and clone stamp .formidable/context.json by
+	// default (clones idempotently). When false (the default), stamping
+	// is strictly opt-in per request via scaffold_formidable: true.
+	FormidableFirst bool `json:"formidable_first"`
 }
 
 // StorageConfig controls where repositories are kept.

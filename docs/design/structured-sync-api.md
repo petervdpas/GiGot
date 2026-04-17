@@ -1,6 +1,6 @@
 # Structured Sync API — Design & Execution Plan
 
-**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 shipped (2026-04-17), Phase 4 shipped (2026-04-17). Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16. Marker provisioning rule (§2.7) accepted 2026-04-17 — not yet implemented.
+**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 shipped (2026-04-17), Phase 4 shipped (2026-04-17). Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16. Marker provisioning rule (§2.7) shipped 2026-04-17.
 **Owner:** Peter
 **Last updated:** 2026-04-17
 

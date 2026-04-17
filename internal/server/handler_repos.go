@@ -108,12 +108,14 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.SourceURL != "" && req.ScaffoldFormidable {
-		writeError(w, http.StatusBadRequest, "source_url and scaffold_formidable are mutually exclusive")
-		return
-	}
+	// Decision matrix per docs/design/structured-sync-api.md §2.7.1: the
+	// per-request flag wins when explicit, otherwise fall back to the
+	// server-level default. Everything else downstream branches on
+	// (isClone, stamp).
+	stamp := resolveShouldStamp(s.cfg.Server.FormidableFirst, req.ScaffoldFormidable)
+	isClone := req.SourceURL != ""
 
-	if req.SourceURL != "" {
+	if isClone {
 		if err := s.git.CloneBare(req.Name, req.SourceURL); err != nil {
 			writeError(w, http.StatusConflict, err.Error())
 			return
@@ -125,7 +127,18 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if req.ScaffoldFormidable {
+	stampedOnClone := false
+	switch {
+	case !stamp:
+		// Nothing to do — repo stays as-is.
+	case isClone:
+		written, err := stampFormidableMarker(s.git, req.Name, time.Now())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "stamping marker: "+err.Error())
+			return
+		}
+		stampedOnClone = written
+	default:
 		files, err := formidableScaffoldFiles(time.Now())
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "scaffold payload: "+err.Error())
@@ -144,14 +157,28 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 
 	msg := "repository " + req.Name
 	switch {
-	case req.SourceURL != "":
+	case isClone && stampedOnClone:
+		msg += " cloned from " + req.SourceURL + " and stamped as Formidable context"
+	case isClone && stamp:
+		msg += " cloned from " + req.SourceURL + " (existing Formidable marker preserved)"
+	case isClone:
 		msg += " cloned from " + req.SourceURL
-	case req.ScaffoldFormidable:
+	case stamp:
 		msg += " created (scaffolded as Formidable context)"
 	default:
 		msg += " created"
 	}
 	writeJSON(w, http.StatusCreated, MessageResponse{Message: msg})
+}
+
+// resolveShouldStamp implements the §2.7.1 tri-state resolution:
+// explicit request flag wins; otherwise fall back to the server-level
+// default. Pure function so it can be exhaustively table-tested.
+func resolveShouldStamp(serverDefault bool, requested *bool) bool {
+	if requested != nil {
+		return *requested
+	}
+	return serverDefault
 }
 
 // handleRepo godoc
