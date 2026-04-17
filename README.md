@@ -536,6 +536,7 @@ everything.
 | GET    | `/api/repos/{name}/files/{path}`   | bearer | One blob at a version (base64)        |
 | PUT    | `/api/repos/{name}/files/{path}`   | bearer | Write one file with fast-forward/auto-merge/409-conflict semantics |
 | POST   | `/api/repos/{name}/commits`        | bearer | Atomic multi-file commit (put/delete ops); transactional 409 on any conflict |
+| GET    | `/api/repos/{name}/changes`        | bearer | Paths added/modified/deleted between a client's `since` version and current HEAD |
 
 ### Tokens (legacy)
 

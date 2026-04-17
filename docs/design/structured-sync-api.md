@@ -1,6 +1,6 @@
 # Structured Sync API — Design & Execution Plan
 
-**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 shipped (2026-04-17), Phase 4 not yet started. Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16.
+**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 shipped (2026-04-17), Phase 4 shipped (2026-04-17). Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16.
 **Owner:** Peter
 **Last updated:** 2026-04-17
 
@@ -449,6 +449,24 @@ Scope:
 
 Acceptance: a client that's one commit behind pulls only the changed blobs,
 not the whole snapshot.
+
+**Shipped 2026-04-17.** Delta primitive lives in
+`internal/git/changes.go:Changes`; handler is `handleRepoChanges` in
+`internal/server/handler_sync.go`. Uses `git diff-tree --raw -r -z
+--no-commit-id <since> HEAD`; `-z` gives NUL-separated records so paths
+with spaces or newlines parse unambiguously. `since` must be a strict
+ancestor of HEAD (or equal) — non-ancestor surfaces as `ErrStaleParent`
+and maps to 409, forcing the client to re-snapshot rather than consume
+a misleading diff. `since == HEAD` returns an empty `changes[]` list
+without running diff-tree. Added/modified entries carry the new blob
+SHA; deleted entries carry the pre-change blob SHA so a client always
+has something concrete to fetch. Rename detection (`-M`) is *off* —
+renames surface as delete+add, mirroring Phase 3's own transactional
+model. Unit tests cover add/modify/delete mix, no-op, missing/empty
+repo, bad/missing since, stale since, and nested/spaced paths; handler
+tests mirror the HTTP surface;
+`integration/features/sync.feature` adds eight `/changes` scenarios
+(404/409/400/422/stale-409/no-op-200/added-200/405).
 
 ### Phase 5 — Polish & Formidable-aware merging
 

@@ -20,6 +20,8 @@ func (s *Server) handleRepoRouter(w http.ResponseWriter, r *http.Request) {
 		s.handleRepoFile(w, r)
 	case strings.HasSuffix(path, "/commits"):
 		s.handleRepoCommits(w, r)
+	case strings.HasSuffix(path, "/changes"):
+		s.handleRepoChanges(w, r)
 	case strings.HasSuffix(path, "/status"):
 		s.handleRepoStatus(w, r)
 	case strings.HasSuffix(path, "/branches"):

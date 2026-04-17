@@ -509,7 +509,7 @@ func (tc *testContext) thatTokenIsRevoked() error {
 // --- API steps ---
 
 func (tc *testContext) iGET(path string) error {
-	return tc.doRequest(http.MethodGet, path, "")
+	return tc.doRequest(http.MethodGet, tc.expandSaved(path), "")
 }
 
 func (tc *testContext) iPOSTWithBody(path, body string) error {

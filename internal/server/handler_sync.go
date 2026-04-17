@@ -114,6 +114,49 @@ func (s *Server) handleRepoSnapshot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, info)
 }
 
+// handleRepoChanges godoc
+// @Summary      Delta since version
+// @Description  Returns the set of paths added, modified, or deleted between
+// @Description  the given since version and current HEAD. since must be a
+// @Description  strict ancestor of HEAD (or equal to it); anything else
+// @Description  returns 409 so the client can re-snapshot instead of
+// @Description  consuming a misleading diff. since == HEAD returns an empty
+// @Description  changes list.
+// @Tags         sync
+// @Produce      json
+// @Param        name   path      string  true   "Repository name"
+// @Param        since  query     string  true   "Client's last-seen commit SHA"
+// @Success      200    {object}  git.ChangesInfo
+// @Failure      400    {object}  ErrorResponse
+// @Failure      404    {object}  ErrorResponse
+// @Failure      405    {object}  ErrorResponse
+// @Failure      409    {object}  ErrorResponse
+// @Failure      422    {object}  ErrorResponse
+// @Security     BearerAuth
+// @Router       /repos/{name}/changes [get]
+func (s *Server) handleRepoChanges(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	name, ok := s.resolveReadableRepo(w, r, "/changes")
+	if !ok {
+		return
+	}
+	since := r.URL.Query().Get("since")
+	if since == "" {
+		writeError(w, http.StatusBadRequest, "since is required")
+		return
+	}
+
+	info, err := s.git.Changes(name, since)
+	if err != nil {
+		writeSyncError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
+}
+
 // handleRepoFile godoc
 // @Summary      Single-file read
 // @Description  Returns one file's content at the given version (default HEAD),
@@ -440,6 +483,8 @@ func writeSyncError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, gitmanager.ErrRepoEmpty):
 		writeError(w, http.StatusConflict, "repository has no commits yet")
+	case errors.Is(err, gitmanager.ErrStaleParent):
+		writeError(w, http.StatusConflict, "since is not an ancestor of current head")
 	case errors.Is(err, gitmanager.ErrVersionNotFound):
 		writeError(w, http.StatusUnprocessableEntity, "version not found")
 	case errors.Is(err, gitmanager.ErrPathNotFound):

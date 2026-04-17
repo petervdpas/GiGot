@@ -232,3 +232,67 @@ Feature: Structured sync API
     And I POST "/api/repos" with body '{"name":"c-meth","scaffold_formidable":true}'
     When I GET "/api/repos/c-meth/commits"
     Then the response status should be 405
+
+  Scenario: Changes on missing repo returns 404
+    Given the server is running
+    When I GET "/api/repos/ghost-repo/changes?since=HEAD"
+    Then the response status should be 404
+
+  Scenario: Changes on empty repo returns 409
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"ch-empty"}'
+    When I GET "/api/repos/ch-empty/changes?since=HEAD"
+    Then the response status should be 409
+
+  Scenario: Changes without since returns 400
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"ch-nosince","scaffold_formidable":true}'
+    When I GET "/api/repos/ch-nosince/changes"
+    Then the response status should be 400
+
+  Scenario: Changes with unresolvable since returns 422
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"ch-badsince","scaffold_formidable":true}'
+    When I GET "/api/repos/ch-badsince/changes?since=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    Then the response status should be 422
+
+  Scenario: Changes with since equal to HEAD returns empty diff
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"ch-noop","scaffold_formidable":true}'
+    And I GET "/api/repos/ch-noop/head"
+    And I save the JSON response "version" as "head"
+    When I GET "/api/repos/ch-noop/changes?since=${head}"
+    Then the response status should be 200
+    And the response body should contain "\"changes\":[]"
+
+  Scenario: Changes lists paths added between since and HEAD
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"ch-added","scaffold_formidable":true}'
+    And I GET "/api/repos/ch-added/head"
+    And I save the JSON response "version" as "head0"
+    And I PUT "/api/repos/ch-added/files/templates/new.yaml" with body '{"parent_version":"${head0}","content_b64":"bmV3Cg=="}'
+    When I GET "/api/repos/ch-added/changes?since=${head0}"
+    Then the response status should be 200
+    And the response body should contain "\"path\":\"templates/new.yaml\""
+    And the response body should contain "\"op\":\"added\""
+
+  Scenario: Changes reports added, modified, and deleted in one response
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"ch-mix","scaffold_formidable":true}'
+    And I GET "/api/repos/ch-mix/head"
+    And I save the JSON response "version" as "head0"
+    And I POST "/api/repos/ch-mix/commits" with body '{"parent_version":"${head0}","message":"mix a/m/d","changes":[{"op":"delete","path":"templates/basic.yaml"},{"op":"put","path":"README.md","content_b64":"dXBkYXRlZAo="},{"op":"put","path":"templates/new.yaml","content_b64":"bmV3Cg=="}]}'
+    When I GET "/api/repos/ch-mix/changes?since=${head0}"
+    Then the response status should be 200
+    And the response body should contain "\"path\":\"templates/basic.yaml\""
+    And the response body should contain "\"op\":\"deleted\""
+    And the response body should contain "\"path\":\"README.md\""
+    And the response body should contain "\"op\":\"modified\""
+    And the response body should contain "\"path\":\"templates/new.yaml\""
+    And the response body should contain "\"op\":\"added\""
+
+  Scenario: Changes method not allowed
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"ch-meth","scaffold_formidable":true}'
+    When I POST "/api/repos/ch-meth/changes?since=HEAD" with body '{}'
+    Then the response status should be 405

@@ -9,6 +9,26 @@ definitions:
       name:
         type: string
     type: object
+  git.ChangeEntry:
+    properties:
+      blob:
+        type: string
+      op:
+        type: string
+      path:
+        type: string
+    type: object
+  git.ChangesInfo:
+    properties:
+      changes:
+        items:
+          $ref: '#/definitions/git.ChangeEntry'
+        type: array
+      from:
+        type: string
+      to:
+        type: string
+    type: object
   git.CommitResult:
     properties:
       merged_from:
@@ -1025,6 +1045,58 @@ paths:
       security:
       - BearerAuth: []
       summary: List branches
+      tags:
+      - sync
+  /repos/{name}/changes:
+    get:
+      description: |-
+        Returns the set of paths added, modified, or deleted between
+        the given since version and current HEAD. since must be a
+        strict ancestor of HEAD (or equal to it); anything else
+        returns 409 so the client can re-snapshot instead of
+        consuming a misleading diff. since == HEAD returns an empty
+        changes list.
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Client's last-seen commit SHA
+        in: query
+        name: since
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/git.ChangesInfo'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delta since version
       tags:
       - sync
   /repos/{name}/commits:

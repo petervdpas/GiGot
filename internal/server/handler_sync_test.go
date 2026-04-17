@@ -750,6 +750,208 @@ func TestRepoCommitsMethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestRepoChangesMissingRepo(t *testing.T) {
+	srv := testServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/repos/ghost/changes?since=HEAD", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestRepoChangesEmptyRepo(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("ch-empty")
+	req := httptest.NewRequest(http.MethodGet, "/api/repos/ch-empty/changes?since=HEAD", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Errorf("expected 409 on empty repo, got %d", rec.Code)
+	}
+}
+
+func TestRepoChangesMissingSince(t *testing.T) {
+	srv := testServer(t)
+	seedBareWith(t, srv, "ch-nosince", "a.txt", "A\n")
+	req := httptest.NewRequest(http.MethodGet, "/api/repos/ch-nosince/changes", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 on missing since, got %d", rec.Code)
+	}
+}
+
+func TestRepoChangesBadSince(t *testing.T) {
+	srv := testServer(t)
+	seedBareWith(t, srv, "ch-badsince", "a.txt", "A\n")
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/repos/ch-badsince/changes?since=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("expected 422, got %d", rec.Code)
+	}
+}
+
+func TestRepoChangesStaleSince(t *testing.T) {
+	srv := testServer(t)
+	seedBareWith(t, srv, "ch-stale", "a.txt", "v1\n")
+
+	// Plant an orphan commit into the object store so the SHA resolves but
+	// is not an ancestor of HEAD.
+	otherDir := t.TempDir() + "/other"
+	run(t, "git", "init", otherDir)
+	run(t, "git", "-C", otherDir, "config", "user.email", "x@y.z")
+	run(t, "git", "-C", otherDir, "config", "user.name", "x")
+	os.WriteFile(otherDir+"/x.txt", []byte("x\n"), 0644)
+	run(t, "git", "-C", otherDir, "add", "x.txt")
+	run(t, "git", "-C", otherDir, "commit", "-m", "orphan")
+	shaOut, err := exec.Command("git", "-C", otherDir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse: %v", err)
+	}
+	orphan := strings.TrimSpace(string(shaOut))
+	if out, err := exec.Command("git", "-C", srv.git.RepoPath("ch-stale"),
+		"fetch", otherDir, orphan).CombinedOutput(); err != nil {
+		t.Fatalf("fetch orphan: %s: %v", out, err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/repos/ch-stale/changes?since="+orphan, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Errorf("expected 409 on stale since, got %d", rec.Code)
+	}
+}
+
+func TestRepoChangesPopulated(t *testing.T) {
+	srv := testServer(t)
+	from := seedBareWith(t, srv, "ch-ok", "a.txt", "A\n")
+	seedFile(t, srv, "ch-ok", "b.txt", "B\n", "add b")
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/repos/ch-ok/changes?since="+from, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	var body gitmanager.ChangesInfo
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.From != from {
+		t.Errorf("From: want %s, got %s", from, body.From)
+	}
+	if len(body.Changes) != 1 || body.Changes[0].Path != "b.txt" {
+		t.Errorf("want 1 change on b.txt, got %+v", body.Changes)
+	}
+	if body.Changes[0].Op != gitmanager.ChangeAdded {
+		t.Errorf("want added, got %s", body.Changes[0].Op)
+	}
+}
+
+// TestRepoChangesMixedOps exercises all three ops in a single HTTP response
+// so a regression on the JSON shape for "modified" or "deleted" (missing
+// field tag, wrong op literal, dropped blob) is caught at the handler
+// layer — TestRepoChangesPopulated only proves the "added" path.
+func TestRepoChangesMixedOps(t *testing.T) {
+	srv := testServer(t)
+	seedBareWith(t, srv, "ch-mix", "a.txt", "A1\n")
+	// Add b.txt in the same baseline so we can exercise delete.
+	seedFile(t, srv, "ch-mix", "b.txt", "B\n", "add b")
+	head, _ := srv.git.Head("ch-mix")
+	baseline := head.Version
+
+	// One commit that modifies a.txt, deletes b.txt, adds c.txt.
+	repoPath := srv.git.RepoPath("ch-mix")
+	work := t.TempDir()
+	run(t, "git", "clone", repoPath, work)
+	run(t, "git", "-C", work, "config", "user.email", "x@y.z")
+	run(t, "git", "-C", work, "config", "user.name", "x")
+	os.WriteFile(work+"/a.txt", []byte("A2\n"), 0644)
+	os.WriteFile(work+"/c.txt", []byte("C\n"), 0644)
+	run(t, "git", "-C", work, "rm", "b.txt")
+	run(t, "git", "-C", work, "add", "a.txt", "c.txt")
+	run(t, "git", "-C", work, "commit", "-m", "mix")
+	run(t, "git", "-C", work, "push", "origin", "master")
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/repos/ch-mix/changes?since="+baseline, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	var body gitmanager.ChangesInfo
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.From != baseline {
+		t.Errorf("From: want %s, got %s", baseline, body.From)
+	}
+	postHead, _ := srv.git.Head("ch-mix")
+	if body.To != postHead.Version {
+		t.Errorf("To: want %s, got %s", postHead.Version, body.To)
+	}
+	if len(body.Changes) != 3 {
+		t.Fatalf("want 3 changes, got %d: %+v", len(body.Changes), body.Changes)
+	}
+
+	revBlob := func(rev, path string) string {
+		t.Helper()
+		out, err := exec.Command("git", "-C", repoPath, "rev-parse", rev+":"+path).Output()
+		if err != nil {
+			t.Fatalf("rev-parse %s:%s: %v", rev, path, err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+
+	byPath := map[string]gitmanager.ChangeEntry{}
+	for _, c := range body.Changes {
+		byPath[c.Path] = c
+	}
+
+	cases := []struct {
+		path    string
+		wantOp  string
+		blobRev string
+	}{
+		{"a.txt", gitmanager.ChangeModified, body.To},
+		{"b.txt", gitmanager.ChangeDeleted, body.From},
+		{"c.txt", gitmanager.ChangeAdded, body.To},
+	}
+	for _, c := range cases {
+		entry, ok := byPath[c.path]
+		if !ok {
+			t.Errorf("missing %s in response", c.path)
+			continue
+		}
+		if entry.Op != c.wantOp {
+			t.Errorf("%s: op want %s, got %s", c.path, c.wantOp, entry.Op)
+		}
+		want := revBlob(c.blobRev, c.path)
+		if entry.Blob != want {
+			t.Errorf("%s: blob want %s, got %s", c.path, want, entry.Blob)
+		}
+	}
+}
+
+func TestRepoChangesMethodNotAllowed(t *testing.T) {
+	srv := testServer(t)
+	seedBareWith(t, srv, "ch-meth", "a.txt", "A\n")
+	req := httptest.NewRequest(http.MethodPost, "/api/repos/ch-meth/changes?since=HEAD", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rec.Code)
+	}
+}
+
 func TestRepoLogWithCommits(t *testing.T) {
 	srv := testServer(t)
 	srv.git.InitBare("log-commits")
