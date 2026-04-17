@@ -159,11 +159,13 @@ primary driver and per-request flags collapse into an override.
 
 **Rule — generic server (`formidable_first: false`, default).**
 
-Unchanged from today. `scaffold_formidable: true` is the explicit
-per-request opt-in to stamp on init; clones are never auto-stamped;
-`source_url` + `scaffold_formidable: true` stays rejected at
-`handler_repos.go` (lifting that is covered under §2.7's
-implementation work, not a standalone task).
+Default stamping is off. `scaffold_formidable: true` is the explicit
+per-request opt-in to stamp — on both init *and* clone. The
+`source_url + scaffold_formidable: true` combination that today 400s
+at `handler_repos.go:112` becomes valid: clone first, then stamp-if-
+absent on top (identical plumbing to the Formidable-first clone path).
+That subsumes the original Clone-as-Formidable task. Clones without
+the flag are never auto-stamped.
 
 **Per-request override.** `scaffold_formidable: false` on a
 Formidable-first server suppresses stamping for *this* repo,
@@ -210,14 +212,26 @@ keeps the §2.5 escape hatch intact.
 
   | `formidable_first` | `source_url` | `scaffold_formidable` | Effect |
   | ------------------ | ------------ | --------------------- | ------ |
+  | `false`            | empty        | omitted               | empty init (today) |
   | `false`            | empty        | `true`                | init + scaffold (today) |
-  | `false`            | empty        | `false`/omitted       | empty init (today) |
-  | `false`            | set          | `true`                | 400 — incoherent on a generic server |
-  | `false`            | set          | `false`/omitted       | clone, no stamp (today) |
-  | `true`             | empty        | any (default `true`)  | init + scaffold |
+  | `false`            | empty        | `false`               | empty init |
+  | `false`            | set          | omitted               | clone, no stamp (today) |
+  | `false`            | set          | `true`                | clone + stamp-if-absent *(new — the original Clone-as-Formidable case)* |
+  | `false`            | set          | `false`               | clone, no stamp |
+  | `true`             | empty        | omitted               | init + scaffold *(server-default flip)* |
+  | `true`             | empty        | `true`                | init + scaffold |
   | `true`             | empty        | `false`               | empty init (admin opt-out) |
-  | `true`             | set          | any (default `true`)  | clone + stamp-if-absent |
+  | `true`             | set          | omitted               | clone + stamp-if-absent *(server-default flip)* |
+  | `true`             | set          | `true`                | clone + stamp-if-absent |
   | `true`             | set          | `false`               | clone, no stamp (mirror opt-out) |
+
+  Boolean shape: `shouldStamp = explicit ?? cfg.formidable_first` where
+  `explicit` is the request's tri-state flag. This requires changing
+  `CreateRepoRequest.ScaffoldFormidable` from `bool` to `*bool` (or
+  equivalent) so "omitted" can be distinguished from "explicit
+  false" — the `bool` default of `false` conflates them today and is
+  safe only because the server-default is also `false`. Once the
+  server-default can be `true`, tri-state is required.
 
 - **Clone-stamp primitive**: new `Manager.StampFormidableMarker(name)`
   in `internal/git`. Reads the current HEAD tree; if `.formidable/
