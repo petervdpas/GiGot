@@ -65,13 +65,21 @@ tracker and is the source of truth for "what's next."
       plan live in [`docs/design/structured-sync-api.md`](docs/design/structured-sync-api.md).
       The previously-listed "Formidable context marker file" task is folded
       into Phase 0 of that plan.
-- [ ] **Clone-as-Formidable.** Today `POST /api/repos` rejects `source_url`
-      + `scaffold_formidable: true` as mutually exclusive. Lift that
-      restriction so an external repo can be cloned and stamped with
-      `.formidable/context.json` in one request (second commit on top of
-      the clone, authored by the scaffolder identity). Needed before any
-      Formidable-first F-phase starts gating on the marker; harmless to
-      defer until then.
+- [ ] **Config-driven marker provisioning.** On a `formidable_first:
+      true` server, both `POST /api/repos` paths (init and clone)
+      stamp `.formidable/context.json` by default — idempotent on
+      clones whose upstream already carries the marker. On the
+      default `formidable_first: false` server, per-request
+      `scaffold_formidable: true` stays the explicit opt-in and
+      clones are never auto-stamped; `scaffold_formidable: false` on a
+      Formidable-first server is the per-request escape hatch for
+      hosting a plain repo (e.g. a mirror). Supersedes the earlier
+      narrower "lift the `source_url` + `scaffold_formidable` mutex"
+      task. Full rule, matrix, and implementation surface live in
+      [`docs/design/structured-sync-api.md`](docs/design/structured-sync-api.md)
+      §2.7. Needed before any F-phase can gate on the marker; also
+      the insertion point for the `server.formidable_first` config
+      key (currently absent).
 - [ ] **NaCl-challenge admin login.** Replace the password+session login
       with curve25519 challenge/response, admin keypair held in the
       browser (passphrase-encrypted in localStorage). Password path stays

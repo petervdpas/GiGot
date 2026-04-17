@@ -1,6 +1,6 @@
 # Structured Sync API — Design & Execution Plan
 
-**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 shipped (2026-04-17), Phase 4 shipped (2026-04-17). Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16.
+**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 shipped (2026-04-17), Phase 4 shipped (2026-04-17). Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16. Marker provisioning rule (§2.7) accepted 2026-04-17 — not yet implemented.
 **Owner:** Peter
 **Last updated:** 2026-04-17
 
@@ -134,6 +134,115 @@ flag is still a forward-looking marker with no client-side
 enforcement. Revisit once the Formidable profile-level toggle lands:
 at that point, strict rejection of records whose template is not
 sync-enabled becomes a reasonable invariant to check.
+
+---
+
+## 2.7 Marker provisioning on create/clone
+
+§2.5 specifies that on a `formidable_first: true` server, a repo only
+gets Formidable-aware behaviour if it carries
+`.formidable/context.json`. This section specifies **how the marker
+gets onto a repo in the first place**, so the server's mode is the
+primary driver and per-request flags collapse into an override.
+
+**Rule — Formidable-first server (`formidable_first: true`).**
+
+- `POST /api/repos` with no `source_url` ("init") stamps the marker
+  as part of the initial scaffold commit. Same payload as today's
+  explicit `scaffold_formidable: true`.
+- `POST /api/repos` with `source_url` ("clone") stamps the marker as
+  a single commit on top of the cloned history, authored and
+  committed by the scaffolder identity, containing only
+  `.formidable/context.json`. Idempotent: if the cloned tree already
+  carries a valid marker, no extra commit is written and the repo
+  is left bit-for-bit equal to its upstream.
+
+**Rule — generic server (`formidable_first: false`, default).**
+
+Unchanged from today. `scaffold_formidable: true` is the explicit
+per-request opt-in to stamp on init; clones are never auto-stamped;
+`source_url` + `scaffold_formidable: true` stays rejected at
+`handler_repos.go` (lifting that is covered under §2.7's
+implementation work, not a standalone task).
+
+**Per-request override.** `scaffold_formidable: false` on a
+Formidable-first server suppresses stamping for *this* repo,
+preserving the coexistence guarantee in §2.5 — "a Formidable-first
+deployment can still host a plain structured-sync repo without the
+server choking on non-conforming content." Reach for this when the
+repo is a mirror of a plain upstream and a stamp commit would show up
+on a later mirror push.
+
+**Non-retroactive.** Flipping `formidable_first` from `false` to
+`true` on a running server with existing repos does **not** migrate
+them. Existing repos stay marker-less (and therefore generic-mode per
+§2.5) until re-stamped by an explicit admin action — not yet
+specified; probably a `POST /api/repos/{name}/formidable/stamp`
+endpoint gated on admin session, sized when we need it. Silent
+auto-migration is explicitly rejected: it would write commits the
+operator didn't ask for.
+
+**Mirror-sync interaction.** The stamp commit on a clone is authored
+by the scaffolder and does not exist in the upstream. A later mirror
+push back to that upstream (see the mirror-sync roadmap item) will
+include it. Mirrors where the upstream must stay untouched want
+`scaffold_formidable: false` at clone time; there is no way to
+un-stamp after the fact short of a history rewrite, which the mirror
+push would then reject on fast-forward grounds anyway.
+
+**Why this framing over the original "Clone-as-Formidable" task.**
+The earlier README item described the change narrowly — "lift the
+mutually-exclusive validation on `source_url` + `scaffold_formidable:
+true`". That phrasing put the decision on the *caller*: every
+`POST /api/repos` has to remember to tick the box. On a deployment
+dedicated to Formidable that's churn and a footgun (forget the flag
+and you've imported a repo the F-phases will refuse to touch).
+Moving the decision to server config matches the §2.5 framing of
+Formidable-first as a deployment mode, and the per-request override
+keeps the §2.5 escape hatch intact.
+
+### 2.7.1 Implementation surface
+
+- **Handler**: `handleCreateRepo` (`internal/server/handler_repos.go`)
+  drops the `source_url && scaffold_formidable` 400 branch and instead
+  resolves the effective stamp decision from
+  `(cfg.formidable_first, req.source_url, req.scaffold_formidable)`:
+
+  | `formidable_first` | `source_url` | `scaffold_formidable` | Effect |
+  | ------------------ | ------------ | --------------------- | ------ |
+  | `false`            | empty        | `true`                | init + scaffold (today) |
+  | `false`            | empty        | `false`/omitted       | empty init (today) |
+  | `false`            | set          | `true`                | 400 — incoherent on a generic server |
+  | `false`            | set          | `false`/omitted       | clone, no stamp (today) |
+  | `true`             | empty        | any (default `true`)  | init + scaffold |
+  | `true`             | empty        | `false`               | empty init (admin opt-out) |
+  | `true`             | set          | any (default `true`)  | clone + stamp-if-absent |
+  | `true`             | set          | `false`               | clone, no stamp (mirror opt-out) |
+
+- **Clone-stamp primitive**: new `Manager.StampFormidableMarker(name)`
+  in `internal/git`. Reads the current HEAD tree; if `.formidable/
+  context.json` is present and parses cleanly, returns a
+  `StampSkipped` sentinel the handler maps to "no extra commit".
+  Otherwise builds a one-file tree on top of HEAD with a freshly
+  generated marker (reuse `buildFormidableMarker` from
+  `formidable_scaffold.go`) and writes it via the same plumbing used
+  by `WriteFile` — author and committer both scaffolder, message
+  `"Add Formidable context marker"`.
+
+- **Config**: `internal/config` grows a single bool
+  `server.formidable_first` (or similar nested key) plumbed through
+  to `Server`. Default `false`. No runtime reload.
+
+- **Tests**: the handler test `TestCreateRepoCloneAndScaffold
+  MutuallyExclusive` gets replaced by a table-driven test walking
+  the matrix above. A manager test for `StampFormidableMarker`
+  covers the three cases: fresh clone without marker, clone that
+  already has a marker (skip), empty repo (reject — nothing to
+  commit on top of).
+
+- **Docs**: README's "Clone-as-Formidable" roadmap item shrinks to a
+  pointer at §2.7; Configuration Reference gains a
+  `server.formidable_first` row.
 
 ---
 
