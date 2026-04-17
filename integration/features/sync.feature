@@ -167,3 +167,68 @@ Feature: Structured sync API
     And the response body should contain "\"base_b64\":\""
     And the response body should contain "\"theirs_b64\":\""
     And the response body should contain "\"yours_b64\":\""
+
+  Scenario: Multi-file commit on missing repo returns 404
+    Given the server is running
+    When I POST "/api/repos/ghost-repo/commits" with body '{"parent_version":"HEAD","changes":[{"op":"put","path":"a","content_b64":"eA=="}]}'
+    Then the response status should be 404
+
+  Scenario: Multi-file commit on empty repo returns 409
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"c-empty"}'
+    When I POST "/api/repos/c-empty/commits" with body '{"parent_version":"HEAD","changes":[{"op":"put","path":"a","content_b64":"eA=="}]}'
+    Then the response status should be 409
+
+  Scenario: Multi-file commit with missing parent_version returns 400
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"c-noparent","scaffold_formidable":true}'
+    When I POST "/api/repos/c-noparent/commits" with body '{"changes":[{"op":"put","path":"a","content_b64":"eA=="}]}'
+    Then the response status should be 400
+
+  Scenario: Multi-file commit with empty changes returns 400
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"c-noch","scaffold_formidable":true}'
+    And I GET "/api/repos/c-noch/head"
+    And I save the JSON response "version" as "head"
+    When I POST "/api/repos/c-noch/commits" with body '{"parent_version":"${head}","changes":[]}'
+    Then the response status should be 400
+
+  Scenario: Multi-file commit with bad op returns 400
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"c-badop","scaffold_formidable":true}'
+    And I GET "/api/repos/c-badop/head"
+    And I save the JSON response "version" as "head"
+    When I POST "/api/repos/c-badop/commits" with body '{"parent_version":"${head}","changes":[{"op":"nuke","path":"a"}]}'
+    Then the response status should be 400
+
+  Scenario: Multi-file commit with unresolvable parent_version returns 422
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"c-badver","scaffold_formidable":true}'
+    When I POST "/api/repos/c-badver/commits" with body '{"parent_version":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","changes":[{"op":"put","path":"a","content_b64":"eA=="}]}'
+    Then the response status should be 422
+
+  Scenario: Multi-file rename produces exactly one commit
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"c-rn","scaffold_formidable":true}'
+    And I GET "/api/repos/c-rn/head"
+    And I save the JSON response "version" as "head"
+    When I POST "/api/repos/c-rn/commits" with body '{"parent_version":"${head}","message":"rename basic","changes":[{"op":"delete","path":"templates/basic.yaml"},{"op":"put","path":"templates/renamed.yaml","content_b64":"eA=="}]}'
+    Then the response status should be 200
+    And the response body should contain "\"version\":\""
+
+  Scenario: Multi-file commit aborts transactionally on conflict
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"c-cf","scaffold_formidable":true}'
+    And I GET "/api/repos/c-cf/head"
+    And I save the JSON response "version" as "head0"
+    And I PUT "/api/repos/c-cf/files/templates/basic.yaml" with body '{"parent_version":"${head0}","content_b64":"c2VydmVyLWVkaXQK"}'
+    When I POST "/api/repos/c-cf/commits" with body '{"parent_version":"${head0}","changes":[{"op":"put","path":"templates/basic.yaml","content_b64":"Y2xpZW50Cg=="},{"op":"put","path":"new.txt","content_b64":"bmV3Cg=="}]}'
+    Then the response status should be 409
+    And the response body should contain "\"conflicts\":["
+    And the response body should contain "\"path\":\"templates/basic.yaml\""
+
+  Scenario: Multi-file commit method not allowed
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"c-meth","scaffold_formidable":true}'
+    When I GET "/api/repos/c-meth/commits"
+    Then the response status should be 405

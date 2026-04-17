@@ -1042,6 +1042,82 @@
                 }
             }
         },
+        "/repos/{name}/commits": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Applies an ordered list of put/delete changes against the\ngiven parent_version as a single commit. Returns 200 with\nthe new version on success (fast-forward or auto-merged).\nReturns 409 with conflicts[] if any path conflicts — the\nwhole commit is rejected, no partial apply.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sync"
+                ],
+                "summary": "Multi-file atomic commit",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Commit request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CommitRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/git.CommitResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/server.CommitConflictResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/repos/{name}/files/{path}": {
             "get": {
                 "security": [
@@ -1459,6 +1535,20 @@
                 }
             }
         },
+        "git.CommitResult": {
+            "type": "object",
+            "properties": {
+                "merged_from": {
+                    "type": "string"
+                },
+                "merged_with": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
         "git.FileInfo": {
             "type": "object",
             "properties": {
@@ -1597,6 +1687,60 @@
                 "name": {
                     "type": "string",
                     "example": "Alice"
+                }
+            }
+        },
+        "server.ChangeRequest": {
+            "type": "object",
+            "properties": {
+                "content_b64": {
+                    "type": "string",
+                    "example": "aGVsbG8K"
+                },
+                "op": {
+                    "type": "string",
+                    "example": "put"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "templates/basic.yaml"
+                }
+            }
+        },
+        "server.CommitConflictResponse": {
+            "type": "object",
+            "properties": {
+                "conflicts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.WriteFileConflictResponse"
+                    }
+                },
+                "current_version": {
+                    "type": "string",
+                    "example": "def456..."
+                }
+            }
+        },
+        "server.CommitRequest": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/server.AuthorInfo"
+                },
+                "changes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.ChangeRequest"
+                    }
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Rename a→c"
+                },
+                "parent_version": {
+                    "type": "string",
+                    "example": "abc123..."
                 }
             }
         },

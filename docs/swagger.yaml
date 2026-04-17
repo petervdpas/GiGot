@@ -9,6 +9,15 @@ definitions:
       name:
         type: string
     type: object
+  git.CommitResult:
+    properties:
+      merged_from:
+        type: string
+      merged_with:
+        type: string
+      version:
+        type: string
+    type: object
   git.FileInfo:
     properties:
       content_b64:
@@ -98,6 +107,43 @@ definitions:
         type: string
       name:
         example: Alice
+        type: string
+    type: object
+  server.ChangeRequest:
+    properties:
+      content_b64:
+        example: aGVsbG8K
+        type: string
+      op:
+        example: put
+        type: string
+      path:
+        example: templates/basic.yaml
+        type: string
+    type: object
+  server.CommitConflictResponse:
+    properties:
+      conflicts:
+        items:
+          $ref: '#/definitions/server.WriteFileConflictResponse'
+        type: array
+      current_version:
+        example: def456...
+        type: string
+    type: object
+  server.CommitRequest:
+    properties:
+      author:
+        $ref: '#/definitions/server.AuthorInfo'
+      changes:
+        items:
+          $ref: '#/definitions/server.ChangeRequest'
+        type: array
+      message:
+        example: Rename a→c
+        type: string
+      parent_version:
+        example: abc123...
         type: string
     type: object
   server.CreateRepoRequest:
@@ -979,6 +1025,60 @@ paths:
       security:
       - BearerAuth: []
       summary: List branches
+      tags:
+      - sync
+  /repos/{name}/commits:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Applies an ordered list of put/delete changes against the
+        given parent_version as a single commit. Returns 200 with
+        the new version on success (fast-forward or auto-merged).
+        Returns 409 with conflicts[] if any path conflicts — the
+        whole commit is rejected, no partial apply.
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Commit request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.CommitRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/git.CommitResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.CommitConflictResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Multi-file atomic commit
       tags:
       - sync
   /repos/{name}/files/{path}:

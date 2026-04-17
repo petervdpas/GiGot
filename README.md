@@ -535,6 +535,7 @@ everything.
 | GET    | `/api/repos/{name}/snapshot`       | bearer | All blobs at a version (base64)       |
 | GET    | `/api/repos/{name}/files/{path}`   | bearer | One blob at a version (base64)        |
 | PUT    | `/api/repos/{name}/files/{path}`   | bearer | Write one file with fast-forward/auto-merge/409-conflict semantics |
+| POST   | `/api/repos/{name}/commits`        | bearer | Atomic multi-file commit (put/delete ops); transactional 409 on any conflict |
 
 ### Tokens (legacy)
 

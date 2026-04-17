@@ -268,6 +268,156 @@ func (s *Server) handleRepoFilePut(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
+// ChangeRequest is one entry in the changes[] array of POST /commits.
+// Op is "put" or "delete"; ContentB64 is required for put, ignored for delete.
+type ChangeRequest struct {
+	Op         string `json:"op" example:"put"`
+	Path       string `json:"path" example:"templates/basic.yaml"`
+	ContentB64 string `json:"content_b64,omitempty" example:"aGVsbG8K"`
+}
+
+// CommitRequest is the body of POST /repos/{name}/commits. See
+// docs/design/structured-sync-api.md §3.6. All changes apply atomically:
+// any per-path conflict aborts the whole commit.
+type CommitRequest struct {
+	ParentVersion string          `json:"parent_version" example:"abc123..."`
+	Changes       []ChangeRequest `json:"changes"`
+	Author        *AuthorInfo     `json:"author,omitempty"`
+	Message       string          `json:"message,omitempty" example:"Rename a→c"`
+}
+
+// CommitConflictResponse is the 409 body when a commit cannot be merged.
+// conflicts[] mirrors the single-path shape of WriteFileConflictResponse
+// for each failing path. On a stale-parent 409 every change is echoed back
+// with only yours_b64 populated.
+type CommitConflictResponse struct {
+	CurrentVersion string                      `json:"current_version" example:"def456..."`
+	Conflicts      []WriteFileConflictResponse `json:"conflicts"`
+}
+
+// handleRepoCommits godoc
+// @Summary      Multi-file atomic commit
+// @Description  Applies an ordered list of put/delete changes against the
+// @Description  given parent_version as a single commit. Returns 200 with
+// @Description  the new version on success (fast-forward or auto-merged).
+// @Description  Returns 409 with conflicts[] if any path conflicts — the
+// @Description  whole commit is rejected, no partial apply.
+// @Tags         sync
+// @Accept       json
+// @Produce      json
+// @Param        name  path      string         true  "Repository name"
+// @Param        body  body      CommitRequest  true  "Commit request"
+// @Success      200   {object}  git.CommitResult
+// @Failure      400   {object}  ErrorResponse
+// @Failure      404   {object}  ErrorResponse
+// @Failure      405   {object}  ErrorResponse
+// @Failure      409   {object}  CommitConflictResponse
+// @Failure      422   {object}  ErrorResponse
+// @Security     BearerAuth
+// @Router       /repos/{name}/commits [post]
+func (s *Server) handleRepoCommits(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	name, ok := s.resolveReadableRepoWithAction(w, r, "/commits", policy.ActionWriteRepo)
+	if !ok {
+		return
+	}
+
+	var req CommitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.ParentVersion == "" {
+		writeError(w, http.StatusBadRequest, "parent_version is required")
+		return
+	}
+	if len(req.Changes) == 0 {
+		writeError(w, http.StatusBadRequest, "changes is required")
+		return
+	}
+
+	changes := make([]gitmanager.Change, 0, len(req.Changes))
+	for i, c := range req.Changes {
+		if c.Op != gitmanager.OpPut && c.Op != gitmanager.OpDelete {
+			writeError(w, http.StatusBadRequest,
+				"changes["+strconv.Itoa(i)+"]: op must be \"put\" or \"delete\"")
+			return
+		}
+		if c.Path == "" {
+			writeError(w, http.StatusBadRequest,
+				"changes["+strconv.Itoa(i)+"]: path is required")
+			return
+		}
+		mc := gitmanager.Change{Op: c.Op, Path: c.Path}
+		if c.Op == gitmanager.OpPut {
+			content, err := base64.StdEncoding.DecodeString(c.ContentB64)
+			if err != nil {
+				writeError(w, http.StatusBadRequest,
+					"changes["+strconv.Itoa(i)+"]: content_b64 is not valid base64")
+				return
+			}
+			mc.Content = content
+		}
+		changes = append(changes, mc)
+	}
+
+	authorName, authorEmail := s.resolveAuthor(r, req.Author)
+	if authorName == "" || authorEmail == "" {
+		writeError(w, http.StatusBadRequest, "author identity could not be determined")
+		return
+	}
+
+	subUsername := ""
+	if id := auth.IdentityFromContext(r.Context()); id != nil {
+		subUsername = id.Username
+	}
+
+	res, err := s.git.Commit(name, gitmanager.CommitOptions{
+		ParentVersion:        req.ParentVersion,
+		Changes:              changes,
+		AuthorName:           authorName,
+		AuthorEmail:          authorEmail,
+		CommitterName:        scaffoldCommitterName,
+		CommitterEmail:       scaffoldCommitterEmail,
+		Message:              req.Message,
+		SubscriptionUsername: subUsername,
+	})
+	if err != nil {
+		var ce *gitmanager.CommitConflictError
+		if errors.As(err, &ce) {
+			conflicts := make([]WriteFileConflictResponse, 0, len(ce.Conflicts))
+			for _, c := range ce.Conflicts {
+				conflicts = append(conflicts, WriteFileConflictResponse{
+					CurrentVersion: c.CurrentVersion,
+					Path:           c.Path,
+					BaseB64:        c.BaseB64,
+					TheirsB64:      c.TheirsB64,
+					YoursB64:       c.YoursB64,
+				})
+			}
+			writeJSON(w, http.StatusConflict, CommitConflictResponse{
+				CurrentVersion: ce.CurrentVersion,
+				Conflicts:      conflicts,
+			})
+			return
+		}
+		writeSyncError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// resolveReadableRepoWithAction is the generalised form of
+// resolveReadableRepo that takes an explicit action (so POST /commits can
+// require ActionWriteRepo rather than ActionReadRepo). Kept as a thin
+// wrapper around authorizeRepo so URL-suffix parsing stays in one place.
+func (s *Server) resolveReadableRepoWithAction(w http.ResponseWriter, r *http.Request, suffix string, action policy.Action) (string, bool) {
+	return s.authorizeRepo(w, r, s.extractRepoSubPath(r.URL.Path, suffix), action)
+}
+
 // resolveAuthor picks the author identity for a write: client-supplied
 // values win when present; otherwise fall back to "<username>@gigot.local"
 // derived from the authenticated identity. Returns empty strings when no

@@ -622,6 +622,134 @@ func TestRepoFilePutBadBase64(t *testing.T) {
 	}
 }
 
+// postCommits sends POST /commits with the given body and returns the
+// recorder. Body is a JSON string; callers can use fmt.Sprintf to
+// interpolate saved values.
+func postCommits(t *testing.T, srv *Server, repo, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/repos/"+repo+"/commits",
+		strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+func TestRepoCommitsRename(t *testing.T) {
+	srv := testServer(t)
+	parent := seedBareWith(t, srv, "rn", "templates/a.yaml", "A\n")
+
+	body := `{"parent_version":"` + parent + `","message":"rename a to c","changes":[` +
+		`{"op":"delete","path":"templates/a.yaml"},` +
+		`{"op":"put","path":"templates/c.yaml","content_b64":"QQo="}]}`
+	rec := postCommits(t, srv, "rn", body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	var res gitmanager.CommitResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(res.Version) != 40 {
+		t.Errorf("Version should be 40-char SHA, got %q", res.Version)
+	}
+	if res.MergedFrom != "" {
+		t.Errorf("rename should be fast-forward, got merge: %+v", res)
+	}
+}
+
+func TestRepoCommitsConflict(t *testing.T) {
+	srv := testServer(t)
+	parent := seedBareWith(t, srv, "cc", "a.txt", "base\n")
+	seedFile(t, srv, "cc", "a.txt", "server-edit\n", "server edit")
+
+	body := `{"parent_version":"` + parent + `","changes":[` +
+		`{"op":"put","path":"a.txt","content_b64":"Y2xpZW50Cg=="},` +
+		`{"op":"put","path":"b.txt","content_b64":"bmV3Cg=="}]}`
+	rec := postCommits(t, srv, "cc", body)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	var body2 CommitConflictResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body2); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body2.Conflicts) != 1 || body2.Conflicts[0].Path != "a.txt" {
+		t.Errorf("expected 1 conflict on a.txt, got %+v", body2.Conflicts)
+	}
+}
+
+func TestRepoCommitsMissingRepo(t *testing.T) {
+	srv := testServer(t)
+	body := `{"parent_version":"HEAD","changes":[{"op":"put","path":"a","content_b64":"eA=="}]}`
+	rec := postCommits(t, srv, "ghost", body)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestRepoCommitsEmptyRepo(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("emp")
+	body := `{"parent_version":"HEAD","changes":[{"op":"put","path":"a","content_b64":"eA=="}]}`
+	rec := postCommits(t, srv, "emp", body)
+	if rec.Code != http.StatusConflict {
+		t.Errorf("expected 409, got %d", rec.Code)
+	}
+}
+
+func TestRepoCommitsBadOp(t *testing.T) {
+	srv := testServer(t)
+	parent := seedBareWith(t, srv, "bo", "a.txt", "A\n")
+	body := `{"parent_version":"` + parent + `","changes":[{"op":"nuke","path":"a.txt"}]}`
+	rec := postCommits(t, srv, "bo", body)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRepoCommitsEmptyChanges(t *testing.T) {
+	srv := testServer(t)
+	parent := seedBareWith(t, srv, "ec", "a.txt", "A\n")
+	body := `{"parent_version":"` + parent + `","changes":[]}`
+	rec := postCommits(t, srv, "ec", body)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestRepoCommitsBadParent(t *testing.T) {
+	srv := testServer(t)
+	seedBareWith(t, srv, "bp", "a.txt", "A\n")
+	body := `{"parent_version":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","changes":[` +
+		`{"op":"put","path":"a.txt","content_b64":"eA=="}]}`
+	rec := postCommits(t, srv, "bp", body)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("expected 422, got %d", rec.Code)
+	}
+}
+
+func TestRepoCommitsBadBase64(t *testing.T) {
+	srv := testServer(t)
+	parent := seedBareWith(t, srv, "bb", "a.txt", "A\n")
+	body := `{"parent_version":"` + parent + `","changes":[` +
+		`{"op":"put","path":"a.txt","content_b64":"not base64!!"}]}`
+	rec := postCommits(t, srv, "bb", body)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestRepoCommitsMethodNotAllowed(t *testing.T) {
+	srv := testServer(t)
+	req := httptest.NewRequest(http.MethodPut, "/api/repos/anything/commits", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rec.Code)
+	}
+}
+
 func TestRepoLogWithCommits(t *testing.T) {
 	srv := testServer(t)
 	srv.git.InitBare("log-commits")

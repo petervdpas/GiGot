@@ -513,7 +513,7 @@ func (tc *testContext) iGET(path string) error {
 }
 
 func (tc *testContext) iPOSTWithBody(path, body string) error {
-	return tc.doRequest(http.MethodPost, path, body)
+	return tc.doRequest(http.MethodPost, path, tc.expandSaved(body))
 }
 
 // iPUTWithBody sends a PUT with JSON body. Tokens of the form ${key} in the

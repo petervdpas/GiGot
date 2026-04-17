@@ -159,7 +159,7 @@ func (m *Manager) WriteFile(name string, opts WriteOptions) (WriteResult, error)
 			}}
 		}
 
-		mergedTree, clean, err := mergeTree(repoPath, head.Version, clientCommit)
+		mergedTree, clean, _, err := mergeTree(repoPath, head.Version, clientCommit)
 		if err != nil {
 			return WriteResult{}, fmt.Errorf("merge-tree: %w", err)
 		}
@@ -323,28 +323,39 @@ func isAncestor(repoPath, possibleAncestor, descendant string) bool {
 	return err == nil
 }
 
-// mergeTree runs `git merge-tree --write-tree theirs yours` and returns the
-// resulting tree SHA plus a clean flag. The command exits 0 on a clean merge
-// and non-zero on conflict; we distinguish those via exit status. Genuine
-// failures (bad revs, IO errors) surface as the third return.
-func mergeTree(repoPath, theirs, yours string) (string, bool, error) {
-	cmd := exec.Command("git", "-C", repoPath, "merge-tree", "--write-tree", theirs, yours)
+// mergeTree runs `git merge-tree --write-tree --name-only theirs yours` and
+// returns the resulting tree SHA, a clean flag, and the list of conflicting
+// paths (empty on clean merges). The command exits 0 on a clean merge and 1
+// on conflict; we distinguish those via exit status. Genuine failures (bad
+// revs, IO errors) surface as the error return.
+//
+// --name-only dedupes conflicts across stages (base/ours/theirs), so a
+// single conflicted file appears exactly once. That matches the 409 shape
+// for both PUT (single path, len == 1) and POST /commits (multi-path).
+func mergeTree(repoPath, theirs, yours string) (string, bool, []string, error) {
+	cmd := exec.Command("git", "-C", repoPath, "merge-tree", "--write-tree", "--name-only", "--no-messages", theirs, yours)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
-	lines := strings.SplitN(strings.TrimRight(stdout.String(), "\n"), "\n", 2)
+	lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")
 	if len(lines) == 0 || lines[0] == "" {
-		return "", false, fmt.Errorf("merge-tree: empty output (stderr=%s)", strings.TrimSpace(stderr.String()))
+		return "", false, nil, fmt.Errorf("merge-tree: empty output (stderr=%s)", strings.TrimSpace(stderr.String()))
 	}
 	tree := lines[0]
 	if err == nil {
-		return tree, true, nil
+		return tree, true, nil, nil
 	}
 	// Exit status 1 means conflict; anything else is a real error.
 	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-		return tree, false, nil
+		var paths []string
+		for _, p := range lines[1:] {
+			if p != "" {
+				paths = append(paths, p)
+			}
+		}
+		return tree, false, paths, nil
 	}
-	return "", false, fmt.Errorf("merge-tree: %s: %w", strings.TrimSpace(stderr.String()), err)
+	return "", false, nil, fmt.Errorf("merge-tree: %s: %w", strings.TrimSpace(stderr.String()), err)
 }
 
 // catBlob returns the bytes of <rev>:<path> or ErrPathNotFound if absent.

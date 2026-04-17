@@ -1,6 +1,6 @@
 # Structured Sync API — Design & Execution Plan
 
-**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 not yet started. Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16.
+**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 shipped (2026-04-17), Phase 4 not yet started. Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16.
 **Owner:** Peter
 **Last updated:** 2026-04-17
 
@@ -422,6 +422,22 @@ Scope:
 
 Acceptance: rename test (delete A + put B in one request) produces exactly
 one commit; conflict on any path aborts the whole commit.
+
+**Shipped 2026-04-17.** Multi-file primitive lives in
+`internal/git/commit.go:Commit`; handler is `handleRepoCommits` in
+`internal/server/handler_sync.go`. Reuses Phase 2's low-level helpers
+(`hashObject`, `commitTree`, `mergeTree`, `updateRefCAS`) plus a new
+`treeWithChanges` that applies an ordered put/delete sequence against a
+throwaway GIT_INDEX_FILE (with GIT_WORK_TREE set — bare repos refuse
+`update-index --force-remove` without one). Merge-tree now runs with
+`--name-only --no-messages` so conflict paths parse cleanly for the
+multi-path 409 body. `CommitConflictError` carries `[]WriteConflict`,
+one entry per failing path; on stale-parent the list echoes every client
+change with only `yours_b64` populated (delete ops leave `yours_b64`
+empty). Unit tests cover rename-as-fast-forward, auto-merge across
+disjoint files, transactional abort on conflict, stale-parent, and the
+standard validation + sentinel paths; handler tests mirror the surface;
+`integration/features/sync.feature` has nine `/commits` scenarios.
 
 ### Phase 4 — Delta / efficient pull
 
