@@ -755,24 +755,20 @@ The template is Formidable's contract with the client, not with the
 server. Corrupt records are caught at render time on the client, not
 at commit time on the server. The uniform rule in §10.3 treats
 unknown `data.*` keys the same as known ones, so extraneous keys
-survive a merge harmlessly.
+survive a merge harmlessly. §10.5 follows the same principle — image
+referential integrity stays on the client.
 
 ### 10.5 Referential integrity for image fields
 
-For every `data.*` whose template field has `type: image`, the value is
-expected to be a path relative to `storage/<template>/images/`. On
-commit, the server checks:
-
-- If a record references an image, that image exists in the target tree
-  (either unchanged from the parent, or added in this same commit).
-  Missing ⇒ 422.
-- On merge, if one side deletes an image the other side still
-  references, the deletion is held back — a 409 is returned naming the
-  dangling reference, so the client can decide (drop the reference, or
-  restore the image).
-
-This is the only merge rule that crosses file boundaries. It's cheap:
-the server already has both trees parsed for record merging.
+**Descoped.** Whether a record references an image that exists — or
+whether an image on disk is still referenced — is Formidable's problem,
+not GiGot's. Checking it on the server would require exactly the
+template coupling rejected in §10.4. The server treats image blobs as
+ordinary binary files under `storage/<template>/images/`: it transports
+them (§11 F3) and leaves orphaned files / dangling references for the
+client to handle. The only conflict GiGot resolves is the record one
+(§10.3); two people overwriting the same image file isn't a realistic
+scenario worth a dedicated rule.
 
 ### 10.6 Per-field conflict shape
 
@@ -898,26 +894,14 @@ schema validation. Both are out:
 Phase number retained so F3/F4 numbering stays stable. Reopen only if
 production usage shows template line-merge causing real pain.
 
-### Phase F3 — Referential integrity for image fields
+### Phase F3 — Binary transport for images
 
 **Layers on:** Phase 3 (multi-file commits).
 
-Scope:
-- On commit: parse records for `type: image` values, check referents
-  exist.
-- On merge: hold back image deletions that would orphan references;
-  409 with named dangling references.
-- Define the image-upload path — either `POST /commits` with binary
-  blobs base64'd in the `changes[]` entry (MVP), or a streaming path
-  (`multipart/form-data`) if blob sizes warrant it. Decide at phase
-  start; this is where §7's "binary files" open question resolves for
-  both modes.
-
-Acceptance:
-- Commit that deletes an image still referenced by a record is
-  rejected.
-- Merge that would orphan an image returns 409 with the offending
-  record and field named.
+Images land as ordinary binary blobs under
+`storage/<template>/images/`. The only merge path that can conflict is
+the record (`*.meta.json`), which §10.3 already covers. No
+referential integrity, no template parsing.
 
 ### Phase F4 — Record query endpoint
 

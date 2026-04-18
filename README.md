@@ -59,13 +59,6 @@ tracker and is the source of truth for "what's next."
       identity header forwarded by a fronting gateway (e.g. Azure APIM).
       Lets the admin UI skip server-side login when deployed behind a
       gateway that already authenticates the caller.
-- [ ] **Structured sync API — F3 + F4 remaining.** Generic Phases 0–4 and
-      Formidable-first Phase F1 are shipped; F2 is descoped. F3 adds
-      referential integrity for image fields (reject commits that orphan
-      image references); F4 adds the in-memory record query endpoint
-      (`GET /records/{template}`). Spec lives in
-      [`docs/design/structured-sync-api.md`](docs/design/structured-sync-api.md)
-      §10.5, §10.8, §11.
 - [ ] **NaCl-challenge admin login.** Replace the password+session login
       with curve25519 challenge/response, admin keypair held in the
       browser (passphrase-encrypted in localStorage). Password path stays
@@ -75,6 +68,8 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Phase F4 — Record query endpoint.** `GET /api/repos/{name}/records/{template}` lists all parsed records under `storage/<template>/*.meta.json` at HEAD, with optional `where` (equality/inequality on string fields, numeric range on scalars), `sort` (prefix `-` for descending), and `limit`. Filter DSL lives in `internal/formidable/query.go`; handler in `internal/server/handler_records.go`. Swagger, unit, handler, and Cucumber tests green. See [`structured-sync-api.md`](docs/design/structured-sync-api.md) §10.8 and §11 F4.
+- [x] **Phase F3 — Binary transport for images.** Binary blobs under `storage/<template>/images/` flow through the existing `PUT /files/{path}` and `POST /commits` endpoints as ordinary base64-encoded content; the record-merge path (§10.3) explicitly skips images via `isFormidableRecordPath`. Same-path overwrite is accepted without conflict. Referential integrity is descoped — that's Formidable's concern, not GiGot's. Cucumber scenarios in `formidable_records.feature` cover round-trip and overwrite. See [`structured-sync-api.md`](docs/design/structured-sync-api.md) §10.5 and §11 F3.
 - [x] **Phase F2 — Descoped.** Server-side schema validation would couple GiGot to Formidable's field-type model (rejected); template structural merge is handled well enough by the generic line-based merge. See [`structured-sync-api.md`](docs/design/structured-sync-api.md) §10.4, §10.7, and §11 F2 for rationale.
 - [x] **Phase F1 — Structured per-field record merge.** `internal/formidable` implements the uniform merge rule from `structured-sync-api.md` §10.3: every `data.*` field in a `storage/**/*.meta.json` record resolves as one atomic value; same-field divergence is last-writer-wins by `meta.updated`; immutable meta keys (`created`, `id`, `template`) are the only conflict source. Wired into `PUT /files/{path}` and `POST /commits` for marker-stamped repos. Unit + handler + Cucumber tests green; new `formidable.RecordConflict` 409 shape documented in Swagger.
 - [x] **Cucumber coverage for server-mode-driven behavior.** Integration feature `formidable_first.feature` plus the `the server is running in formidable-first mode` step exercise the §2.7 decision matrix (init/clone × default/override) end-to-end through the HTTP pipeline, including a wire-level idempotence proof against a pre-marked upstream.

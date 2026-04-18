@@ -1434,6 +1434,89 @@
                 }
             }
         },
+        "/repos/{name}/records/{template}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists all Formidable records under storage/{template}/ at\nHEAD. Optional where/sort/limit query params apply the\nminimal filter DSL from §10.8 — equality/inequality on\nscalar data.\u003ckey\u003e values and numeric range comparisons.\nSort accepts a data key, optionally prefixed with \"-\"\nfor descending. Limit defaults to no limit.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sync"
+                ],
+                "summary": "Record query endpoint (Formidable-first)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Template directory name under storage/",
+                        "name": "template",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter expression (e.g. city=London, count\u003e5)",
+                        "name": "where",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Data key to sort by (prefix with - for descending)",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of records",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.RecordQueryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/repos/{name}/snapshot": {
             "get": {
                 "security": [
@@ -1957,6 +2040,21 @@
                 "message": {
                     "type": "string",
                     "example": "repository created"
+                }
+            }
+        },
+        "server.RecordQueryResponse": {
+            "type": "object",
+            "properties": {
+                "records": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "version": {
+                    "type": "string"
                 }
             }
         },

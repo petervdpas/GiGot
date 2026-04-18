@@ -3,6 +3,7 @@ package integration
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -390,6 +391,86 @@ func (tc *testContext) theResultingRecordHasDataField(path, repo, key, want stri
 	got, ok := decoded.Data[key]
 	if !ok {
 		return fmt.Errorf("data.%s missing in %q (raw: %s)", key, path, string(out))
+	}
+	if fmt.Sprintf("%v", got) != want {
+		return fmt.Errorf("data.%s = %v, want %q", key, got, want)
+	}
+	return nil
+}
+
+// iPutBinaryFile builds a PUT /files/{path} body for an arbitrary
+// hex-encoded binary blob and fires it. Used by F3 scenarios that
+// need to prove binary transport works under
+// storage/<template>/images/.
+func (tc *testContext) iPutBinaryFile(path, repo, hexBody, parent string) error {
+	raw, err := hex.DecodeString(hexBody)
+	if err != nil {
+		return fmt.Errorf("decode hex %q: %w", hexBody, err)
+	}
+	body := map[string]any{
+		"parent_version": tc.expandSaved(parent),
+		"content_b64":    base64.StdEncoding.EncodeToString(raw),
+		"message":        "binary transport test",
+	}
+	rawBody, _ := json.Marshal(body)
+	return tc.doRequest(http.MethodPut, "/api/repos/"+repo+"/files/"+path, string(rawBody))
+}
+
+// theResponseBodyBase64DecodesToHex reads a {content_b64:"..."}
+// JSON payload (as returned by GET /files/{path}) and asserts the
+// decoded bytes equal the given hex. Used by F3 scenarios.
+func (tc *testContext) theResponseBodyBase64DecodesToHex(wantHex string) error {
+	var decoded struct {
+		ContentB64 string `json:"content_b64"`
+	}
+	if err := json.Unmarshal([]byte(tc.respBody), &decoded); err != nil {
+		return fmt.Errorf("decode response: %v (body: %s)", err, tc.respBody)
+	}
+	raw, err := base64.StdEncoding.DecodeString(decoded.ContentB64)
+	if err != nil {
+		return fmt.Errorf("base64: %v", err)
+	}
+	got := hex.EncodeToString(raw)
+	if got != wantHex {
+		return fmt.Errorf("hex mismatch: got %s, want %s", got, wantHex)
+	}
+	return nil
+}
+
+// theRecordsResponseContainsNRecords asserts records[] length.
+func (tc *testContext) theRecordsResponseContainsNRecords(n int) error {
+	var decoded struct {
+		Records []map[string]any `json:"records"`
+	}
+	if err := json.Unmarshal([]byte(tc.respBody), &decoded); err != nil {
+		return fmt.Errorf("decode records response: %v", err)
+	}
+	if len(decoded.Records) != n {
+		return fmt.Errorf("records count: got %d, want %d (body: %s)", len(decoded.Records), n, tc.respBody)
+	}
+	return nil
+}
+
+// theRecordsResponseRecordHasDataField asserts records[i].data[key]
+// stringifies to want. Used by F4 scenarios to inspect the filter
+// and sort result without introducing a full JSONPath step.
+func (tc *testContext) theRecordsResponseRecordHasDataField(index int, key, want string) error {
+	var decoded struct {
+		Records []map[string]any `json:"records"`
+	}
+	if err := json.Unmarshal([]byte(tc.respBody), &decoded); err != nil {
+		return fmt.Errorf("decode: %v", err)
+	}
+	if index < 0 || index >= len(decoded.Records) {
+		return fmt.Errorf("index %d out of range (%d records)", index, len(decoded.Records))
+	}
+	data, ok := decoded.Records[index]["data"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("record %d has no data map", index)
+	}
+	got, ok := data[key]
+	if !ok {
+		return fmt.Errorf("data.%s missing in record %d", key, index)
 	}
 	if fmt.Sprintf("%v", got) != want {
 		return fmt.Errorf("data.%s = %v, want %q", key, got, want)
@@ -1079,6 +1160,10 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I put a record "([^"]*)" in repo "([^"]*)" with data '([^']*)' updated "([^"]*)" and parent "([^"]*)"$`, tc.iPutARecord)
 	ctx.Step(`^I put a record "([^"]*)" in repo "([^"]*)" with data '([^']*)' created "([^"]*)" updated "([^"]*)" and parent "([^"]*)"$`, tc.iPutARecordWithCreated)
 	ctx.Step(`^the resulting record "([^"]*)" in repo "([^"]*)" has data field "([^"]*)" equal to "([^"]*)"$`, tc.theResultingRecordHasDataField)
+	ctx.Step(`^I put binary file "([^"]*)" in repo "([^"]*)" with bytes "([^"]*)" and parent "([^"]*)"$`, tc.iPutBinaryFile)
+	ctx.Step(`^the response body base64-decodes to hex "([^"]*)"$`, tc.theResponseBodyBase64DecodesToHex)
+	ctx.Step(`^the records response contains (\d+) records$`, tc.theRecordsResponseContainsNRecords)
+	ctx.Step(`^the records response record (\d+) has data field "([^"]*)" equal to "([^"]*)"$`, tc.theRecordsResponseRecordHasDataField)
 
 	// Config steps
 	ctx.Step(`^no config file exists$`, tc.noConfigFileExists)
