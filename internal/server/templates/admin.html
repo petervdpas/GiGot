@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GiGot Admin</title>
+<link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+
+<div id="login" class="login-wrap card hidden">
+  <img class="logo" src="/assets/gigot.png" alt="GiGot">
+  <div class="brand-name">GiGot</div>
+  <div class="brand-tag">Git-backed server for Formidable</div>
+  <h2>Admin login</h2>
+  <form id="login-form">
+    <input name="username" placeholder="Username" autofocus required>
+    <input name="password" type="password" placeholder="Password" required>
+    <button type="submit">Sign in</button>
+    <div id="login-error" class="error"></div>
+  </form>
+</div>
+
+<div id="app" class="hidden">
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <img class="logo" src="/assets/gigot.png" alt="GiGot">
+        <div class="brand-text">
+          <h1>GiGot</h1>
+          <div class="muted">Admin console</div>
+        </div>
+      </div>
+      <nav>
+        <a data-panel="repos" class="active">Repositories</a>
+        <a data-panel="keys">Subscription keys</a>
+        <div class="spacer"></div>
+        <a href="/swagger/index.html" target="_blank" rel="noopener">API documentation</a>
+        <a id="logout">Sign out</a>
+      </nav>
+      <div class="me">
+        signed in as
+        <strong id="me-name"></strong>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div id="panel-repos" class="panel active">
+        <div class="page-header">
+          <h1>Repositories <span class="muted">(<span id="repo-count">0</span>)</span></h1>
+        </div>
+        <div class="card">
+          <h2>Create repository</h2>
+          <form id="create-repo-form" class="row">
+            <input name="name" placeholder="New repo name" required>
+            <input name="source_url" placeholder="Clone from URL (optional)" class="create-repo-source">
+            <label class="muted create-repo-scaffold">
+              <input type="checkbox" name="scaffold">
+              Scaffold as Formidable context
+            </label>
+            <button type="submit">Create repo</button>
+          </form>
+          <div class="muted create-repo-hint">
+            Leave URL empty to create an empty bare repo. URL + scaffold clones and stamps the Formidable marker on top.
+            On a Formidable-first server (server.formidable_first) every create stamps by default.
+          </div>
+          <div id="repo-msg" class="muted"></div>
+        </div>
+        <div class="card">
+          <h2>Existing repositories</h2>
+          <ul id="repo-list" class="repo-list-ul"></ul>
+        </div>
+      </div>
+
+      <div id="panel-keys" class="panel">
+        <div class="page-header">
+          <h1>Subscription keys <span class="muted">(<span id="count">0</span>)</span></h1>
+        </div>
+        <div class="card">
+          <h2>Issue subscription key</h2>
+          <form id="issue-form" class="row issue-form-row">
+            <input name="username" placeholder="Client username" required>
+            <div>
+              <div class="muted issue-repos-label">Repos this key can access:</div>
+              <div id="issue-repos" class="repo-picker"></div>
+            </div>
+            <button type="submit">Issue key</button>
+          </form>
+          <div id="issue-msg" class="success"></div>
+        </div>
+        <div class="card">
+          <h2>Active keys</h2>
+          <table>
+            <thead><tr><th>Username</th><th>Repos</th><th>Token</th><th></th></tr></thead>
+            <tbody id="token-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="/assets/admin.js"></script>
+</body>
+</html>

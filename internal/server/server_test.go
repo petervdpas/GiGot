@@ -41,7 +41,7 @@ func TestIndexPage(t *testing.T) {
 	if !strings.Contains(body, "GiGot") {
 		t.Error("index page should contain GiGot")
 	}
-	if !strings.Contains(body, "running") {
+	if !strings.Contains(body, "Running") {
 		t.Error("index page should show running status")
 	}
 }

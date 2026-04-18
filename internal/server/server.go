@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html/template"
 	"log"
 	"net"
 	"net/http"
@@ -61,6 +60,7 @@ func New(cfg *config.Config) *Server {
 	ap.MarkPublic("/admin/login")
 	ap.MarkPublic("/admin/logout")
 	ap.MarkPublicPrefix("/swagger/")
+	ap.MarkPublicPrefix("/assets/")
 
 	ts := auth.NewTokenStrategy()
 	ap.Register(ts)
@@ -188,6 +188,9 @@ func (s *Server) routes() {
 	// Swagger
 	s.mux.Handle("/swagger/", httpSwagger.WrapHandler)
 
+	// Static assets (embedded logo etc.)
+	s.mux.HandleFunc("/assets/", s.handleAssets)
+
 	// API
 	s.mux.HandleFunc("/api/health", s.handleHealth)
 	s.mux.HandleFunc("/api/repos", s.handleRepos)
@@ -207,44 +210,6 @@ func (s *Server) routes() {
 	// Git smart HTTP transport
 	s.mux.HandleFunc("/git/", s.handleGitRouter)
 }
-
-var indexTmpl = template.Must(template.New("index").Parse(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>GiGot</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-         background: #0d1117; color: #c9d1d9; display: flex; align-items: center;
-         justify-content: center; min-height: 100vh; }
-  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-          padding: 2.5rem; max-width: 420px; text-align: center; }
-  h1 { font-size: 2rem; margin-bottom: 0.25rem; color: #f0f6fc; }
-  .subtitle { color: #8b949e; margin-bottom: 1.5rem; }
-  .status { display: inline-block; background: #238636; color: #fff;
-            padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.85rem;
-            margin-bottom: 1.5rem; }
-  .info { text-align: left; font-size: 0.9rem; line-height: 1.8; }
-  .info span { color: #8b949e; }
-  a { color: #58a6ff; text-decoration: none; }
-</style>
-</head>
-<body>
-<div class="card">
-  <h1>GiGot</h1>
-  <p class="subtitle">Git-backed server for Formidable</p>
-  <div class="status">running</div>
-  <div class="info">
-    <div><span>Port:</span> {{.Port}}</div>
-    <div><span>Repo root:</span> {{.RepoRoot}}</div>
-    <div><span>Repos:</span> {{.RepoCount}}</div>
-    <div><span>Go:</span> {{.GoVersion}}</div>
-    <div><a href="/swagger/index.html">API Documentation</a></div>
-  </div>
-</div>
-</body>
-</html>`))
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {

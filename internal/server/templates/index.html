@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GiGot</title>
+<link rel="stylesheet" href="/assets/index.css">
+</head>
+<body>
+<div class="stack">
+  <div class="card">
+    <img class="logo" src="/assets/gigot.png" alt="GiGot">
+    <h1>GiGot</h1>
+    <p class="subtitle">Git-backed server for Formidable</p>
+    <aside class="explainer">
+      <span class="tag">Gigot · /ʒi.ɡo/</span>
+      <p>French for a roast leg of lamb — a proper, meaty service for
+         your Formidable records.</p>
+      <dl class="pron">
+        <dt>French</dt>
+        <dd><span class="ipa">/ʒi.ɡo/</span> — "zhee-goh" (silent <em>t</em>)</dd>
+        <dt>English</dt>
+        <dd>"JEE-got" — the <em>t</em> sneaks back in</dd>
+      </dl>
+    </aside>
+  </div>
+
+  <div class="card">
+    <div class="status">GiGot is Running!</div>
+    <div class="info">
+      <div><span>Port:</span> {{.Port}}</div>
+      <div><span>Repo root:</span> {{.RepoRoot}}</div>
+      <div><span>Repos:</span> {{.RepoCount}}</div>
+      <div><span>Go:</span> {{.GoVersion}}</div>
+      <div class="info-link"><a href="/swagger/index.html">API Documentation</a></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,5 +1,9 @@
 # GiGot
 
+<p align="center">
+  <img src="docs/images/gigot.png" alt="GiGot" width="220">
+</p>
+
 Git-backed server for [Formidable](https://github.com/petervdpas/Formidable). GiGot
 gives Formidable clients an optional, server-centered place to clone, push, and pull
 templates and context while keeping Formidable itself local-first.
