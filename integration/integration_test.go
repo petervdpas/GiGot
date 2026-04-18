@@ -2,6 +2,7 @@ package integration
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -329,6 +330,71 @@ func keysOfAny(m map[string]any) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// iPutARecord builds a minimal Formidable record JSON ({meta,data}),
+// base64-encodes it, and PUTs it at the given path. The meta carries
+// fixed id/template and created timestamps so scenarios only need to
+// vary updated + data. Variant with an explicit created is handled by
+// iPutARecordWithCreated.
+func (tc *testContext) iPutARecord(path, repo, dataJSON, updated, parent string) error {
+	return tc.putRecordWithCreated(path, repo, dataJSON, "2024-01-01T00:00:00Z", updated, parent)
+}
+
+func (tc *testContext) iPutARecordWithCreated(path, repo, dataJSON, created, updated, parent string) error {
+	return tc.putRecordWithCreated(path, repo, dataJSON, created, updated, parent)
+}
+
+func (tc *testContext) putRecordWithCreated(path, repo, dataJSON, created, updated, parent string) error {
+	var data map[string]any
+	if err := json.Unmarshal([]byte(dataJSON), &data); err != nil {
+		return fmt.Errorf("parse data %q: %w", dataJSON, err)
+	}
+	rec := map[string]any{
+		"meta": map[string]any{
+			"id":       "fixed-id",
+			"template": "addresses.yaml",
+			"created":  created,
+			"updated":  updated,
+		},
+		"data": data,
+	}
+	raw, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	body := map[string]any{
+		"parent_version": tc.expandSaved(parent),
+		"content_b64":    base64.StdEncoding.EncodeToString(raw),
+		"message":        "test merge scenario",
+	}
+	rawBody, _ := json.Marshal(body)
+	return tc.doRequest(http.MethodPut, "/api/repos/"+repo+"/files/"+path, string(rawBody))
+}
+
+// theResultingRecordHasDataField reads the file at HEAD, parses as
+// {meta,data}, and asserts data[key] == want. Used to verify merged
+// record content without having to decode the merge response body.
+func (tc *testContext) theResultingRecordHasDataField(path, repo, key, want string) error {
+	p := tc.git.RepoPath(repo)
+	out, err := exec.Command("git", "-C", p, "show", "HEAD:"+path).Output()
+	if err != nil {
+		return fmt.Errorf("show HEAD:%s in %q: %w", path, repo, err)
+	}
+	var decoded struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(out, &decoded); err != nil {
+		return fmt.Errorf("record %q is not valid JSON: %v (raw: %s)", path, err, string(out))
+	}
+	got, ok := decoded.Data[key]
+	if !ok {
+		return fmt.Errorf("data.%s missing in %q (raw: %s)", key, path, string(out))
+	}
+	if fmt.Sprintf("%v", got) != want {
+		return fmt.Errorf("data.%s = %v, want %q", key, got, want)
+	}
+	return nil
 }
 
 func (tc *testContext) theRepositoryHeadCommitAuthor(repo, author string) error {
@@ -1010,6 +1076,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the repository "([^"]*)" does not contain file "([^"]*)"$`, tc.theRepositoryDoesNotContainFile)
 	ctx.Step(`^the repository "([^"]*)" file "([^"]*)" is valid JSON with field "([^"]*)" equal to "([^"]*)"$`, tc.theRepositoryFileIsJSONWithField)
 	ctx.Step(`^the repository "([^"]*)" head commit is authored by "([^"]*)"$`, tc.theRepositoryHeadCommitAuthor)
+	ctx.Step(`^I put a record "([^"]*)" in repo "([^"]*)" with data '([^']*)' updated "([^"]*)" and parent "([^"]*)"$`, tc.iPutARecord)
+	ctx.Step(`^I put a record "([^"]*)" in repo "([^"]*)" with data '([^']*)' created "([^"]*)" updated "([^"]*)" and parent "([^"]*)"$`, tc.iPutARecordWithCreated)
+	ctx.Step(`^the resulting record "([^"]*)" in repo "([^"]*)" has data field "([^"]*)" equal to "([^"]*)"$`, tc.theResultingRecordHasDataField)
 
 	// Config steps
 	ctx.Step(`^no config file exists$`, tc.noConfigFileExists)

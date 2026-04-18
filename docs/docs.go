@@ -1181,9 +1181,9 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "One or more Formidable records violated immutable meta fields",
                         "schema": {
-                            "$ref": "#/definitions/server.CommitConflictResponse"
+                            "$ref": "#/definitions/server.CommitRecordConflictResponse"
                         }
                     },
                     "422": {
@@ -1333,9 +1333,9 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "Structured record merge conflict (immutable meta field)",
                         "schema": {
-                            "$ref": "#/definitions/server.WriteFileConflictResponse"
+                            "$ref": "#/definitions/formidable.RecordConflict"
                         }
                     },
                     "422": {
@@ -1598,6 +1598,37 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "formidable.FieldConflict": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string"
+                }
+            }
+        },
+        "formidable.RecordConflict": {
+            "type": "object",
+            "properties": {
+                "current_version": {
+                    "type": "string"
+                },
+                "field_conflicts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/formidable.FieldConflict"
+                    }
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
         "git.BranchInfo": {
             "type": "object",
             "properties": {
@@ -1827,6 +1858,21 @@ const docTemplate = `{
                 "current_version": {
                     "type": "string",
                     "example": "def456..."
+                }
+            }
+        },
+        "server.CommitRecordConflictResponse": {
+            "type": "object",
+            "properties": {
+                "current_version": {
+                    "type": "string",
+                    "example": "def456..."
+                },
+                "record_conflicts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/formidable.RecordConflict"
+                    }
                 }
             }
         },

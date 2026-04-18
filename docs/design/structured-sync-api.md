@@ -1,8 +1,8 @@
 # Structured Sync API — Design & Execution Plan
 
-**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 shipped (2026-04-17), Phase 4 shipped (2026-04-17). Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16. Marker provisioning rule (§2.7) shipped 2026-04-17.
+**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 shipped (2026-04-17), Phase 4 shipped (2026-04-17). Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16. Marker provisioning rule (§2.7) shipped 2026-04-17. §10.3 simplified to a uniform last-writer-wins field rule 2026-04-18 (per-type merge logic removed; live-presence service will handle fine-grained co-editing later). Phase F1 shipped 2026-04-18.
 **Owner:** Peter
-**Last updated:** 2026-04-17
+**Last updated:** 2026-04-18
 
 This document is the source of truth for moving GiGot from "dumb git remote +
 sealed bodies" toward a **structured sync API** that lets Formidable clients
@@ -709,55 +709,58 @@ JSON key instead of per line. Rules, top to bottom:
   corrupt client, not a real conflict.
 - **`meta.author_name`, `meta.author_email`** — follow the winning
   `meta.updated` (last-writer-wins on attribution).
-- **`meta.gigot_enabled`** — re-stamp from the governing template's
-  merged `gigot_enabled` value in the target tree. Cross-file
-  dependency (same style as §10.5 for images); the server already has
-  both template and record trees parsed for record merging. Never a
-  conflict on its own.
-- **`data.<field-key>`** — resolved per field type (§10.3).
+- **`meta.gigot_enabled`** — follow the winning `meta.updated`.
+  (F2 may replace this with a cross-file re-stamp from the governing
+  template.)
+- **`data.<field-key>`** — opaque value, merged by the uniform rule in
+  §10.3. No per-type logic.
 
 If every key resolves without conflict, the server produces a single
 merge commit whose tree is the merged JSON, re-serialised canonically
-(sorted keys for maps the schema doesn't order; preserved order for
-arrays that are positional, like `table` rows).
+(sorted keys throughout; array positions preserved as-is).
 
-### 10.3 Type-aware field resolution
+### 10.3 Uniform field resolution
 
-Per `data.*` key, the server consults the template's `fields[]` entry
-and applies:
+Every `data.*` key, regardless of declared field type, resolves by a
+single rule:
 
-| Field type | Merge rule |
-| ---------- | ---------- |
-| `text`, `number`, `boolean`, `date`, `range`, `dropdown`, `radio`, `guid`, `link` | If one side unchanged, take the changed side. If both changed to the same value, no-op. Otherwise 409. |
-| `textarea` (`plain` or `markdown`) | Line-based 3-way merge — this is prose. Clean ⇒ ok; dirty ⇒ 409 with blob-triple under this field. |
-| `latex`, `code` | Line-based 3-way merge, same as `textarea`. |
-| `tags` | Set union (same rule as `meta.tags`). |
-| `multioption` | Set union on selected values. |
-| `list` | Element-level merge if the list has a `primary_key` field declared; otherwise line-based over canonical-serialised list. |
-| `table` | Row-level merge keyed by the row's `primary_key` column if any; otherwise by row index (positional). Cell conflicts within a row bubble up as field-level 409s on that cell. |
-| `image` | Last-writer-wins on `meta.updated`. The referenced filename is just a string; the actual blob lives in `images/` and is merged separately (§10.5). |
-| `api` | Treat the cached value as opaque JSON; deep-merge objects, conflict on scalar disagreement. |
-| Unknown type | Fall back to line-based merge. |
+- Neither side changed the value (both equal `base`) → keep `base`.
+- One side changed, the other didn't → take the changed side.
+- Both sides changed to the same value → no-op.
+- Both sides changed to different values → take the side whose
+  `meta.updated` is newer (last-writer-wins).
 
-Loop groups (`loopstart`/`loopstop`) merge per iteration, keyed by the
-loop entry's `guid` field if present, otherwise positional.
+Equality is deep-equality on the decoded JSON value, so a `textarea`
+string, a `list` array, and a `number` are all treated the same: the
+field's whole value is atomic.
+
+Rationale: clients already ship the whole field value on every save
+(they don't PATCH sub-structure), so treating each field as atomic
+matches the wire contract and removes an entire class of merge
+conflicts that the user would have had to resolve by hand. Per-type
+cleverness (line-merging inside `textarea`, set-union on `multioption`,
+row-keying on `table`) is expressly not in scope — the simple rule
+handles every type.
+
+The one exception is `image` fields: the referenced filename merges by
+the uniform rule, but the referenced blob in `images/` is subject to
+referential integrity in F3 (§10.5). F1 just takes the later filename
+and lets F3 worry about dangling references.
 
 ### 10.4 Schema validation on commit
 
-Before writing any record, the server checks:
+**F2 territory.** F1 does not validate record shape against the
+template. The uniform rule in §10.3 treats unknown `data.*` keys the
+same as known ones, so extra keys survive a merge harmlessly. F2 adds:
 
 1. `meta.template` names an existing `templates/<name>.yaml` in the
    target version. Missing ⇒ 422.
 2. Every `data.*` key appears in the template's `fields[]`. Extraneous
-   keys ⇒ 422 by default; can be downgraded to a warning via config for
-   forward-compat during template edits (open question — decide in F2).
-3. Each field's value matches its declared type's coarse shape (string
-   for text, array for list/table, ISO8601 for date, etc.). Mismatch ⇒
-   422.
+   keys ⇒ configurable (warn vs reject).
+3. Each field's value matches its declared type's coarse shape.
 
-This catches corrupt clients and cross-file rename drift (template
-renames a field, record still uses old key) at commit time rather than
-at render time.
+Deferring validation keeps F1 independent of template parsing — the
+merge does not need to load the template at all.
 
 ### 10.5 Referential integrity for image fields
 
@@ -778,31 +781,28 @@ the server already has both trees parsed for record merging.
 
 ### 10.6 Per-field conflict shape
 
-When a record merge hits a real conflict, the 409 response is richer
-than §3.5's blob-triple:
+With the uniform rule in §10.3, `data.*` fields never produce 409s —
+last-writer-wins resolves them. Conflicts only arise when a client
+attempts to mutate one of the immutable `meta.*` keys (`created`,
+`id`, `template`). The 409 body calls those out explicitly:
 
 ```
 409 {
   "current_version": "<sha>",
   "path": "storage/addresses/baker-residence.meta.json",
-  "record_id": "b8498b24-...",
-  "template": "addresses.yaml",
   "field_conflicts": [
     {
-      "key": "postal",
-      "field_type": "text",
-      "base":   "NW1 6XE",
-      "theirs": "NW1 6XF",
-      "yours":  "NW1 6XG"
+      "scope": "meta",
+      "key":   "created",
+      "reason": "immutable"
     }
-  ],
-  "auto_merged_fields": ["city", "owners"]
+  ]
 }
 ```
 
-Line-based conflicts inside `textarea`/`latex`/`code` fields keep the
-blob-triple shape nested under the field entry. The client renders a
-field-specific dialog, not a whole-file diff.
+Multiple immutable violations on the same record are bundled into one
+`field_conflicts` array. The client surfaces this as "corrupt client,
+your save was rejected" — not a user-resolvable merge dialog.
 
 ### 10.7 Template writes
 
@@ -850,6 +850,12 @@ count, amortised by the parse the server already does for merges.
 - **Cross-repo queries** — not planned.
 - **Full-text search / JMESPath** — overkill for MVP query needs; add
   only if usage demands.
+- **Live presence / co-editing** — a separate future service (SignalR-style)
+  will show which fields peers are editing and push in-place updates,
+  so two users hardly ever race on the same field. That service makes
+  §10.3's last-writer-wins an acceptable *last-resort* tie-break rather
+  than the common case. Not in scope here; called out so the simplicity
+  of §10.3 is understood as deliberate.
 
 ---
 
@@ -860,25 +866,37 @@ ships first, the Formidable behaviour is an upgrade. A server can run
 at any combination (e.g. generic Phase 2 only, or Phase 2 + F1, or
 Phase 4 + F1 + F2 without F3/F4).
 
-### Phase F1 — Schema parsing + per-field record merge
+### Phase F1 — Record merge (uniform field rule)
 
 **Layers on:** Phase 2 (generic single-file write).
 
 Scope:
-- YAML template parser (reuse an existing Go YAML lib; no custom
-  parser).
-- Record JSON parser + validator keyed by `meta.template`.
-- Field-level merge engine covering all types in §10.3.
-- Per-field 409 response shape (§10.6).
-- Configurable strictness for extraneous `data` keys (warn vs reject).
+- Record JSON parser (`{ meta, data }`).
+- `meta.*` rules from §10.2 (updated-max, tags set-union, flagged
+  true-wins, immutable created/id/template, others follow updated
+  winner).
+- Uniform `data.*` rule from §10.3: one-side-changed → take changed
+  side; both-same → no-op; both-different → last-writer-wins by
+  `meta.updated`. No per-type dispatch.
+- Canonical JSON output for deterministic merge bytes.
+- 409 response shape from §10.6, used only for immutable-meta violations.
+- Wiring into `PUT /files/{path}` and `POST /commits` for paths matching
+  `storage/**/*.meta.json` on repos with a Formidable marker.
+
+Explicitly **not** in scope:
+- Template parsing, schema validation, strictness knobs — all F2.
+- Image referential integrity — F3.
 
 Acceptance:
 - Two clients edit different fields on the same record with stale
   parents ⇒ auto-merge succeeds, one merge commit, no human
   intervention.
-- Two clients edit the same scalar field ⇒ 409 naming the field only.
+- Two clients edit the same data field to different values ⇒ the client
+  whose `meta.updated` is newer wins, 200 OK, no 409.
 - `updated` never triggers a conflict.
-- Corrupt record (missing template, wrong type) is rejected at commit.
+- A client that mutates `meta.created`, `meta.id`, or `meta.template`
+  gets 409 with the field named.
+- Merge output bytes are stable across servers (canonical JSON).
 
 ### Phase F2 — Template writes + validation at commit
 

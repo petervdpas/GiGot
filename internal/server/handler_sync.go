@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/petervdpas/GiGot/internal/auth"
+	"github.com/petervdpas/GiGot/internal/formidable"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
 	"github.com/petervdpas/GiGot/internal/policy"
 )
@@ -247,6 +248,7 @@ type WriteFileConflictResponse struct {
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Failure      409   {object}  WriteFileConflictResponse
+// @Failure      409   {object}  formidable.RecordConflict  "Structured record merge conflict (immutable meta field)"
 // @Failure      422   {object}  ErrorResponse
 // @Security     BearerAuth
 // @Router       /repos/{name}/files/{path} [put]
@@ -282,6 +284,28 @@ func (s *Server) handleRepoFilePut(w http.ResponseWriter, r *http.Request) {
 		subUsername = id.Username
 	}
 
+	// Structured Formidable merge: if this write targets a record file in
+	// a marker-stamped repo and the parent is stale, pre-merge per-field
+	// (§10.2–§10.3) and fast-forward the canonical bytes on top of HEAD.
+	// A nil merged + nil conflict + applicable=false means this write is
+	// not a Formidable candidate; fall through to the generic path.
+	originalParent := req.ParentVersion
+	mergedBlob, recConflict, headVersion, applicable, mergeErr := s.maybeFormidableMerge(name, filePath, req.ParentVersion, content)
+	if mergeErr != nil {
+		writeError(w, http.StatusInternalServerError, mergeErr.Error())
+		return
+	}
+	if recConflict != nil {
+		writeJSON(w, http.StatusConflict, recConflict)
+		return
+	}
+	formidableMerged := false
+	if applicable && mergedBlob != nil {
+		content = mergedBlob
+		req.ParentVersion = headVersion
+		formidableMerged = true
+	}
+
 	res, err := s.git.WriteFile(name, gitmanager.WriteOptions{
 		ParentVersion:        req.ParentVersion,
 		Path:                 filePath,
@@ -307,6 +331,14 @@ func (s *Server) handleRepoFilePut(w http.ResponseWriter, r *http.Request) {
 		}
 		writeSyncError(w, err)
 		return
+	}
+	// A Formidable merge always fast-forwards at the git level, but
+	// semantically it was a merge — surface MergedFrom/MergedWith so the
+	// client sees the same "this was a merge" signal as the generic path.
+	if formidableMerged {
+		res.FastForward = false
+		res.MergedFrom = originalParent
+		res.MergedWith = headVersion
 	}
 	writeJSON(w, http.StatusOK, res)
 }
@@ -338,6 +370,16 @@ type CommitConflictResponse struct {
 	Conflicts      []WriteFileConflictResponse `json:"conflicts"`
 }
 
+// CommitRecordConflictResponse is the 409 body when one or more
+// Formidable records in a commit violate immutable meta fields
+// (§10.6). Transactional: any record conflict aborts the whole commit
+// before the generic merge runs. Structurally distinct from
+// CommitConflictResponse so clients can switch on the body shape.
+type CommitRecordConflictResponse struct {
+	CurrentVersion string                        `json:"current_version" example:"def456..."`
+	RecordConflicts []formidable.RecordConflict  `json:"record_conflicts"`
+}
+
 // handleRepoCommits godoc
 // @Summary      Multi-file atomic commit
 // @Description  Applies an ordered list of put/delete changes against the
@@ -355,6 +397,7 @@ type CommitConflictResponse struct {
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Failure      409   {object}  CommitConflictResponse
+// @Failure      409   {object}  CommitRecordConflictResponse  "One or more Formidable records violated immutable meta fields"
 // @Failure      422   {object}  ErrorResponse
 // @Security     BearerAuth
 // @Router       /repos/{name}/commits [post]
@@ -416,6 +459,37 @@ func (s *Server) handleRepoCommits(w http.ResponseWriter, r *http.Request) {
 	subUsername := ""
 	if id := auth.IdentityFromContext(r.Context()); id != nil {
 		subUsername = id.Username
+	}
+
+	// Pre-scan record-path puts for immutable-meta violations. F1
+	// scope: reject the whole commit on any record-level conflict; do
+	// not attempt auto-merge-on-commit (deferred). Non-record changes
+	// and non-record repos fall through unaffected.
+	var recordConflicts []formidable.RecordConflict
+	var recordHeadVersion string
+	for _, c := range changes {
+		if c.Op != gitmanager.OpPut {
+			continue
+		}
+		if !isFormidableRecordPath(c.Path) {
+			continue
+		}
+		_, rc, headV, applicable, mergeErr := s.maybeFormidableMerge(name, c.Path, req.ParentVersion, c.Content)
+		if mergeErr != nil {
+			writeError(w, http.StatusInternalServerError, mergeErr.Error())
+			return
+		}
+		if applicable && rc != nil {
+			recordConflicts = append(recordConflicts, *rc)
+			recordHeadVersion = headV
+		}
+	}
+	if len(recordConflicts) > 0 {
+		writeJSON(w, http.StatusConflict, CommitRecordConflictResponse{
+			CurrentVersion:  recordHeadVersion,
+			RecordConflicts: recordConflicts,
+		})
+		return
 	}
 
 	res, err := s.git.Commit(name, gitmanager.CommitOptions{
