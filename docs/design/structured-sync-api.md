@@ -1,6 +1,6 @@
 # Structured Sync API — Design & Execution Plan
 
-**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 shipped (2026-04-17), Phase 4 shipped (2026-04-17). Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16. Marker provisioning rule (§2.7) shipped 2026-04-17. §10.3 simplified to a uniform last-writer-wins field rule 2026-04-18 (per-type merge logic removed; live-presence service will handle fine-grained co-editing later). Phase F1 shipped 2026-04-18.
+**Status:** accepted, Phase 0 closed (2026-04-16), Phase 1 shipped (2026-04-16), Phase 2 shipped (2026-04-17), Phase 3 shipped (2026-04-17), Phase 4 shipped (2026-04-17). Formidable-first layer (§10–§11) and Formidable-side opt-in hierarchy (§2.6) added 2026-04-16. Marker provisioning rule (§2.7) shipped 2026-04-17. §10.3 simplified to a uniform last-writer-wins field rule 2026-04-18 (per-type merge logic removed; live-presence service will handle fine-grained co-editing later). Phase F1 shipped 2026-04-18. Phase F2 descoped 2026-04-18 (server-side schema validation would couple to Formidable; template structural merge not worth the cost).
 **Owner:** Peter
 **Last updated:** 2026-04-18
 
@@ -749,18 +749,13 @@ and lets F3 worry about dangling references.
 
 ### 10.4 Schema validation on commit
 
-**F2 territory.** F1 does not validate record shape against the
-template. The uniform rule in §10.3 treats unknown `data.*` keys the
-same as known ones, so extra keys survive a merge harmlessly. F2 adds:
-
-1. `meta.template` names an existing `templates/<name>.yaml` in the
-   target version. Missing ⇒ 422.
-2. Every `data.*` key appears in the template's `fields[]`. Extraneous
-   keys ⇒ configurable (warn vs reject).
-3. Each field's value matches its declared type's coarse shape.
-
-Deferring validation keeps F1 independent of template parsing — the
-merge does not need to load the template at all.
+**Descoped.** Server-side schema validation would couple GiGot to
+Formidable's field-type model; that coupling is explicitly rejected.
+The template is Formidable's contract with the client, not with the
+server. Corrupt records are caught at render time on the client, not
+at commit time on the server. The uniform rule in §10.3 treats
+unknown `data.*` keys the same as known ones, so extraneous keys
+survive a merge harmlessly.
 
 ### 10.5 Referential integrity for image fields
 
@@ -806,23 +801,11 @@ your save was rejected" — not a user-resolvable merge dialog.
 
 ### 10.7 Template writes
 
-Templates are YAML. The server merges:
-
-- Top-level scalar keys (`name`, `item_field`, `enable_collection`,
-  `gigot_enabled`, `sidebar_expression`) — last-writer-wins at commit
-  time if both changed.
-- `markdown_template` — line-based merge. It's Handlebars prose; line
-  merge is the right tool. Conflict ⇒ 409 with blob-triple for this key
-  only.
-- `fields[]` — structural merge keyed by field `key`. Additions from
-  both sides interleave in commit-time order. A removal from one side
-  plus an edit on the other on the same key ⇒ 409. Reorderings are a
-  no-op for keys both sides kept; if both sides reordered differently,
-  409.
-
-Field *rename* (same semantics, different `key`) is not auto-detected.
-A rename on one side plus an edit on the other side will 409 as
-"delete-vs-edit" — mirrors git's own behaviour on file renames.
+**Descoped.** Templates are YAML files. The generic Phase 2/3 line-based
+merge handles them; no Formidable-aware code path. Two designers
+adding fields on stale parents will 409 at the YAML line level — rare
+enough in practice that the structural-merge cost isn't justified, and
+building it would re-introduce the coupling we're avoiding in §10.4.
 
 ### 10.8 Record query endpoint
 
@@ -898,24 +881,22 @@ Acceptance:
   gets 409 with the field named.
 - Merge output bytes are stable across servers (canonical JSON).
 
-### Phase F2 — Template writes + validation at commit
+### Phase F2 — Descoped (2026-04-18)
 
-**Layers on:** Phase 2/3 (generic single-file + multi-file writes).
+F2 originally covered template structural merge and server-side
+schema validation. Both are out:
 
-Scope:
-- Structural `fields[]` merge for templates (§10.7).
-- Cross-file check on commit: if a template is edited and records of
-  that template are also touched in the same commit, verify record
-  `data.*` keys still match the new `fields[]`.
-- Warn (not reject) if an existing record elsewhere in the repo is now
-  invalid after a template edit — surface this in the commit response
-  so the client can prompt a migration flow.
+- **Schema validation** would couple GiGot to Formidable's field-type
+  model. The template is the client's contract, not the server's —
+  corrupt records are caught at render time, not commit time. See
+  §10.4.
+- **Template structural merge** (§10.7) is a nice-to-have that the
+  generic line-based merge already covers well enough. Templates are
+  edited rarely; rebuilding this phase only to avoid occasional YAML
+  merge friction isn't worth the code it would take.
 
-Acceptance:
-- Two template designers add different fields to the same template ⇒
-  auto-merge with both fields present, preserving order.
-- Template rename of a field key plus a record edit using the old key
-  ⇒ 409 with a clear "template/record drift" message.
+Phase number retained so F3/F4 numbering stays stable. Reopen only if
+production usage shows template line-merge causing real pain.
 
 ### Phase F3 — Referential integrity for image fields
 

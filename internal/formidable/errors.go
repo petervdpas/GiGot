@@ -5,8 +5,7 @@
 // The merge rule is uniform across all field types — every data field
 // is treated as an atomic value and last-writer-wins (by meta.updated)
 // resolves any both-sides-changed disagreement. See
-// docs/design/structured-sync-api.md §10.3 and
-// docs/design/f1-formidable-record-merge.md.
+// docs/design/structured-sync-api.md §10.2–§10.3.
 package formidable
 
 import "errors"
