@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -412,6 +413,89 @@ func seedCloneSourceWithMarker(t *testing.T) string {
 		}
 	}
 	return dir
+}
+
+// seedCloneSourceWithBrokenMarker is seedCloneSource plus a malformed
+// .formidable/context.json (non-JSON) commit. Used to prove the stamp
+// path replaces a garbage marker with a valid one at the handler layer.
+func seedCloneSourceWithBrokenMarker(t *testing.T) string {
+	t.Helper()
+	dir := seedCloneSource(t)
+	markerDir := filepath.Join(dir, ".formidable")
+	if err := os.MkdirAll(markerDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(markerDir, "context.json"), []byte("this is not json\n"), 0644); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	cmds := [][]string{
+		{"-C", dir, "add", ".formidable/context.json"},
+		{"-C", dir, "commit", "-m", "add broken marker"},
+	}
+	for _, args := range cmds {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+		}
+	}
+	return dir
+}
+
+// TestCreateRepoCloneOverwritesBrokenMarker closes the unit↔handler gap:
+// the stamp helper knows how to overwrite a broken marker
+// (TestStampFormidableMarker_OverwritesBrokenMarker), but that behaviour
+// only matters if the create-repo handler actually routes a broken-marker
+// clone through the stamper. This covers both server-mode paths so a
+// future refactor can't accidentally make one of them skip the overwrite.
+func TestCreateRepoCloneOverwritesBrokenMarker(t *testing.T) {
+	tru := true
+	cases := []struct {
+		name          string
+		serverDefault bool
+		scaffoldFlag  *bool
+	}{
+		{"formidable-first server default", true, nil},
+		{"generic server with explicit opt-in", false, &tru},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			source := seedCloneSourceWithBrokenMarker(t)
+			srv := testServer(t)
+			srv.cfg.Server.FormidableFirst = c.serverDefault
+
+			body := map[string]any{"name": "fix-me", "source_url": source}
+			if c.scaffoldFlag != nil {
+				body["scaffold_formidable"] = *c.scaffoldFlag
+			}
+			payload, _ := json.Marshal(body)
+			req := httptest.NewRequest(http.MethodPost, "/api/repos", bytes.NewReader(payload))
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("status: want 201, got %d: %s", rec.Code, rec.Body.String())
+			}
+
+			// Marker at HEAD must be valid after the stamp overwrite —
+			// not the "this is not json" blob from the source.
+			file, err := srv.git.File("fix-me", "", formidableMarkerPath)
+			if err != nil {
+				t.Fatalf("marker file at HEAD: %v", err)
+			}
+			raw, decodeErr := base64.StdEncoding.DecodeString(file.ContentB64)
+			if decodeErr != nil {
+				t.Fatalf("marker b64 decode: %v", decodeErr)
+			}
+			if !isValidFormidableMarker(raw) {
+				t.Errorf("marker should be valid after overwrite; got:\n%s", raw)
+			}
+
+			// Source had 2 commits (readme + broken marker). Stamp adds
+			// exactly 1 overwrite commit = 3.
+			if got := countCommits(t, srv.git.RepoPath("fix-me")); got != 3 {
+				t.Errorf("commit count: want 3 (source 2 + stamp 1), got %d", got)
+			}
+		})
+	}
 }
 
 func TestCreateRepoCloneInvalidSource(t *testing.T) {

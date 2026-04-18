@@ -49,17 +49,6 @@ the sealed bodies of GiGot requests and responses.
 Open work, in rough priority order. This list mirrors the in-project task
 tracker and is the source of truth for "what's next."
 
-- [ ] **Cucumber coverage for server-mode-driven behavior.** Feature
-      tests today only exercise handlers with explicit request
-      flags; server-level switches like `server.formidable_first`
-      have no step definition to flip them mid-scenario, so the
-      config-driven marker-provisioning default (design doc §2.7)
-      is covered only at the unit/handler layer. Add a
-      `the server has formidable_first enabled` step and
-      corresponding scenarios for init/clone × default/omitted.
-      Low priority — handler-level matrix test already verifies the
-      decision cells — but worth closing for symmetry with other
-      endpoints.
 - [ ] **Mirror-sync gigot repos to external remotes.** Per-repo upstream URL
       + credential (e.g. GitHub / Azure DevOps PAT) stored in an encrypted
       store. Post-receive hook installed in each bare repo that fires
@@ -85,6 +74,8 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Cucumber coverage for server-mode-driven behavior.** Integration feature `formidable_first.feature` plus the `the server is running in formidable-first mode` step exercise the §2.7 decision matrix (init/clone × default/override) end-to-end through the HTTP pipeline, including a wire-level idempotence proof against a pre-marked upstream.
+- [x] **CLI redesign with grouped `-help`.** One `-init` flag plus a `-formidable-first` sub-flag replaces the earlier standalone `--init-formidable`; `gigot -help` prints grouped help. Parse/dispatch split (`cmd/gigot/cli.go`) makes every flag combination exhaustively unit-testable.
 - [x] **Config-driven marker provisioning** (design doc §2.7): `server.formidable_first` flips the default so both init and clone stamp `.formidable/context.json`; per-request `scaffold_formidable: true`/`false` overrides either direction. Clone-stamp is idempotent when the upstream already carries a valid marker.
 - [x] Leaf `internal/crypto` NaCl-box package + on-disk keypair bootstrap
 - [x] Client enrollment endpoint
@@ -92,7 +83,7 @@ Done and shipping:
 - [x] Encrypted persistent token store
 - [x] Admin page + password/session login
 - [x] Per-repo access on subscription keys (enforced via `internal/policy`)
-- [x] `./gigot --rotate-keys` with atomic rewrap + backups
+- [x] `./gigot -rotate-keys` with atomic rewrap + backups
 - [x] Central `policy.Evaluator` + `DenyAll` / `AllowAuthenticated` /
       `TokenRepoPolicy`
 - [x] Models split per concern (`models_*.go`)
@@ -111,11 +102,11 @@ Done and shipping:
 go build -o gigot .
 
 # 2. Generate a default config next to the binary
-./gigot --init
+./gigot -init
 # → Wrote default gigot.json
 
 # 3. Create your first admin account
-./gigot --add-admin alice
+./gigot -add-admin alice
 # Password for alice:
 # Confirm password:
 # → Admin "alice" saved
@@ -187,28 +178,47 @@ git -C repos/my-templates.git ls-tree -r HEAD --name-only
 
 ## Command-Line Interface
 
-The `gigot` binary has one daemon mode and two management subcommands. Flags are
-parsed via Go's standard `flag` package, so any order works.
+The `gigot` binary has one daemon mode and three one-shot commands.
+`-init`, `-add-admin`, and `-rotate-keys` are mutually exclusive; running
+`gigot` with none of them starts the HTTP server. `gigot -help` prints
+the same grouped help shown below.
 
-| Flag                          | Description                                                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `--config <path>`             | Path to a `gigot.json`. Defaults to `./gigot.json`. Missing file falls back to built-in defaults.             |
-| `--init`                      | Writes a default `gigot.json` into the current directory and exits. Will not overwrite by accident — you own the file. |
-| `--add-admin <username>`      | Creates (or overwrites) an admin account with the given username and exits. Prompts for a password on stdin. |
-| `--rotate-keys`               | Generates a fresh server keypair, re-encrypts all sealed stores under it, backs up the previous files as `.bak.{timestamp}`, and exits. **Stop the server first.**         |
+**Run mode (default when no one-shot flag is set):**
+
+| Flag              | Description                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------- |
+| `-config <path>`  | Path to `gigot.json`. Defaults to `./gigot.json`. Missing file falls back to built-in defaults.   |
+
+**One-shot commands (each exits after running; mutually exclusive):**
+
+| Flag                       | Description                                                                                                                              |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `-init`                    | Writes a fresh `gigot.json` into the current directory and exits. Will not overwrite by accident — you own the file.                     |
+| &nbsp;&nbsp;`-formidable-first` | Sub-flag of `-init`: pre-enables `server.formidable_first` in the emitted config, so both init and clone stamp the Formidable context marker by default (design doc §2.5/§2.7). Rejected when used without `-init`. |
+| `-add-admin <username>`    | Creates (or overwrites) an admin account with the given username and exits. Prompts for a password on stdin.                             |
+| `-rotate-keys`             | Generates a fresh server keypair, re-encrypts all sealed stores under it, backs up the previous files as `.bak.{timestamp}`, and exits. **Stop the server first.** |
+
+**Help:**
+
+| Flag          | Description                 |
+| ------------- | --------------------------- |
+| `-help`, `-h` | Show the grouped help.      |
 
 ### Examples
 
 ```bash
 # Generate a default config
-./gigot --init
+./gigot -init
+
+# Generate a config pre-configured for Formidable-first mode
+./gigot -init -formidable-first
 
 # Run with a non-default config path
-./gigot --config /etc/gigot/gigot.json
+./gigot -config /etc/gigot/gigot.json
 
 # Rotate the server keypair (e.g. after a suspected leak, or before making
 # the repo public). Stop the server first.
-./gigot --rotate-keys
+./gigot -rotate-keys
 
 # After you've confirmed the rotated server works (admin login succeeds,
 # clients reconnect), purge the rollback backups. The old server.key.bak.*
@@ -216,7 +226,7 @@ parsed via Go's standard `flag` package, so any order works.
 rm data/*.bak.*
 
 # Add an admin non-interactively (e.g. from a deploy script)
-printf 'hunter2\nhunter2\n' | ./gigot --add-admin ci-admin
+printf 'hunter2\nhunter2\n' | ./gigot -add-admin ci-admin
 ```
 
 > The password prompt uses `golang.org/x/term` when stdin is a TTY (so nothing is
@@ -257,7 +267,7 @@ A full `gigot.json` looks like this:
 
 All relative paths are resolved relative to the directory that contains the
 config file, not the process's working directory. This makes it safe to invoke
-`gigot --config /etc/gigot/gigot.json` from anywhere.
+`gigot -config /etc/gigot/gigot.json` from anywhere.
 
 ### `server`
 
@@ -310,7 +320,7 @@ The loader merges your config into the built-in defaults, so you can keep your
 
 ## On-Disk Data Layout
 
-After `--init` and a first run, you'll see something like:
+After `-init` and a first run, you'll see something like:
 
 ```
 ./
@@ -477,7 +487,7 @@ Because the admin UI needs an account to log into, you create the first admin
 with the CLI:
 
 ```bash
-./gigot --add-admin alice
+./gigot -add-admin alice
 ```
 
 The account is stored in `data/admins.enc` (sealed), so it survives restarts.
@@ -593,7 +603,7 @@ server (or gateway) for confidentiality here.
 Run the binary directly on a host, optionally behind nginx/caddy for TLS:
 
 ```bash
-./gigot --config /etc/gigot/gigot.json
+./gigot -config /etc/gigot/gigot.json
 ```
 
 Point `gigot.json` at a persistent data directory:
@@ -622,7 +632,7 @@ After=network-online.target
 Type=simple
 User=gigot
 WorkingDirectory=/var/lib/gigot
-ExecStart=/usr/local/bin/gigot --config /etc/gigot/gigot.json
+ExecStart=/usr/local/bin/gigot -config /etc/gigot/gigot.json
 Restart=on-failure
 
 [Install]
@@ -660,13 +670,13 @@ login when you're already authenticated at the gateway.
   every encrypted store. Back it up, and preferably keep a copy offline.
 - **Rotation is a one-liner.** If you suspect a leak (or are about to flip a
   previously-private repo public), stop the server and run
-  `./gigot --rotate-keys`. It generates a fresh keypair, decrypts every sealed
+  `./gigot -rotate-keys`. It generates a fresh keypair, decrypts every sealed
   store with the old key in memory, re-encrypts under the new one, and backs up
   the previous files as `.bak.{timestamp}` so you can inspect or roll back.
   Admin accounts, subscription tokens, and enrolled client pubkeys all survive.
   Formidable clients pick up the new server pubkey on their next
   `/api/crypto/pubkey` fetch and keep working.
-- **Delete rotation backups once you're satisfied.** After `--rotate-keys`,
+- **Delete rotation backups once you're satisfied.** After `-rotate-keys`,
   `data/server.key.bak.{timestamp}` still contains the *old* private key —
   which is exactly the key material you rotated away from. Keeping it defeats
   the rotation. Once the server comes back up, an admin can log in, and any
@@ -738,9 +748,8 @@ swag init -g main.go -o docs
 
 ```text
 GiGot/
-├── main.go                           # Entry point
-├── gigot.json                        # Server config (generated with --init)
-├── cmd/gigot/root.go                 # CLI bootstrap, flag parsing, --add-admin
+├── main.go                           # Entry point — just calls cli.Execute
+├── gigot.json                        # Server config (generated with -init)
 ├── docs/                             # Generated Swagger assets
 ├── integration/                      # Cucumber feature tests
 │   ├── integration_test.go
@@ -748,6 +757,9 @@ GiGot/
 └── internal/
     ├── admins/                       # Admin account store (bcrypt + sealed file)
     ├── auth/                         # Provider, TokenStrategy, SessionStrategy, SealedTokenStore
+    ├── cli/                          # CLI bootstrap: Parse → dispatch → Execute
+    │   ├── cli.go                    # Flag definitions, Parse(), helpText()
+    │   └── root.go                   # Execute() dispatch + runAddAdmin/runRotateKeys
     ├── clients/                      # Enrolled client pubkeys (sealed file)
     ├── config/                       # JSON config loading + defaults
     ├── crypto/                       # NaCl box wrappers + keypair bootstrap (leaf package)

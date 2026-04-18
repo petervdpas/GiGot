@@ -14,8 +14,8 @@
 // @description Enter your bearer token as: Bearer <token>
 package main
 
-import "github.com/petervdpas/GiGot/cmd/gigot"
+import "github.com/petervdpas/GiGot/internal/cli"
 
 func main() {
-	gigot.Execute()
+	cli.Execute()
 }

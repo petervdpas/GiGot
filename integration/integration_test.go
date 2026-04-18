@@ -72,8 +72,20 @@ func (tc *testContext) reset() {
 // --- Server steps ---
 
 func (tc *testContext) theServerIsRunning() error {
+	return tc.startServerWithFormidableFirst(false)
+}
+
+// theServerIsRunningInFormidableFirstMode boots a server with
+// cfg.Server.FormidableFirst = true so scenarios can exercise the
+// server-level default branch of the §2.7 marker-provisioning matrix.
+func (tc *testContext) theServerIsRunningInFormidableFirstMode() error {
+	return tc.startServerWithFormidableFirst(true)
+}
+
+func (tc *testContext) startServerWithFormidableFirst(first bool) error {
 	tc.tmpDir, _ = os.MkdirTemp("", "gigot-test-*")
 	cfg := configInTempDir(tc.tmpDir)
+	cfg.Server.FormidableFirst = first
 	os.MkdirAll(cfg.Storage.RepoRoot, 0755)
 	tc.cfg = cfg
 	tc.git = gitmanager.NewManager(cfg.Storage.RepoRoot)
@@ -153,6 +165,126 @@ func (tc *testContext) theRepositoryHasCommits(name string, expected string) err
 	want := expected == "has commits"
 	if has != want {
 		return fmt.Errorf("repo %q has-commits = %v, want %v", name, has, want)
+	}
+	return nil
+}
+
+// aLocalGitSourceExists creates a non-bare git repo with one README commit
+// and saves its filesystem path under the given name, so a scenario can
+// reference it as ${name} inside a POST body's source_url field.
+func (tc *testContext) aLocalGitSourceExists(name string) error {
+	return tc.seedLocalSource(name, sourceSeedPlain)
+}
+
+// aLocalGitSourceExistsWithMarker is aLocalGitSourceExists plus a
+// pre-existing .formidable/context.json commit — used to prove clone-stamp
+// idempotence at the feature level.
+func (tc *testContext) aLocalGitSourceExistsWithMarker(name string) error {
+	return tc.seedLocalSource(name, sourceSeedValidMarker)
+}
+
+// aLocalGitSourceExistsWithBrokenMarker seeds a source whose
+// .formidable/context.json is malformed (non-JSON). Used to verify the
+// stamp path replaces a garbage marker with a valid one at the wire
+// level — the corresponding unit/handler tests cover the inner and
+// handler layers.
+func (tc *testContext) aLocalGitSourceExistsWithBrokenMarker(name string) error {
+	return tc.seedLocalSource(name, sourceSeedBrokenMarker)
+}
+
+type sourceSeedKind int
+
+const (
+	sourceSeedPlain sourceSeedKind = iota
+	sourceSeedValidMarker
+	sourceSeedBrokenMarker
+)
+
+func (tc *testContext) seedLocalSource(name string, kind sourceSeedKind) error {
+	if tc.tmpDir == "" {
+		var err error
+		tc.tmpDir, err = os.MkdirTemp("", "gigot-test-*")
+		if err != nil {
+			return err
+		}
+	}
+	dir := filepath.Join(tc.tmpDir, "sources", name)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	if err := exec.Command("git", "init", dir).Run(); err != nil {
+		return fmt.Errorf("git init %s: %w", dir, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello\n"), 0644); err != nil {
+		return err
+	}
+	cmds := [][]string{
+		{"-C", dir, "config", "user.email", "test@example.com"},
+		{"-C", dir, "config", "user.name", "Test"},
+		{"-C", dir, "add", "README.md"},
+		{"-C", dir, "commit", "-m", "initial"},
+	}
+	if kind != sourceSeedPlain {
+		markerDir := filepath.Join(dir, ".formidable")
+		if err := os.MkdirAll(markerDir, 0755); err != nil {
+			return err
+		}
+		var body []byte
+		var msg string
+		switch kind {
+		case sourceSeedValidMarker:
+			body = []byte(`{"version":1,"scaffolded_by":"gigot","scaffolded_at":"2024-01-01T00:00:00Z"}` + "\n")
+			msg = "add marker"
+		case sourceSeedBrokenMarker:
+			body = []byte("this is not json\n")
+			msg = "add broken marker"
+		}
+		if err := os.WriteFile(filepath.Join(markerDir, "context.json"), body, 0644); err != nil {
+			return err
+		}
+		cmds = append(cmds,
+			[][]string{
+				{"-C", dir, "add", ".formidable/context.json"},
+				{"-C", dir, "commit", "-m", msg},
+			}...,
+		)
+	}
+	for _, args := range cmds {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, out)
+		}
+	}
+	tc.savedValues[name] = dir
+	return nil
+}
+
+// theRepositoryHasExactCommits pins an exact commit count at HEAD — used
+// to prove clone-stamp idempotence (source has N commits, cloned repo
+// still has N, no sneaky extra stamp commit) and that the stamp path adds
+// exactly one commit when it fires.
+func (tc *testContext) theRepositoryHasExactCommits(repo string, want int) error {
+	path := tc.git.RepoPath(repo)
+	out, err := exec.Command("git", "-C", path, "rev-list", "--count", "HEAD").Output()
+	if err != nil {
+		return fmt.Errorf("rev-list %s: %w", repo, err)
+	}
+	got := strings.TrimSpace(string(out))
+	if got != fmt.Sprintf("%d", want) {
+		return fmt.Errorf("repo %q commit count = %s, want %d", repo, got, want)
+	}
+	return nil
+}
+
+func (tc *testContext) theRepositoryDoesNotContainFile(repo, file string) error {
+	path := tc.git.RepoPath(repo)
+	out, err := exec.Command("git", "-C", path, "ls-tree", "-r", "HEAD", "--name-only").Output()
+	if err != nil {
+		return fmt.Errorf("ls-tree %s: %w", repo, err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.TrimSpace(line) == file {
+			return fmt.Errorf("repo %q should not contain %q but does", repo, file)
+		}
 	}
 	return nil
 }
@@ -862,14 +994,20 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 
 	// Server steps
 	ctx.Step(`^the server is running$`, tc.theServerIsRunning)
+	ctx.Step(`^the server is running in formidable-first mode$`, tc.theServerIsRunningInFormidableFirstMode)
 	ctx.Step(`^I request "([^"]*)"$`, tc.iRequest)
 	ctx.Step(`^the response status should be (\d+)$`, tc.theResponseStatusShouldBe)
 	ctx.Step(`^the response should contain JSON key "([^"]*)" with value "([^"]*)"$`, tc.theResponseShouldContainJSONKeyWithValue)
 	ctx.Step(`^the response content type should contain "([^"]*)"$`, tc.theResponseContentTypeShouldContain)
 	ctx.Step(`^the response body should contain "([^"]*)"$`, tc.theResponseBodyShouldContain)
 	ctx.Step(`^a repository "([^"]*)" exists$`, tc.aRepositoryExists)
+	ctx.Step(`^a local git source "([^"]*)" exists$`, tc.aLocalGitSourceExists)
+	ctx.Step(`^a local git source "([^"]*)" exists with a formidable marker$`, tc.aLocalGitSourceExistsWithMarker)
+	ctx.Step(`^a local git source "([^"]*)" exists with a broken formidable marker$`, tc.aLocalGitSourceExistsWithBrokenMarker)
 	ctx.Step(`^the repository "([^"]*)" (has commits|has no commits)$`, tc.theRepositoryHasCommits)
+	ctx.Step(`^the repository "([^"]*)" has (\d+) commits$`, tc.theRepositoryHasExactCommits)
 	ctx.Step(`^the repository "([^"]*)" contains file "([^"]*)"$`, tc.theRepositoryContainsFile)
+	ctx.Step(`^the repository "([^"]*)" does not contain file "([^"]*)"$`, tc.theRepositoryDoesNotContainFile)
 	ctx.Step(`^the repository "([^"]*)" file "([^"]*)" is valid JSON with field "([^"]*)" equal to "([^"]*)"$`, tc.theRepositoryFileIsJSONWithField)
 	ctx.Step(`^the repository "([^"]*)" head commit is authored by "([^"]*)"$`, tc.theRepositoryHeadCommitAuthor)
 
