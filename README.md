@@ -59,12 +59,13 @@ tracker and is the source of truth for "what's next."
       identity header forwarded by a fronting gateway (e.g. Azure APIM).
       Lets the admin UI skip server-side login when deployed behind a
       gateway that already authenticates the caller.
-- [ ] **Structured sync API (multi-phase).** Move Formidable clients off
-      direct `git push/pull` onto an HTTP-only content API so non-technical
-      teammates cannot brick a repo with a stale push. Design and phased
-      plan live in [`docs/design/structured-sync-api.md`](docs/design/structured-sync-api.md).
-      The previously-listed "Formidable context marker file" task is folded
-      into Phase 0 of that plan.
+- [ ] **Structured sync API — F3 + F4 remaining.** Generic Phases 0–4 and
+      Formidable-first Phase F1 are shipped; F2 is descoped. F3 adds
+      referential integrity for image fields (reject commits that orphan
+      image references); F4 adds the in-memory record query endpoint
+      (`GET /records/{template}`). Spec lives in
+      [`docs/design/structured-sync-api.md`](docs/design/structured-sync-api.md)
+      §10.5, §10.8, §11.
 - [ ] **NaCl-challenge admin login.** Replace the password+session login
       with curve25519 challenge/response, admin keypair held in the
       browser (passphrase-encrypted in localStorage). Password path stays
@@ -74,9 +75,10 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Phase F2 — Descoped.** Server-side schema validation would couple GiGot to Formidable's field-type model (rejected); template structural merge is handled well enough by the generic line-based merge. See [`structured-sync-api.md`](docs/design/structured-sync-api.md) §10.4, §10.7, and §11 F2 for rationale.
 - [x] **Phase F1 — Structured per-field record merge.** `internal/formidable` implements the uniform merge rule from `structured-sync-api.md` §10.3: every `data.*` field in a `storage/**/*.meta.json` record resolves as one atomic value; same-field divergence is last-writer-wins by `meta.updated`; immutable meta keys (`created`, `id`, `template`) are the only conflict source. Wired into `PUT /files/{path}` and `POST /commits` for marker-stamped repos. Unit + handler + Cucumber tests green; new `formidable.RecordConflict` 409 shape documented in Swagger.
 - [x] **Cucumber coverage for server-mode-driven behavior.** Integration feature `formidable_first.feature` plus the `the server is running in formidable-first mode` step exercise the §2.7 decision matrix (init/clone × default/override) end-to-end through the HTTP pipeline, including a wire-level idempotence proof against a pre-marked upstream.
-- [x] **CLI redesign with grouped `-help`.** One `-init` flag plus a `-formidable-first` sub-flag replaces the earlier standalone `--init-formidable`; `gigot -help` prints grouped help. Parse/dispatch split (`cmd/gigot/cli.go`) makes every flag combination exhaustively unit-testable.
+- [x] **CLI redesign with grouped `-help`.** One `-init` flag plus a `-formidable-first` sub-flag replaces the earlier standalone `--init-formidable`; `gigot -help` prints grouped help. Parse/dispatch split (`internal/cli/cli.go`) makes every flag combination exhaustively unit-testable.
 - [x] **Config-driven marker provisioning** (design doc §2.7): `server.formidable_first` flips the default so both init and clone stamp `.formidable/context.json`; per-request `scaffold_formidable: true`/`false` overrides either direction. Clone-stamp is idempotent when the upstream already carries a valid marker.
 - [x] Leaf `internal/crypto` NaCl-box package + on-disk keypair bootstrap
 - [x] Client enrollment endpoint
