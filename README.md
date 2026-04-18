@@ -1,7 +1,7 @@
 # GiGot
 
 <p align="center">
-  <img src="docs/images/gigot.png" alt="GiGot" width="220">
+  <img src="docs/images/gigot.png" alt="GiGot" width="320">
 </p>
 
 Git-backed server for [Formidable](https://github.com/petervdpas/Formidable). GiGot
