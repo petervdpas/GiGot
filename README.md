@@ -65,6 +65,13 @@ tracker and is the source of truth for "what's next."
       **Must also** include `refs/audit/*` in the push refspec so the
       audit chain travels to mirrors alongside `refs/heads/*` (see
       [`docs/design/audit-trail.md`](docs/design/audit-trail.md)).
+- [ ] **Mirror destination — move enabled toggle off the create/edit
+      form.** Nobody adds a destination with `enabled = false`, so the
+      checkbox in the form is noise. Default new destinations to
+      enabled, drop the checkbox from the add/edit form, and make the
+      "enabled/disabled" badge on the display row clickable to toggle
+      via PATCH. Pause/resume is a management gesture on an existing
+      thing, not a new-thing form field.
 - [ ] **Audit trail — `git-receive-pack` event coverage.** The
       tamper-proof guard is shipped (see below); still outstanding is
       emitting `push_received` audit entries when a client pushes via

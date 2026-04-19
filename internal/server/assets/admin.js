@@ -310,7 +310,7 @@ function renderDestinationEditor(container, repoName, existing) {
         '<select name="credential_name" required>' + credOptions + '</select>' +
       '</label>' +
       '<label class="dest-field inline">' +
-        '<input type="checkbox" name="enabled" ' + enabledChecked + '> enabled' +
+        '<input type="checkbox" name="enabled" ' + enabledChecked + '> Enable mirror-sync to this destination' +
       '</label>' +
       '<div class="dest-actions">' +
         '<button type="submit" class="small">' + (isEdit ? 'Save' : 'Add') + '</button>' +

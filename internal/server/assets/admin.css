@@ -214,6 +214,13 @@ a:hover { text-decoration: underline; }
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 }
 
+/* Both the repo and tokens grids render one full-width row per card so
+   cards read top-to-bottom as a list. Auto-fill is kept on the base
+   .card-grid rule in case another panel wants a denser layout. */
+#repo-grid,
+#token-grid { grid-template-columns: 1fr; }
+.info-card .ic-actions { justify-content: flex-end; }
+
 .info-card {
   background: #0d1117;
   border: 1px solid #30363d;
@@ -389,8 +396,12 @@ a:hover { text-decoration: underline; }
 .dest-form {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 0.4rem;
 }
+.dest-form .dest-field input[type="text"],
+.dest-form .dest-field select { width: 100%; }
+.dest-form .dest-actions { justify-content: flex-start; }
 .dest-form .dest-field {
   display: flex;
   flex-direction: column;
