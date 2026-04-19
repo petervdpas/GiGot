@@ -76,6 +76,22 @@ func TestAddDemoSetup_ProvisionsEverything(t *testing.T) {
 		t.Errorf("scaffolded repo missing templates/basic.yaml")
 	}
 
+	// Plain companion repo exists, has a commit, and does NOT carry
+	// the Formidable marker — that's the point of the convert-flow
+	// fixture.
+	if !stores.git.Exists(DemoPlainRepoName) {
+		t.Fatalf("plain repo should exist after add-demo-setup")
+	}
+	plainTree, err := stores.git.Tree(DemoPlainRepoName, "")
+	if err != nil {
+		t.Fatalf("Tree %s: %v", DemoPlainRepoName, err)
+	}
+	for _, entry := range plainTree.Files {
+		if entry.Path == ".formidable/context.json" {
+			t.Errorf("plain repo should NOT carry the Formidable marker")
+		}
+	}
+
 	// Credential.
 	cred, err := stores.credentials.Get(DemoCredentialName)
 	if err != nil {
@@ -96,8 +112,16 @@ func TestAddDemoSetup_ProvisionsEverything(t *testing.T) {
 	for _, entry := range stores.tokens.List() {
 		if entry.Token == issued && entry.Username == demoTokenUsername {
 			foundInStore = true
-			if len(entry.Repos) != 1 || entry.Repos[0] != DemoRepoName {
-				t.Errorf("token repos = %v, want [%q]", entry.Repos, DemoRepoName)
+			wantRepos := map[string]bool{DemoRepoName: false, DemoPlainRepoName: false}
+			for _, r := range entry.Repos {
+				if _, ok := wantRepos[r]; ok {
+					wantRepos[r] = true
+				}
+			}
+			for r, seen := range wantRepos {
+				if !seen {
+					t.Errorf("token repos missing %q (got %v)", r, entry.Repos)
+				}
 			}
 			break
 		}
@@ -175,6 +199,9 @@ func TestRemoveDemoSetup_UndoesEverything(t *testing.T) {
 	}
 	if stores.git.Exists(DemoRepoName) {
 		t.Error("demo repo should be gone after remove")
+	}
+	if stores.git.Exists(DemoPlainRepoName) {
+		t.Error("plain repo should be gone after remove")
 	}
 	if _, err := stores.credentials.Get(DemoCredentialName); err == nil {
 		t.Error("demo credential should be gone after remove")

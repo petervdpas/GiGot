@@ -196,6 +196,13 @@ definitions:
         example: abc123...
         type: string
     type: object
+  server.ConvertFormidableResponse:
+    properties:
+      repo:
+        $ref: '#/definitions/server.RepoInfo'
+      stamped:
+        type: boolean
+    type: object
   server.CreateCredentialRequest:
     properties:
       expires:
@@ -1030,6 +1037,56 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       summary: Manage one destination by id (admin only)
+      tags:
+      - admin
+  /admin/repos/{name}/formidable:
+    post:
+      description: |-
+        Stamps .formidable/context.json on top of HEAD so the
+        repo picks up structured record-merge behaviour on subsequent
+        writes. Gated to server.formidable_first=true so generic-mode
+        operators don't trip this accidentally. Idempotent: a repo
+        that already carries a valid marker returns stamped=false
+        and writes no commit. On a successful stamp the server
+        appends one `repo_convert_formidable` audit entry.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.ConvertFormidableResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: Server not in formidable_first mode
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Repo not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "422":
+          description: Empty repo — nothing to stamp on top of
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Convert a plain repo to a Formidable context (admin only)
       tags:
       - admin
   /admin/session:

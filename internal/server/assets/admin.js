@@ -111,6 +111,13 @@ const api = {
     });
     if (!r.ok) throw new Error('delete destination failed');
   },
+  async convertToFormidable(repo) {
+    const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/formidable', {
+      method: 'POST', credentials: 'same-origin',
+    });
+    if (!r.ok) throw new Error((await r.json()).error || 'convert failed');
+    return r.json();
+  },
   async listCredentials() {
     const r = await fetch('/api/admin/credentials', { credentials: 'same-origin' });
     if (!r.ok) throw new Error('list credentials failed');
@@ -194,6 +201,16 @@ function renderRepoCard(r) {
     }
   }
 
+  // "Convert to Formidable" is only meaningful for a repo that has
+  // commits (nothing to stamp on top of an empty one) and doesn't
+  // already carry the marker. The server gates the endpoint to
+  // formidable_first mode; in generic mode the button would 403, so
+  // we hide it upfront rather than fail on click.
+  const canConvert = !r.has_formidable && !r.empty;
+  const convertBtn = canConvert
+    ? '<button class="small secondary convert-formidable-btn">Convert to Formidable</button>'
+    : '';
+
   card.innerHTML =
     '<div class="ic-header">' +
       '<div class="ic-title">' + escapeHtml(r.name) + '</div>' +
@@ -203,11 +220,28 @@ function renderRepoCard(r) {
     '<div class="ic-section" data-section="subs"></div>' +
     '<div class="ic-section" data-section="dest"></div>' +
     '<div class="ic-actions">' +
+      convertBtn +
       '<button class="small danger delete-btn">Delete</button>' +
     '</div>';
 
   renderSubscriptionsSection(card.querySelector('[data-section="subs"]'), r.name);
   renderDestinationSection(card.querySelector('[data-section="dest"]'), r.name);
+
+  const convertEl = card.querySelector('.convert-formidable-btn');
+  if (convertEl) {
+    convertEl.addEventListener('click', async () => {
+      if (!confirm('Stamp "' + r.name + '" as a Formidable context? One commit is added on top of HEAD carrying .formidable/context.json. Subsequent writes pick up structured record-merge behaviour.')) return;
+      try {
+        const res = await api.convertToFormidable(r.name);
+        if (!res.stamped) {
+          alert(r.name + ' already carries a valid Formidable marker; no commit was written.');
+        }
+        await refreshRepos();
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  }
 
   card.querySelector('.delete-btn').addEventListener('click', async () => {
     if (!confirm('Delete repo "' + r.name + '"? This is destructive — the bare repo and any attached destinations are dropped.')) return;

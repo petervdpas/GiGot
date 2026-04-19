@@ -11,10 +11,11 @@ import (
 // Audit event types. Centralised here so a typo in a handler can't drift the
 // schema that clients read.
 const (
-	AuditTypeRepoCreate    = "repo_create"
-	AuditTypeFilePut       = "file_put"
-	AuditTypeCommit        = "commit"
-	AuditTypePushReceived  = "push_received"
+	AuditTypeRepoCreate             = "repo_create"
+	AuditTypeFilePut                = "file_put"
+	AuditTypeCommit                 = "commit"
+	AuditTypePushReceived           = "push_received"
+	AuditTypeRepoConvertFormidable  = "repo_convert_formidable"
 )
 
 // auditActor extracts the authenticated principal from the request context

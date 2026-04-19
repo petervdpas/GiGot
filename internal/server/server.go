@@ -243,9 +243,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/admin/tokens", s.handleAdminTokens)
 	s.mux.HandleFunc("/api/admin/credentials", s.handleAdminCredentials)
 	s.mux.HandleFunc("/api/admin/credentials/", s.handleAdminCredential)
-	// Admin repo destinations live under /api/admin/repos/{name}/destinations[/{id}].
-	// A prefix handler dispatches both list/create and per-id forms.
-	s.mux.HandleFunc("/api/admin/repos/", s.handleAdminRepoDestinations)
+	// Admin per-repo subroutes live under /api/admin/repos/{name}/...:
+	//   /destinations[/{id}] — mirror-sync targets
+	//   /formidable          — convert plain repo to a Formidable context
+	// A single prefix handler sniffs the suffix and dispatches.
+	s.mux.HandleFunc("/api/admin/repos/", s.handleAdminRepoSub)
 
 	// Git smart HTTP transport
 	s.mux.HandleFunc("/git/", s.handleGitRouter)

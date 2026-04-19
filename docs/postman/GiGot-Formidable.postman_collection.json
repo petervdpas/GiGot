@@ -22,7 +22,8 @@
     { "key": "serverModeScaffolded", "value": "" },
     { "key": "headVer", "value": "" },
     { "key": "headVer2", "value": "" },
-    { "key": "recordB64", "value": "" }
+    { "key": "recordB64", "value": "" },
+    { "key": "plainRepo", "value": "postman-plain" }
   ],
   "item": [
     {
@@ -162,7 +163,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"{{adminUser}}\",\n  \"repos\": [\"{{sideRepoOn}}\", \"{{sideRepoOff}}\", \"{{sideRepoDefault}}\"]\n}"
+              "raw": "{\n  \"username\": \"{{adminUser}}\",\n  \"repos\": [\"{{sideRepoOn}}\", \"{{sideRepoOff}}\", \"{{sideRepoDefault}}\", \"{{plainRepo}}\"]\n}"
             },
             "url": { "raw": "{{baseUrl}}/api/admin/tokens", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tokens"] }
           },
@@ -654,8 +655,67 @@
       ]
     },
     {
-      "name": "06 Teardown",
-      "description": "Delete the three side-repos and revoke the token so a second run starts from a clean slate. Uses session auth (noauth override) for the repo deletes since ActionManageRepos is session-only.",
+      "name": "06 Convert to Formidable",
+      "description": "Exercises POST /api/admin/repos/{name}/formidable against the plain repo `postman-plain` that -add-demo-setup provisions. On first run the stamp fires (stamped=true); on subsequent runs the repo is already Formidable (stamped=false). Second call is always idempotent regardless — that's the strict assertion.",
+      "item": [
+        {
+          "name": "Convert postman-plain → stamped",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/repos/{{plainRepo}}/formidable",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "repos", "{{plainRepo}}", "formidable"]
+            },
+            "description": "Stamps .formidable/context.json on top of HEAD. Session-authed (noauth override) because the endpoint is admin-only. First run: stamped=true. Re-run after teardown leaves the plain repo in its converted state, so a second whole-collection run sees stamped=false here — that's still valid, the repo does carry the marker."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('stamped is boolean', () => pm.expect(body.stamped).to.be.a('boolean'));",
+                  "pm.test('repo now carries marker', () => pm.expect(body.repo.has_formidable).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Re-convert postman-plain → stamped=false (idempotent)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/repos/{{plainRepo}}/formidable",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "repos", "{{plainRepo}}", "formidable"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('idempotent: stamped=false', () => pm.expect(body.stamped).to.eql(false));",
+                  "pm.test('marker still present', () => pm.expect(body.repo.has_formidable).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 Teardown",
+      "description": "Delete the three side-repos and revoke the token so a second run starts from a clean slate. Uses session auth (noauth override) for the repo deletes since ActionManageRepos is session-only. Note: postman-plain is NOT deleted — it's part of the demo-setup footprint, cleaned up by `./gigot -remove-demo-setup`.",
       "item": [
         {
           "name": "Delete on-repo",

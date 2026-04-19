@@ -80,3 +80,54 @@ Feature: Config-driven marker provisioning (server.formidable_first)
     Then the response status should be 201
     And the repository "clone-optin" has 2 commits
     And the repository "clone-optin" contains file ".formidable/context.json"
+
+  Scenario: Convert a plain repo to a Formidable context (formidable_first mode)
+    Given the server is running in formidable-first mode
+    And an admin "alice" exists with password "hunter2"
+    And a local git source "src-plain2" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/repos" with body '{"name":"to-convert","source_url":"${src-plain2}","scaffold_formidable":false}'
+    Then the response status should be 201
+    And the repository "to-convert" does not contain file ".formidable/context.json"
+    When I POST "/api/admin/repos/to-convert/formidable" with body ''
+    Then the response status should be 200
+    And the JSON response "stamped" should be true
+    And the repository "to-convert" contains file ".formidable/context.json"
+    And the repository "to-convert" file ".formidable/context.json" is valid JSON with field "version" equal to "1"
+    And the top audit event in repo "to-convert" has type "repo_convert_formidable"
+
+  Scenario: Converting an already-Formidable repo is idempotent
+    Given the server is running in formidable-first mode
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/repos" with body '{"name":"already-formidable"}'
+    Then the response status should be 201
+    When I POST "/api/admin/repos/already-formidable/formidable" with body ''
+    Then the response status should be 200
+    And the JSON response "stamped" should be false
+
+  Scenario: Convert is rejected when the server is not in formidable-first mode
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/repos" with body '{"name":"plain-generic"}'
+    Then the response status should be 201
+    When I POST "/api/admin/repos/plain-generic/formidable" with body ''
+    Then the response status should be 403
+    And the response body should contain "formidable_first"
+
+  Scenario: Convert on an empty repo returns 422
+    Given the server is running in formidable-first mode
+    And an admin "alice" exists with password "hunter2"
+    And a repository "bare-and-empty" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/repos/bare-and-empty/formidable" with body ''
+    Then the response status should be 422
+    And the response body should contain "empty"
+
+  Scenario: Convert without a session is rejected (401)
+    Given the server is running in formidable-first mode
+    When I POST "/api/repos" with body '{"name":"unauthed-convert"}'
+    And I POST "/admin/logout" with body ''
+    And I POST "/api/admin/repos/unauthed-convert/formidable" with body ''
+    Then the response status should be 401

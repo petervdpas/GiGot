@@ -756,6 +756,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/repos/{name}/formidable": {
+            "post": {
+                "description": "Stamps .formidable/context.json on top of HEAD so the\nrepo picks up structured record-merge behaviour on subsequent\nwrites. Gated to server.formidable_first=true so generic-mode\noperators don't trip this accidentally. Idempotent: a repo\nthat already carries a valid marker returns stamped=false\nand writes no commit. On a successful stamp the server\nappends one ` + "`" + `repo_convert_formidable` + "`" + ` audit entry.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Convert a plain repo to a Formidable context (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.ConvertFormidableResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Server not in formidable_first mode",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Repo not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Empty repo — nothing to stamp on top of",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/session": {
             "get": {
                 "description": "Returns the admin identity associated with the session cookie,\nor 401 if no valid session exists. The admin UI polls this on\nload to decide whether to show the login form.",
@@ -2655,6 +2720,17 @@ const docTemplate = `{
                 "parent_version": {
                     "type": "string",
                     "example": "abc123..."
+                }
+            }
+        },
+        "server.ConvertFormidableResponse": {
+            "type": "object",
+            "properties": {
+                "repo": {
+                    "$ref": "#/definitions/server.RepoInfo"
+                },
+                "stamped": {
+                    "type": "boolean"
                 }
             }
         },

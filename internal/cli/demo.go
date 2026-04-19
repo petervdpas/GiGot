@@ -23,10 +23,17 @@ const (
 	DemoAdminUser      = "demo"
 	DemoAdminPassword  = "demo-password"
 	DemoRepoName       = "postman-demo"
-	DemoCredentialName = "postman-pat"
-	DemoCredentialKind = "github_pat"
-	demoCredentialBody = "ghp_demo_placeholder_not_a_real_token"
-	demoTokenUsername  = "demo"
+	// DemoPlainRepoName is an unscaffolded companion to DemoRepoName —
+	// a repo with one plaintext commit, no .formidable/context.json —
+	// so the Formidable Postman collection can exercise the
+	// "convert to Formidable" flow without an extra setup step.
+	DemoPlainRepoName     = "postman-plain"
+	demoPlainInitialFile  = "README.md"
+	demoPlainInitialBody  = "Plain (non-Formidable) demo repo.\n\nConvert to a Formidable context with:\n  POST /api/admin/repos/postman-plain/formidable\n"
+	DemoCredentialName    = "postman-pat"
+	DemoCredentialKind    = "github_pat"
+	demoCredentialBody    = "ghp_demo_placeholder_not_a_real_token"
+	demoTokenUsername     = "demo"
 	// legacyTokenUsername matches the token POST /api/auth/token issues
 	// from the Postman collection's "Legacy Tokens" folder. It's part of
 	// the demo flow's footprint, so -remove-demo-setup sweeps these too
@@ -121,6 +128,27 @@ func runAddDemoSetup(cfg *config.Config, stdout io.Writer) error {
 		fmt.Fprintf(stdout, "  repo       %-16s (already present, left alone)\n", DemoRepoName)
 	}
 
+	// Plain companion repo: one README commit, no Formidable marker.
+	// The Formidable Postman collection's convert-flow targets this repo.
+	if !stores.git.Exists(DemoPlainRepoName) {
+		if err := stores.git.InitBare(DemoPlainRepoName); err != nil {
+			return fmt.Errorf("init plain repo: %w", err)
+		}
+		if err := stores.git.Scaffold(DemoPlainRepoName, gitmanager.ScaffoldOptions{
+			CommitterName:  scaffold.CommitterName,
+			CommitterEmail: scaffold.CommitterEmail,
+			Message:        "Initial commit",
+			Files: []gitmanager.ScaffoldFile{
+				{Path: demoPlainInitialFile, Content: []byte(demoPlainInitialBody)},
+			},
+		}); err != nil {
+			return fmt.Errorf("seed plain repo: %w", err)
+		}
+		fmt.Fprintf(stdout, "  repo       %-16s (plain, one README commit)\n", DemoPlainRepoName)
+	} else {
+		fmt.Fprintf(stdout, "  repo       %-16s (already present, left alone)\n", DemoPlainRepoName)
+	}
+
 	if _, err := stores.credentials.Put(credentials.Credential{
 		Name:   DemoCredentialName,
 		Kind:   DemoCredentialKind,
@@ -131,7 +159,7 @@ func runAddDemoSetup(cfg *config.Config, stdout io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "  credential %-16s (kind: %s)\n", DemoCredentialName, DemoCredentialKind)
 
-	token, err := stores.tokens.Issue(demoTokenUsername, []string{DemoRepoName})
+	token, err := stores.tokens.Issue(demoTokenUsername, []string{DemoRepoName, DemoPlainRepoName})
 	if err != nil {
 		return fmt.Errorf("issue token: %w", err)
 	}
@@ -172,13 +200,15 @@ func runRemoveDemoSetup(cfg *config.Config, stdout io.Writer) error {
 		fmt.Fprintf(stdout, "  credential %s removed\n", DemoCredentialName)
 	}
 
-	if stores.git.Exists(DemoRepoName) {
-		if err := stores.git.Delete(DemoRepoName); err != nil {
-			return fmt.Errorf("delete repo: %w", err)
+	for _, name := range []string{DemoRepoName, DemoPlainRepoName} {
+		if stores.git.Exists(name) {
+			if err := stores.git.Delete(name); err != nil {
+				return fmt.Errorf("delete repo %s: %w", name, err)
+			}
+			fmt.Fprintf(stdout, "  repo       %s removed\n", name)
+		} else {
+			fmt.Fprintf(stdout, "  repo       %s (already absent)\n", name)
 		}
-		fmt.Fprintf(stdout, "  repo       %s removed\n", DemoRepoName)
-	} else {
-		fmt.Fprintf(stdout, "  repo       %s (already absent)\n", DemoRepoName)
 	}
 
 	if err := stores.admins.Remove(DemoAdminUser); err != nil {

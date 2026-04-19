@@ -93,6 +93,26 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Convert-to-Formidable admin action.** New endpoint
+      `POST /api/admin/repos/{name}/formidable` stamps
+      `.formidable/context.json` on top of HEAD, flipping an existing
+      plain repo into a Formidable context. Gated to
+      `server.formidable_first=true` so generic-mode operators don't
+      trip the feature accidentally. Idempotent: already-stamped
+      repos return `stamped:false` with no new commit. Returns 422
+      for empty repos (nothing to stamp on top of) with a hint to
+      use `scaffold_formidable:true` at create time instead. Writes
+      one `repo_convert_formidable` audit entry on successful stamp.
+      Admin UI shows a "Convert to Formidable" button on non-Formidable,
+      non-empty repo cards; handler delegates to the existing
+      `stampFormidableMarker` helper so no duplicate stamp logic.
+      `-add-demo-setup` now also provisions `postman-plain` (a non-
+      Formidable companion to `postman-demo`) so the shipped
+      GiGot-Formidable Postman collection has a conversion target
+      without extra setup. Cucumber coverage in `formidable_first.feature`:
+      convert plain repo (stamped + audit), convert already-Formidable
+      (idempotent), generic-mode rejection (403), empty-repo (422),
+      unauthenticated (401).
 - [x] **Postman demo setup CLI.** `./gigot -add-demo-setup` provisions
       the exact state the shipped Postman collection expects — admin
       `demo` / password `demo-password`, scaffolded repo

@@ -952,6 +952,26 @@ func (tc *testContext) theJSONResponseShouldBe(key string, expected int) error {
 	return nil
 }
 
+func (tc *testContext) theJSONResponseBoolShouldBe(key, expected string) error {
+	var body map[string]interface{}
+	if err := json.Unmarshal([]byte(tc.respBody), &body); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	val, ok := body[key]
+	if !ok {
+		return fmt.Errorf("key %q not found in response", key)
+	}
+	b, ok := val.(bool)
+	if !ok {
+		return fmt.Errorf("expected bool for %q, got %T", key, val)
+	}
+	want := expected == "true"
+	if b != want {
+		return fmt.Errorf("expected %s=%v, got %v", key, want, b)
+	}
+	return nil
+}
+
 func (tc *testContext) theJSONResponseStringShouldBe(key, expected string) error {
 	var body map[string]interface{}
 	if err := json.Unmarshal([]byte(tc.respBody), &body); err != nil {
@@ -1299,6 +1319,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I DELETE "([^"]*)"$`, tc.iDELETE)
 	ctx.Step(`^I DELETE "([^"]*)" with saved token "([^"]*)"$`, tc.iDELETEWithSavedToken)
 	ctx.Step(`^the JSON response "([^"]*)" should be (\d+)$`, tc.theJSONResponseShouldBe)
+	ctx.Step(`^the JSON response "([^"]*)" should be (true|false)$`, tc.theJSONResponseBoolShouldBe)
 	ctx.Step(`^the JSON response "([^"]*)" should be "([^"]*)"$`, tc.theJSONResponseStringShouldBe)
 	ctx.Step(`^the JSON response "([^"]*)" should not be empty$`, tc.theJSONResponseShouldNotBeEmpty)
 	ctx.Step(`^I save the JSON response "([^"]*)" as "([^"]*)"$`, tc.iSaveTheJSONResponseAs)
