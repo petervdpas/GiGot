@@ -9,6 +9,7 @@ import (
 var templatesFS embed.FS
 
 var (
-	indexTmpl     = template.Must(template.ParseFS(templatesFS, "templates/index.html"))
-	adminPageTmpl = template.Must(template.ParseFS(templatesFS, "templates/admin.html"))
+	indexTmpl           = template.Must(template.ParseFS(templatesFS, "templates/index.html"))
+	adminPageTmpl       = template.Must(template.ParseFS(templatesFS, "templates/admin.html"))
+	credentialsPageTmpl = template.Must(template.ParseFS(templatesFS, "templates/credentials.html"))
 )

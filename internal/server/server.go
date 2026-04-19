@@ -19,6 +19,7 @@ import (
 	"github.com/petervdpas/GiGot/internal/auth"
 	"github.com/petervdpas/GiGot/internal/clients"
 	"github.com/petervdpas/GiGot/internal/config"
+	"github.com/petervdpas/GiGot/internal/credentials"
 	"github.com/petervdpas/GiGot/internal/crypto"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
 	"github.com/petervdpas/GiGot/internal/policy"
@@ -39,6 +40,7 @@ type Server struct {
 	encryptor       *crypto.Encryptor
 	clients         *clients.Store
 	admins          *admins.Store
+	credentials     *credentials.Store
 	policy          policy.Evaluator
 	mux             *http.ServeMux
 }
@@ -59,6 +61,8 @@ func New(cfg *config.Config) *Server {
 	ap.MarkPublic("/admin/")
 	ap.MarkPublic("/admin/login")
 	ap.MarkPublic("/admin/logout")
+	ap.MarkPublic("/admin/credentials")
+	ap.MarkPublic("/admin/credentials/")
 	ap.MarkPublicPrefix("/swagger/")
 	ap.MarkPublicPrefix("/assets/")
 
@@ -91,6 +95,11 @@ func New(cfg *config.Config) *Server {
 		log.Fatalf("server: open admin store: %v", err)
 	}
 
+	credentialStore, err := credentials.Open(filepath.Join(cfg.Crypto.DataDir, "credentials.enc"), enc)
+	if err != nil {
+		log.Fatalf("server: open credential store: %v", err)
+	}
+
 	session := auth.NewSessionStrategy(12 * time.Hour)
 	ap.Register(session)
 
@@ -103,6 +112,7 @@ func New(cfg *config.Config) *Server {
 		encryptor:       enc,
 		clients:         clientStore,
 		admins:          adminStore,
+		credentials:     credentialStore,
 		policy:          policy.TokenRepoPolicy{},
 		mux:             http.NewServeMux(),
 	}
@@ -204,8 +214,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/admin/", s.handleAdminPage)
 	s.mux.HandleFunc("/admin/login", s.handleAdminLogin)
 	s.mux.HandleFunc("/admin/logout", s.handleAdminLogout)
+	s.mux.HandleFunc("/admin/credentials", s.handleCredentialsPage)
+	s.mux.HandleFunc("/admin/credentials/", s.handleCredentialsPage)
 	s.mux.HandleFunc("/api/admin/session", s.handleAdminSession)
 	s.mux.HandleFunc("/api/admin/tokens", s.handleAdminTokens)
+	s.mux.HandleFunc("/api/admin/credentials", s.handleAdminCredentials)
+	s.mux.HandleFunc("/api/admin/credentials/", s.handleAdminCredential)
 
 	// Git smart HTTP transport
 	s.mux.HandleFunc("/git/", s.handleGitRouter)
