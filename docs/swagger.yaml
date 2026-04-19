@@ -196,6 +196,19 @@ definitions:
         example: abc123...
         type: string
     type: object
+  server.CreateCredentialRequest:
+    properties:
+      expires:
+        type: string
+      kind:
+        type: string
+      name:
+        type: string
+      notes:
+        type: string
+      secret:
+        type: string
+    type: object
   server.CreateRepoRequest:
     properties:
       name:
@@ -206,6 +219,30 @@ definitions:
         type: boolean
       source_url:
         example: https://github.com/owner/repo.git
+        type: string
+    type: object
+  server.CredentialListResponse:
+    properties:
+      count:
+        type: integer
+      credentials:
+        items:
+          $ref: '#/definitions/server.CredentialView'
+        type: array
+    type: object
+  server.CredentialView:
+    properties:
+      created_at:
+        type: string
+      expires:
+        type: string
+      kind:
+        type: string
+      last_used:
+        type: string
+      name:
+        type: string
+      notes:
         type: string
     type: object
   server.EnrollRequest:
@@ -355,6 +392,17 @@ definitions:
         example: alice
         type: string
     type: object
+  server.UpdateCredentialRequest:
+    properties:
+      expires:
+        type: string
+      kind:
+        type: string
+      notes:
+        type: string
+      secret:
+        type: string
+    type: object
   server.UpdateTokenReposRequest:
     properties:
       repos:
@@ -403,6 +451,232 @@ info:
   title: GiGot API
   version: 0.1.0
 paths:
+  /admin/credentials:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        GET lists credential metadata; POST creates a new credential.
+        The secret is write-only — it is never returned on any
+        response. Session-cookie authenticated.
+      parameters:
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateCredentialRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET response
+          schema:
+            $ref: '#/definitions/server.CredentialListResponse'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.CredentialView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Name already exists
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage the credential vault (admin only)
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      description: |-
+        GET lists credential metadata; POST creates a new credential.
+        The secret is write-only — it is never returned on any
+        response. Session-cookie authenticated.
+      parameters:
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateCredentialRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET response
+          schema:
+            $ref: '#/definitions/server.CredentialListResponse'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.CredentialView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Name already exists
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage the credential vault (admin only)
+      tags:
+      - admin
+  /admin/credentials/{name}:
+    delete:
+      consumes:
+      - application/json
+      description: |-
+        GET returns metadata; PATCH updates any of kind/secret/
+        expires/notes (omitted fields are left unchanged); DELETE
+        removes the credential. Session-cookie authenticated.
+      parameters:
+      - description: Credential name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateCredentialRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.CredentialView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage one credential by name (admin only)
+      tags:
+      - admin
+    get:
+      consumes:
+      - application/json
+      description: |-
+        GET returns metadata; PATCH updates any of kind/secret/
+        expires/notes (omitted fields are left unchanged); DELETE
+        removes the credential. Session-cookie authenticated.
+      parameters:
+      - description: Credential name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateCredentialRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.CredentialView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage one credential by name (admin only)
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        GET returns metadata; PATCH updates any of kind/secret/
+        expires/notes (omitted fields are left unchanged); DELETE
+        removes the credential. Session-cookie authenticated.
+      parameters:
+      - description: Credential name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateCredentialRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.CredentialView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage one credential by name (admin only)
+      tags:
+      - admin
   /admin/login:
     post:
       consumes:

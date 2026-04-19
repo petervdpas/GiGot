@@ -148,10 +148,47 @@ Default: silent-and-log. Admin UI surfaces per-destination health.
 
 ### 3.5 Credential storage
 
-Credentials go in the existing sealed store alongside tokens and admin
-accounts. Rotation story is the same as for tokens — including the
-`-rotate-keys` path that already re-wraps every sealed file. No new
-key material design needed.
+Credentials live in the credential vault — `internal/credentials` +
+`data/credentials.enc`, sealed to the server pubkey and rewrapped by
+`-rotate-keys` alongside the other `.enc` files. The vault already
+exists (see [`credential-vault.md`](credential-vault.md)); remote-sync
+is simply its first consumer. A destination stores a vault **name**,
+not the secret itself — rotating a PAT is a single vault update, not
+a per-repo sweep.
+
+#### 3.5.1 Why not git-credential-manager (GCM)?
+
+GitHub, Azure DevOps, and the `git` docs all point a human at a
+workstation at GCM. That is genuinely the right tool **for an
+interactive user** — it stores credentials in the OS keychain
+(Windows Credential Manager / macOS Keychain / libsecret) and handles
+the OAuth device-flow browser popups when tokens expire.
+
+It is not the right tool for GiGot, for three reasons:
+
+1. **Wrong trust model.** GCM targets a desktop session. A headless
+   `gigot` daemon has no keychain to write to and no browser to pop,
+   so the "let GCM handle refresh" UX collapses. Running GCM under a
+   service account means inventing a parallel secret-storage
+   mechanism (file-backed helper, plaintext `.git-credentials`, or
+   keyring-per-user on a server) — all of which are strictly worse
+   than the sealed vault we already have.
+2. **Two stores = two rotation stories.** The vault is rewrapped by
+   `-rotate-keys` alongside `admins.enc` / `tokens.enc` /
+   `clients.enc`. Pulling credentials out into GCM splits that into
+   two incompatible rotation and loss-recovery paths. There is no
+   user benefit to offset the operational cost.
+3. **GCM solves a different problem.** The vault is a *named,
+   rotatable, UI-managed bag of secrets* — an admin product surface.
+   GCM is wire-protocol plumbing between `git push` and one
+   destination's auth flow. They are not substitutes.
+
+Where GCM *could* legitimately plug in is **inside** the push worker
+(§3.3), as the thing that actually executes the `git push`: the
+worker pulls the PAT from the vault in memory, hands it to git via a
+one-shot `credential.helper=!…` shim (or `GIT_ASKPASS`), and the
+secret never lands on disk. That keeps GCM where it shines (speaking
+the credential-helper protocol to git) without making it the store.
 
 ### 3.6 Admin UI
 

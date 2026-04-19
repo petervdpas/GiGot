@@ -53,11 +53,20 @@ the sealed bodies of GiGot requests and responses.
 Open work, in rough priority order. This list mirrors the in-project task
 tracker and is the source of truth for "what's next."
 
-- [ ] **Mirror-sync gigot repos to external remotes.** Per-repo upstream URL
-      + credential (e.g. GitHub / Azure DevOps PAT) stored in an encrypted
-      store. Post-receive hook installed in each bare repo that fires
-      `git push upstream` after every accepted push. Admin UI: add/edit
-      upstream per repo, show last-sync status.
+- [ ] **Mirror-sync gigot repos to external remotes.** Whether to build this
+      at all is still an open question — see
+      [`docs/design/remote-sync.md`](docs/design/remote-sync.md). If it ships:
+      per-repo list of destinations, each one pointing at a named entry in
+      the credential vault (already in place), plus a post-receive push
+      worker and admin UI for destination health. §5 of
+      [`credential-vault.md`](docs/design/credential-vault.md) (destinations,
+      repo→credential linking, 409 on delete when referenced) lands with
+      this work.
+- [ ] **Credential vault — Expires field in the admin UI.** Store and API
+      already accept `expires`; the `/admin/credentials` form and table
+      don't surface it yet. Design doc §3 calls for an input on the form,
+      a column in the list, and a warning when a credential is within 7
+      days of expiring.
 - [ ] **Gateway-trusted identity strategy.** A third `auth.Strategy`
       alongside `TokenStrategy` and `SessionStrategy` that trusts a signed
       identity header forwarded by a fronting gateway (e.g. Azure APIM).
@@ -72,6 +81,17 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Credential vault — storage + admin API + page (design §§1–4, §6, §7).**
+      New sealed store `data/credentials.enc` (NaCl-boxed to the server
+      pubkey, rewrapped by `-rotate-keys` alongside the other `.enc`
+      files). `internal/credentials` owns Open/Put/Get/All/Remove/Touch;
+      secrets never leave the server after write (`PublicView` + the
+      handler's `credentialView` strip `Secret` on every response).
+      `/admin/credentials` is a sibling page to the main admin SPA;
+      endpoints under `/api/admin/credentials[/{name}]` are session-gated
+      and fully Swagger-annotated. Repo↔credential destinations from
+      design §5 are deliberately descoped until mirror-sync decides.
+      See [`docs/design/credential-vault.md`](docs/design/credential-vault.md).
 - [x] **Phase F4 — Record query endpoint.** `GET /api/repos/{name}/records/{template}` lists all parsed records under `storage/<template>/*.meta.json` at HEAD, with optional `where` (equality/inequality on string fields, numeric range on scalars), `sort` (prefix `-` for descending), and `limit`. Filter DSL lives in `internal/formidable/query.go`; handler in `internal/server/handler_records.go`. Swagger, unit, handler, and Cucumber tests green. See [`structured-sync-api.md`](docs/design/structured-sync-api.md) §10.8 and §11 F4.
 - [x] **Phase F3 — Binary transport for images.** Binary blobs under `storage/<template>/images/` flow through the existing `PUT /files/{path}` and `POST /commits` endpoints as ordinary base64-encoded content; the record-merge path (§10.3) explicitly skips images via `isFormidableRecordPath`. Same-path overwrite is accepted without conflict. Referential integrity is descoped — that's Formidable's concern, not GiGot's. Cucumber scenarios in `formidable_records.feature` cover round-trip and overwrite. See [`structured-sync-api.md`](docs/design/structured-sync-api.md) §10.5 and §11 F3.
 - [x] **Phase F2 — Descoped.** Server-side schema validation would couple GiGot to Formidable's field-type model (rejected); template structural merge is handled well enough by the generic line-based merge. See [`structured-sync-api.md`](docs/design/structured-sync-api.md) §10.4, §10.7, and §11 F2 for rationale.
@@ -298,7 +318,7 @@ config file, not the process's working directory. This makes it safe to invoke
 | ----------------- | ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | private_key_path  | string | `"./data/server.key"` | The server's curve25519 private key, base64-encoded in a 0600 file. Generated automatically on first run if missing.                       |
 | public_key_path   | string | `"./data/server.pub"` | Matching public key in a 0644 file. Also generated on first run.                                                                           |
-| data_dir          | string | `"./data"`            | Where encrypted stores live: `clients.enc` (enrolled Formidable clients), `tokens.enc` (subscription keys), `admins.enc` (admin accounts). |
+| data_dir          | string | `"./data"`            | Where encrypted stores live: `clients.enc` (enrolled Formidable clients), `tokens.enc` (subscription keys), `admins.enc` (admin accounts), `credentials.enc` (outbound credential vault). |
 
 ### `logging`
 
@@ -335,13 +355,15 @@ After `-init` and a first run, you'll see something like:
     ├── server.pub            # 0644 — NaCl public key  (base64)
     ├── clients.enc           # sealed: enrolled clients + their pubkeys
     ├── tokens.enc            # sealed: issued subscription keys
-    └── admins.enc            # sealed: admin accounts + bcrypt hashes
+    ├── admins.enc            # sealed: admin accounts + bcrypt hashes
+    └── credentials.enc       # sealed: outbound credentials (PATs, SSH keys, …)
 ```
 
-The three `.enc` files are NaCl-sealed to the server's own public key. **Only a
+The four `.enc` files are NaCl-sealed to the server's own public key. **Only a
 GiGot process holding the matching `server.key` can read them.** If you lose
-`server.key`, you lose every admin account, every subscription key, and every
-enrolled client pubkey — there is no recovery.
+`server.key`, you lose every admin account, every subscription key, every
+enrolled client pubkey, and every stored outbound credential — there is no
+recovery.
 
 **Back up `server.key` somewhere safe.**
 
@@ -479,9 +501,11 @@ hit the data endpoints.
 
 ## Admin UI and Admin API
 
-The admin UI lives at **`/admin`** and is a single self-contained HTML+JS page.
-It lets an admin log in, list issued subscription keys, issue new ones, and
-revoke them.
+The admin UI lives at **`/admin`** and is a single self-contained HTML+JS page
+for repositories and subscription keys. A sibling page at **`/admin/credentials`**
+manages the outbound credential vault (PATs, SSH keys, etc.) that GiGot uses
+when it talks to third-party systems on your behalf — see
+[`docs/design/credential-vault.md`](docs/design/credential-vault.md).
 
 ### Bootstrap
 
@@ -510,11 +534,16 @@ The account is stored in `data/admins.enc` (sealed), so it survives restarts.
 
 | Method | Path                    | Purpose                                                                               |
 | ------ | ----------------------- | ------------------------------------------------------------------------------------- |
-| GET    | `/api/admin/session`    | Returns the current admin identity or 401. The page polls this on load.               |
-| GET    | `/api/admin/tokens`     | Lists every issued subscription key.                                                  |
-| POST   | `/api/admin/tokens`     | Issues a new subscription key. Body: `{ "username", "repos": [...] }`.                |
-| PATCH  | `/api/admin/tokens`     | Changes the repo allowlist on an existing key. Body: `{ "token", "repos": [...] }`.   |
-| DELETE | `/api/admin/tokens`     | Revokes a subscription key. Body: `{ "token": "<value>" }`.                            |
+| GET    | `/api/admin/session`              | Returns the current admin identity or 401. The page polls this on load.                |
+| GET    | `/api/admin/tokens`               | Lists every issued subscription key.                                                   |
+| POST   | `/api/admin/tokens`               | Issues a new subscription key. Body: `{ "username", "repos": [...] }`.                 |
+| PATCH  | `/api/admin/tokens`               | Changes the repo allowlist on an existing key. Body: `{ "token", "repos": [...] }`.    |
+| DELETE | `/api/admin/tokens`               | Revokes a subscription key. Body: `{ "token": "<value>" }`.                             |
+| GET    | `/api/admin/credentials`          | Lists credential metadata (secret is never returned).                                   |
+| POST   | `/api/admin/credentials`          | Creates a credential. Body: `{ "name", "kind", "secret", "expires?", "notes?" }`.      |
+| GET    | `/api/admin/credentials/{name}`   | Metadata for one credential.                                                            |
+| PATCH  | `/api/admin/credentials/{name}`   | Rotate/update metadata. Any omitted field is left unchanged.                            |
+| DELETE | `/api/admin/credentials/{name}`   | Remove a credential.                                                                    |
 
 The legacy unauthenticated `POST /api/auth/token` still exists for backward
 compatibility, but the admin UI uses `/api/admin/tokens` (session-gated) for
