@@ -135,7 +135,10 @@ func TestAddDemoSetup_IdempotentRepeat(t *testing.T) {
 
 // TestRemoveDemoSetup_UndoesEverything proves remove wipes every
 // artefact add provisioned — admin, repo, credential, and every token
-// ever issued to the demo user.
+// ever issued to the demo user. Also sweeps legacy-postman tokens
+// because the Postman collection's "Legacy Tokens" folder can leave
+// those behind on an interrupted run (this test documents the contract:
+// the legacy username is part of the demo flow's footprint).
 func TestRemoveDemoSetup_UndoesEverything(t *testing.T) {
 	cfg := demoTestConfig(t)
 	var out bytes.Buffer
@@ -146,12 +149,24 @@ func TestRemoveDemoSetup_UndoesEverything(t *testing.T) {
 	if err := runAddDemoSetup(cfg, &out); err != nil {
 		t.Fatalf("second add: %v", err)
 	}
+	// Simulate a legacy-postman token lingering from a prior collection
+	// run whose teardown didn't complete (what the admin UI shows under
+	// Active keys when a Postman run was interrupted).
+	stores, err := openDemoStores(cfg)
+	if err != nil {
+		t.Fatalf("reopen stores to seed legacy token: %v", err)
+	}
+	staleLegacy, err := stores.tokens.Issue(legacyTokenUsername, nil)
+	if err != nil {
+		t.Fatalf("seed legacy token: %v", err)
+	}
+
 	out.Reset()
 	if err := runRemoveDemoSetup(cfg, &out); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
 
-	stores, err := openDemoStores(cfg)
+	stores, err = openDemoStores(cfg)
 	if err != nil {
 		t.Fatalf("reopen stores: %v", err)
 	}
@@ -167,6 +182,12 @@ func TestRemoveDemoSetup_UndoesEverything(t *testing.T) {
 	for _, entry := range stores.tokens.List() {
 		if entry.Username == demoTokenUsername {
 			t.Errorf("demo-owned token %q should have been revoked", entry.Token)
+		}
+		if entry.Username == legacyTokenUsername {
+			t.Errorf("legacy-postman token %q should have been revoked", entry.Token)
+		}
+		if entry.Token == staleLegacy {
+			t.Errorf("seeded stale legacy token survived remove: %q", staleLegacy)
 		}
 	}
 }

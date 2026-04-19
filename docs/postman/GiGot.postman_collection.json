@@ -11,22 +11,6 @@
       { "key": "token", "value": "{{subscriptionToken}}", "type": "string" }
     ]
   },
-  "event": [
-    {
-      "listen": "prerequest",
-      "script": {
-        "type": "text/javascript",
-        "exec": [
-          "// Helper: set a variable on both env + collection scopes so reads via",
-          "// pm.variables.get() pick it up under either runner configuration.",
-          "pm.setBoth = (key, value) => {",
-          "  pm.environment.set(key, value);",
-          "  pm.collectionVariables.set(key, value);",
-          "};"
-        ]
-      }
-    }
-  ],
   "variable": [
     { "key": "baseUrl", "value": "http://127.0.0.1:3417" },
     { "key": "adminUser", "value": "alice" },
@@ -196,8 +180,8 @@
                   "pm.test('201 or already-exists', () => pm.expect([201, 409]).to.include(pm.response.code));",
                   "if (pm.response.code === 201) {",
                   "  const body = pm.response.json();",
-                  "  pm.test('name echoed', () => pm.expect(body.name).to.eql(pm.variables.get('repoName')));",
-                  "  pm.test('not empty (scaffolded)', () => pm.expect(body.empty).to.eql(false));",
+                  "  pm.test('message names the repo', () => pm.expect(body.message || '').to.include(pm.variables.get('repoName')));",
+                  "  pm.test('message says scaffolded', () => pm.expect(body.message || '').to.match(/scaffold/i));",
                   "}"
                 ]
               }
@@ -232,7 +216,8 @@
                   "const body = pm.response.json();",
                   "pm.test('token returned', () => pm.expect(body.token).to.be.a('string').and.not.empty);",
                   "pm.test('repos echoed', () => pm.expect(body.repos).to.include(pm.variables.get('repoName')));",
-                  "pm.setBoth('subscriptionToken', body.token);"
+                  "pm.environment.set('subscriptionToken', body.token);",
+                  "pm.collectionVariables.set('subscriptionToken', body.token);"
                 ]
               }
             }
@@ -597,7 +582,8 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
                   "pm.test('version non-empty', () => pm.expect(body.version).to.be.a('string').and.not.empty);",
-                  "pm.setBoth('headVersion', body.version);"
+                  "pm.environment.set('headVersion', body.version);",
+                  "pm.collectionVariables.set('headVersion', body.version);"
                 ]
               }
             }
@@ -731,8 +717,9 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
                   "pm.test('new version returned', () => pm.expect(body.version).to.be.a('string').and.not.empty);",
-                  "pm.test('fast-forward', () => pm.expect(body.fast_forward).to.eql(true));",
-                  "pm.setBoth('headVersion', body.version);"
+                  "pm.test('version advanced from parent', () => pm.expect(body.version).to.not.eql(pm.variables.get('headVersion')));",
+                  "pm.environment.set('headVersion', body.version);",
+                  "pm.collectionVariables.set('headVersion', body.version);"
                 ]
               }
             }
@@ -762,7 +749,8 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
                   "pm.test('new version returned', () => pm.expect(body.version).to.be.a('string').and.not.empty);",
-                  "pm.setBoth('headVersion', body.version);"
+                  "pm.environment.set('headVersion', body.version);",
+                  "pm.collectionVariables.set('headVersion', body.version);"
                 ]
               }
             }
@@ -824,7 +812,8 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
-                  "pm.setBoth('headVersion', body.version);"
+                  "pm.environment.set('headVersion', body.version);",
+                  "pm.collectionVariables.set('headVersion', body.version);"
                 ]
               }
             }
@@ -884,7 +873,8 @@
                   "pm.test('201 Created', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
                   "pm.test('id returned', () => pm.expect(body.id).to.be.a('string').and.not.empty);",
-                  "pm.setBoth('destinationId', body.id);"
+                  "pm.environment.set('destinationId', body.id);",
+                  "pm.collectionVariables.set('destinationId', body.id);"
                 ]
               }
             }
@@ -1017,7 +1007,8 @@
                   "pm.test('201 Created', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
                   "pm.test('token returned', () => pm.expect(body.token).to.be.a('string').and.not.empty);",
-                  "pm.setBoth('legacyToken', body.token);"
+                  "pm.environment.set('legacyToken', body.token);",
+                  "pm.collectionVariables.set('legacyToken', body.token);"
                 ]
               }
             }
@@ -1159,7 +1150,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));"
                 ]
               }
             }

@@ -27,7 +27,22 @@ const (
 	DemoCredentialKind = "github_pat"
 	demoCredentialBody = "ghp_demo_placeholder_not_a_real_token"
 	demoTokenUsername  = "demo"
+	// legacyTokenUsername matches the token POST /api/auth/token issues
+	// from the Postman collection's "Legacy Tokens" folder. It's part of
+	// the demo flow's footprint, so -remove-demo-setup sweeps these too
+	// — otherwise stale legacy tokens pile up across interrupted runs.
+	legacyTokenUsername = "legacy-postman"
 )
+
+// demoTokenUsernames is the set of token-username owners that belong to
+// the demo flow and should be swept on -remove-demo-setup. Wrapped as a
+// helper so callers (and tests) don't duplicate the list.
+func demoTokenUsernames() map[string]struct{} {
+	return map[string]struct{}{
+		demoTokenUsername:   {},
+		legacyTokenUsername: {},
+	}
+}
 
 // demoStores bundles the handful of on-disk stores the demo flow touches.
 // Opening them directly (rather than via server.New) keeps the demo
@@ -137,15 +152,18 @@ func runRemoveDemoSetup(cfg *config.Config, stdout io.Writer) error {
 		return err
 	}
 
+	owners := demoTokenUsernames()
 	revoked := 0
 	for _, entry := range stores.tokens.List() {
-		if entry.Username == demoTokenUsername {
-			if stores.tokens.Revoke(entry.Token) {
-				revoked++
-			}
+		if _, ok := owners[entry.Username]; !ok {
+			continue
+		}
+		if stores.tokens.Revoke(entry.Token) {
+			revoked++
 		}
 	}
-	fmt.Fprintf(stdout, "  revoked %d token(s) issued to %q\n", revoked, demoTokenUsername)
+	fmt.Fprintf(stdout, "  revoked %d demo-flow token(s) (users: %q, %q)\n",
+		revoked, demoTokenUsername, legacyTokenUsername)
 
 	if err := stores.credentials.Remove(DemoCredentialName); err != nil {
 		// credentials.ErrNotFound is the idempotent path — anything else is fatal.
