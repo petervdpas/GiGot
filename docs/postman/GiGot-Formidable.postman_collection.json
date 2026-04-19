@@ -1,0 +1,756 @@
+{
+  "info": {
+    "_postman_id": "b7ed3a22-0000-4000-8000-000000000003",
+    "name": "GiGot — Formidable",
+    "description": "Formidable-specific deep-dive collection. Companion to the main GiGot collection.\n\nWhere the main collection is a breadth-first smoke test, this one exercises the semantic details of Formidable-first mode: the §2.7 scaffold matrix (explicit true / explicit false / server-default), structured record merge on disjoint data fields, immutable-meta 409 conflicts, and the /records query DSL (where / sort / limit).\n\nFastest setup:\n1. `./gigot -add-demo-setup` provisions the demo admin. Re-use it — this collection uses its own side-repos (postman-formidable-on/off/default) so it never touches postman-demo.\n2. Start the server.\n3. Import this collection + the `GiGot — local` environment (same one the main collection uses).\n4. Run Collection — folder 01 creates the side-repos, folder 02 issues a token scoped to them, folders 03–05 exercise record behaviors, folder 06 cleans up.\n\nFolder 01 'Scaffold matrix' probes the server-level `formidable_first` flag directly — the 'default' repo's response message reveals whether scaffolding fired. See docs/design/structured-sync-api.md §2.7 for the decision matrix this collection pins down.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{formidableToken}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:3417" },
+    { "key": "adminUser", "value": "demo" },
+    { "key": "adminPass", "value": "demo-password" },
+    { "key": "formidableToken", "value": "" },
+    { "key": "sideRepoOn", "value": "postman-formidable-on" },
+    { "key": "sideRepoOff", "value": "postman-formidable-off" },
+    { "key": "sideRepoDefault", "value": "postman-formidable-default" },
+    { "key": "serverModeScaffolded", "value": "" },
+    { "key": "headVer", "value": "" },
+    { "key": "headVer2", "value": "" },
+    { "key": "recordB64", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Preamble",
+      "description": "Log in as the demo admin so folder 01 can hit admin-gated routes via the session cookie.",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUser}}\",\n  \"password\": \"{{adminPass}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/login", "host": ["{{baseUrl}}"], "path": ["admin", "login"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Scaffold matrix",
+      "description": "§2.7 decision matrix probed end-to-end: explicit true / explicit false / unset (server default). Each create is paired with a verify that reads back empty and has_formidable to prove the scaffolding actually happened (or didn't).",
+      "item": [
+        {
+          "name": "Create on-repo (scaffold_formidable: true)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{sideRepoOn}}\",\n  \"scaffold_formidable\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/repos", "host": ["{{baseUrl}}"], "path": ["api", "repos"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 or already-exists', () => pm.expect([201, 409]).to.include(pm.response.code));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.test('message says scaffolded', () => pm.expect(pm.response.json().message).to.match(/scaffold/i));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create off-repo (scaffold_formidable: false)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{sideRepoOff}}\",\n  \"scaffold_formidable\": false\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/repos", "host": ["{{baseUrl}}"], "path": ["api", "repos"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 or already-exists', () => pm.expect([201, 409]).to.include(pm.response.code));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.test('message does NOT say scaffolded', () => {",
+                  "    pm.expect(pm.response.json().message || '').to.not.match(/scaffold/i);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create default-repo (flag unset — reveals server mode)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{sideRepoDefault}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/repos", "host": ["{{baseUrl}}"], "path": ["api", "repos"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 or already-exists', () => pm.expect([201, 409]).to.include(pm.response.code));",
+                  "if (pm.response.code === 201) {",
+                  "  const msg = pm.response.json().message || '';",
+                  "  const scaffolded = /scaffold/i.test(msg);",
+                  "  pm.environment.set('serverModeScaffolded', scaffolded ? 'true' : 'false');",
+                  "  pm.collectionVariables.set('serverModeScaffolded', scaffolded ? 'true' : 'false');",
+                  "  pm.test('server mode revealed', () => {",
+                  "    console.log('server is running in formidable_first=' + scaffolded);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Token",
+      "description": "Issue a bearer token scoped to all three side-repos so the record folders downstream can authenticate. Runs after folder 01 so validateRepos accepts the allowlist.",
+      "item": [
+        {
+          "name": "Issue bearer scoped to side-repos (saves {{formidableToken}})",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUser}}\",\n  \"repos\": [\"{{sideRepoOn}}\", \"{{sideRepoOff}}\", \"{{sideRepoDefault}}\"]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/tokens", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tokens"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('token returned', () => pm.expect(body.token).to.be.a('string').and.not.empty);",
+                  "pm.test('all three side-repos in allowlist', () => {",
+                  "  pm.expect(body.repos).to.include.members([",
+                  "    pm.variables.get('sideRepoOn'),",
+                  "    pm.variables.get('sideRepoOff'),",
+                  "    pm.variables.get('sideRepoDefault'),",
+                  "  ]);",
+                  "});",
+                  "pm.environment.set('formidableToken', body.token);",
+                  "pm.collectionVariables.set('formidableToken', body.token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Record basics",
+      "description": "Put one record into the scaffolded on-repo, then read it back via GET /records. Baseline for the merge + query folders below.",
+      "item": [
+        {
+          "name": "HEAD of on-repo (saves {{headVer}})",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/head",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "head"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('headVer', body.version);",
+                  "pm.collectionVariables.set('headVer', body.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT record rec-1 (Alpha / nl)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parent_version\": \"{{headVer}}\",\n  \"content_b64\": \"{{recordB64}}\",\n  \"message\": \"postman-formidable: add rec-1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/files/storage/basic.yaml/rec-1.meta.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "files", "storage", "basic.yaml", "rec-1.meta.json"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const rec = {",
+                  "  meta: { id: 'rec-1', template: 'basic.yaml',",
+                  "          created: '2026-01-01T00:00:00Z', updated: '2026-01-01T00:00:00Z' },",
+                  "  data: { name: 'Alpha', country: 'nl' }",
+                  "};",
+                  "pm.variables.set('recordB64', require('btoa')(JSON.stringify(rec)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('version advanced', () => pm.expect(body.version).to.not.eql(pm.variables.get('headVer')));",
+                  "pm.environment.set('headVer', body.version);",
+                  "pm.collectionVariables.set('headVer', body.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT record rec-2 (Beta / uk)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parent_version\": \"{{headVer}}\",\n  \"content_b64\": \"{{recordB64}}\",\n  \"message\": \"postman-formidable: add rec-2\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/files/storage/basic.yaml/rec-2.meta.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "files", "storage", "basic.yaml", "rec-2.meta.json"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const rec = {",
+                  "  meta: { id: 'rec-2', template: 'basic.yaml',",
+                  "          created: '2026-01-02T00:00:00Z', updated: '2026-01-02T00:00:00Z' },",
+                  "  data: { name: 'Beta', country: 'uk' }",
+                  "};",
+                  "pm.variables.set('recordB64', require('btoa')(JSON.stringify(rec)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('headVer', body.version);",
+                  "pm.collectionVariables.set('headVer', body.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /records — both rec-1 and rec-2 present",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/records/basic.yaml",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "records", "basic.yaml"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('2 records returned', () => pm.expect(body.records).to.have.lengthOf(2));",
+                  "pm.test('records carry both meta + data', () => {",
+                  "  body.records.forEach(r => {",
+                  "    pm.expect(r).to.have.property('meta');",
+                  "    pm.expect(r).to.have.property('data');",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Merge + conflicts",
+      "description": "§10.3 uniform merge rule — two writes to *different* data fields on the same record must merge cleanly. The 'stale parent' write is deliberate: it simulates a client that hadn't pulled between its edit and its save. Immutable meta (created/id/template) is the only path that produces a 409.",
+      "item": [
+        {
+          "name": "HEAD before the race (saves {{headVer}})",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/head",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "head"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('headVer', body.version);",
+                  "pm.collectionVariables.set('headVer', body.version);",
+                  "pm.environment.set('headVer2', body.version);",
+                  "pm.collectionVariables.set('headVer2', body.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Client A: update rec-1.country → 'uk' (fast-forward)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parent_version\": \"{{headVer}}\",\n  \"content_b64\": \"{{recordB64}}\",\n  \"message\": \"A: update country\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/files/storage/basic.yaml/rec-1.meta.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "files", "storage", "basic.yaml", "rec-1.meta.json"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const rec = {",
+                  "  meta: { id: 'rec-1', template: 'basic.yaml',",
+                  "          created: '2026-01-01T00:00:00Z', updated: '2026-02-01T00:00:00Z' },",
+                  "  data: { name: 'Alpha', country: 'uk' }",
+                  "};",
+                  "pm.variables.set('recordB64', require('btoa')(JSON.stringify(rec)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('headVer', body.version);",
+                  "pm.collectionVariables.set('headVer', body.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Client B: update rec-1.name → 'Aleph' with STALE parent (expect merge)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parent_version\": \"{{headVer2}}\",\n  \"content_b64\": \"{{recordB64}}\",\n  \"message\": \"B: update name (stale parent, different field)\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/files/storage/basic.yaml/rec-1.meta.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "files", "storage", "basic.yaml", "rec-1.meta.json"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const rec = {",
+                  "  meta: { id: 'rec-1', template: 'basic.yaml',",
+                  "          created: '2026-01-01T00:00:00Z', updated: '2026-03-01T00:00:00Z' },",
+                  "  data: { name: 'Aleph', country: 'nl' }",
+                  "};",
+                  "pm.variables.set('recordB64', require('btoa')(JSON.stringify(rec)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK (merged, not conflicted)', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('version advanced past both client heads', () => {",
+                  "  pm.expect(body.version).to.not.eql(pm.variables.get('headVer'));",
+                  "  pm.expect(body.version).to.not.eql(pm.variables.get('headVer2'));",
+                  "});",
+                  "pm.environment.set('headVer', body.version);",
+                  "pm.collectionVariables.set('headVer', body.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify merged state — name=Aleph AND country=uk",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/records/basic.yaml",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "records", "basic.yaml"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const rec1 = pm.response.json().records.find(r => r.meta.id === 'rec-1');",
+                  "pm.test('rec-1 found', () => pm.expect(rec1).to.exist);",
+                  "pm.test('B\\'s name update landed', () => pm.expect(rec1.data.name).to.eql('Aleph'));",
+                  "pm.test('A\\'s country update landed', () => pm.expect(rec1.data.country).to.eql('uk'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Immutable meta.created change → 409 RecordConflict",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parent_version\": \"{{headVer2}}\",\n  \"content_b64\": \"{{recordB64}}\",\n  \"message\": \"attempt to mutate immutable meta.created\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/files/storage/basic.yaml/rec-1.meta.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "files", "storage", "basic.yaml", "rec-1.meta.json"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Change meta.created — server must reject since it's in the",
+                  "// immutable set (created / id / template). The immutable-meta",
+                  "// guard lives in the merge path, so parent_version must be",
+                  "// STALE (we use headVer2, the pre-merge HEAD from step 1) —",
+                  "// a fresh-parent write fast-forwards through without the check.",
+                  "const rec = {",
+                  "  meta: { id: 'rec-1', template: 'basic.yaml',",
+                  "          created: '1999-01-01T00:00:00Z', updated: '2026-04-01T00:00:00Z' },",
+                  "  data: { name: 'Aleph', country: 'uk' }",
+                  "};",
+                  "pm.variables.set('recordB64', require('btoa')(JSON.stringify(rec)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('field_conflicts array', () => pm.expect(body.field_conflicts).to.be.an('array').and.not.empty);",
+                  "pm.test('first conflict names created', () => {",
+                  "  pm.expect(body.field_conflicts[0].key).to.eql('created');",
+                  "  pm.expect(body.field_conflicts[0].reason).to.match(/immutable/i);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Record query DSL",
+      "description": "§10.8 filter grammar — where=key<op>value (=, !=, >, >=, <, <=); sort=key (prefix - for desc); limit=N. After folder 04, rec-1 is (Aleph / uk) and rec-2 is (Beta / uk).",
+      "item": [
+        {
+          "name": "where=country=uk → both records",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/records/basic.yaml?where=country=uk",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "records", "basic.yaml"],
+              "query": [{ "key": "where", "value": "country=uk" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('2 records match country=uk', () => pm.expect(body.records).to.have.lengthOf(2));",
+                  "pm.test('all matched records have country=uk', () => {",
+                  "  body.records.forEach(r => pm.expect(r.data.country).to.eql('uk'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "where=name=Aleph → only rec-1",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/records/basic.yaml?where=name=Aleph",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "records", "basic.yaml"],
+              "query": [{ "key": "where", "value": "name=Aleph" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('exactly 1 record', () => pm.expect(body.records).to.have.lengthOf(1));",
+                  "pm.test('it\\'s rec-1', () => pm.expect(body.records[0].meta.id).to.eql('rec-1'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "sort=-name → Beta before Aleph (descending)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/records/basic.yaml?sort=-name",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "records", "basic.yaml"],
+              "query": [{ "key": "sort", "value": "-name" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const names = pm.response.json().records.map(r => r.data.name);",
+                  "pm.test('descending by name', () => pm.expect(names).to.eql(['Beta', 'Aleph']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "limit=1 → only one record",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}/records/basic.yaml?limit=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}", "records", "basic.yaml"],
+              "query": [{ "key": "limit", "value": "1" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('limit respected', () => pm.expect(pm.response.json().records).to.have.lengthOf(1));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 Teardown",
+      "description": "Delete the three side-repos and revoke the token so a second run starts from a clean slate. Uses session auth (noauth override) for the repo deletes since ActionManageRepos is session-only.",
+      "item": [
+        {
+          "name": "Delete on-repo",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOn}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOn}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 or 204', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete off-repo",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoOff}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoOff}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 or 204', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete default-repo",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{sideRepoDefault}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{sideRepoDefault}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 or 204', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{formidableToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/tokens", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tokens"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
