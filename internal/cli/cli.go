@@ -30,6 +30,11 @@ const (
 	// ModeWipe destructively removes on-disk state. Which slice of
 	// state is controlled by WipeTargets on Options.
 	ModeWipe
+	// ModeAddDemoSetup provisions the Postman-collection demo admin /
+	// repo / credential / subscription token. See internal/cli/demo.go.
+	ModeAddDemoSetup
+	// ModeRemoveDemoSetup tears down everything ModeAddDemoSetup set up.
+	ModeRemoveDemoSetup
 )
 
 // WipeTargets is the set of on-disk artefacts a ModeWipe invocation
@@ -107,6 +112,8 @@ func Parse(args []string) (Options, error) {
 		wipeDestinations bool
 		factoryReset     bool
 		assumeYes        bool
+		addDemoSetup     bool
+		removeDemoSetup  bool
 	)
 	fs.BoolVar(&help, "help", false, "show this help and exit")
 	fs.BoolVar(&helpShort, "h", false, "alias for -help")
@@ -124,6 +131,8 @@ func Parse(args []string) (Options, error) {
 	fs.BoolVar(&wipeDestinations, "wipe-destinations", false, "delete data/destinations.enc (per-repo mirror destinations)")
 	fs.BoolVar(&factoryReset, "factory-reset", false, "wipe every sealed store, every repo, the keypair, and rotation backups (stop the server first)")
 	fs.BoolVar(&assumeYes, "yes", false, "skip the interactive confirmation prompt for wipe flags")
+	fs.BoolVar(&addDemoSetup, "add-demo-setup", false, "provision the Postman demo admin, repo, credential and subscription token (stop the server first)")
+	fs.BoolVar(&removeDemoSetup, "remove-demo-setup", false, "tear down everything -add-demo-setup provisioned (stop the server first)")
 
 	if err := fs.Parse(args); err != nil {
 		// flag.ErrHelp is returned when the flag package's builtin
@@ -171,8 +180,14 @@ func Parse(args []string) (Options, error) {
 	if wantsWipe {
 		oneShots++
 	}
+	if addDemoSetup {
+		oneShots++
+	}
+	if removeDemoSetup {
+		oneShots++
+	}
 	if oneShots > 1 {
-		return Options{}, fmt.Errorf("only one of -init, -add-admin, -rotate-keys, or the -wipe-*/-factory-reset family can be used per invocation")
+		return Options{}, fmt.Errorf("only one of -init, -add-admin, -rotate-keys, -add-demo-setup, -remove-demo-setup, or the -wipe-*/-factory-reset family can be used per invocation")
 	}
 
 	// -formidable-first only makes sense alongside -init. Silently
@@ -222,6 +237,10 @@ func Parse(args []string) (Options, error) {
 	case granularWipes.Any():
 		opts.Mode = ModeWipe
 		opts.Wipe = granularWipes
+	case addDemoSetup:
+		opts.Mode = ModeAddDemoSetup
+	case removeDemoSetup:
+		opts.Mode = ModeRemoveDemoSetup
 	default:
 		opts.Mode = ModeServe
 	}
@@ -265,6 +284,12 @@ One-shot commands (each exits after running; mutually exclusive):
     -yes                  Skip the interactive confirmation prompt for
                           any -wipe-* or -factory-reset invocation
                           (intended for non-interactive scripts).
+  -add-demo-setup         Provision the Postman-collection demo state:
+                          admin "demo" / password "demo-password",
+                          scaffolded repo "postman-demo", credential
+                          "postman-pat", and a fresh subscription token
+                          (printed). Stop the server first.
+  -remove-demo-setup      Tear down everything -add-demo-setup created.
 
   The -wipe-* flags compose (e.g. -wipe-admins -wipe-tokens removes
   both stores in one invocation). -factory-reset is a shorthand that

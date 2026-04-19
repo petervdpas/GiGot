@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a9e6f2f1-0000-4000-8000-000000000001",
     "name": "GiGot",
-    "description": "End-to-end test collection for GiGot.\n\nRun the folders in order (or the whole collection with Run Collection) — later requests consume variables captured by earlier ones (subscriptionToken, repoName, headVersion, credentialName, destinationId).\n\nPrerequisites:\n1. GiGot is running (`./gigot`) and reachable at `{{baseUrl}}`.\n2. An admin account exists. Create one out of band: `./gigot -add-admin alice`, then set `{{adminUser}}` + `{{adminPass}}` in your environment.\n3. `auth.enabled = true` in gigot.json if you want the token-scoped requests to actually gate — with auth disabled they all succeed regardless of `subscriptionToken`.\n\nThe legacy `POST /api/auth/token` endpoint is exercised in the final folder so you can prove the backward-compat shim still works.",
+    "description": "End-to-end test collection for GiGot.\n\nFastest setup (matches the shipped environment defaults):\n1. Stop the server.\n2. Run `./gigot -add-demo-setup` — provisions admin `demo` / password `demo-password`, scaffolded repo `postman-demo`, credential `postman-pat`, and prints a subscription token.\n3. Start the server (`./gigot`).\n4. Import this collection + the `GiGot — local` environment, paste the printed token into `subscriptionToken`, hit Run Collection.\n\nAfter you're done, `./gigot -remove-demo-setup` tears the whole thing back down. Everything this collection creates lines up with what the CLI provisions, so the folder structure doubles as documentation of the demo state.\n\nRun the folders in order (or the whole collection with Run Collection) — later requests consume variables captured by earlier ones (subscriptionToken, repoName, headVersion, credentialName, destinationId).\n\nPrerequisites if you're NOT using -add-demo-setup:\n- An admin account exists. Create one with `./gigot -add-admin <username>` and update `adminUser` / `adminPass` in the environment.\n- `auth.enabled = true` in gigot.json if you want the token-scoped requests to actually gate — with auth disabled they all succeed regardless of `subscriptionToken`.\n\nOrdering rules baked into this collection:\n- Admin endpoints (/admin/* and /api/admin/*) use the session cookie set by folder 01 Login. Every admin request overrides collection auth to `noauth` so the bearer isn't sent alongside the cookie (the server's token strategy is tried before session; a bearer-plus-cookie request would authenticate as the token caller and be denied management actions).\n- The repo referenced by the subscription token must exist before the token is issued (see admin.feature: 'Issuing a token bound to a non-existent repo is rejected'). That's why 'Repos — Admin (create)' runs before 'Admin Tokens'.\n- Captured values are written to BOTH the environment and collection scopes so Run-Collection works whether or not an environment is selected.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -11,6 +11,22 @@
       { "key": "token", "value": "{{subscriptionToken}}", "type": "string" }
     ]
   },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Helper: set a variable on both env + collection scopes so reads via",
+          "// pm.variables.get() pick it up under either runner configuration.",
+          "pm.setBoth = (key, value) => {",
+          "  pm.environment.set(key, value);",
+          "  pm.collectionVariables.set(key, value);",
+          "};"
+        ]
+      }
+    }
+  ],
   "variable": [
     { "key": "baseUrl", "value": "http://127.0.0.1:3417" },
     { "key": "adminUser", "value": "alice" },
@@ -41,8 +57,15 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('status: ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+                  "// /api/health is bearer-gated when auth.enabled=true and no token",
+                  "// has been issued yet. Accept 401 in that case — the endpoint",
+                  "// being reachable at all is what this bootstrap check cares about.",
+                  "pm.test('reachable (200 with auth off, 401 with auth on)', () => {",
+                  "  pm.expect([200, 401]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('status: ok', () => pm.expect(pm.response.json().status).to.eql('ok'));",
+                  "}"
                 ]
               }
             }
@@ -138,7 +161,8 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
-                  "pm.test('username echoed', () => pm.expect(body.username).to.eql(pm.collectionVariables.get('adminUser')));"
+                  "// Use pm.variables.get so environment override wins over collection default.",
+                  "pm.test('echoes logged-in admin', () => pm.expect(body.username).to.eql(pm.variables.get('adminUser')));"
                 ]
               }
             }
@@ -147,8 +171,44 @@
       ]
     },
     {
-      "name": "02 Admin Tokens",
-      "description": "Issue / list / rescope / revoke subscription keys. The Issue request captures the new token into {{subscriptionToken}} so the later bearer-authed folders can use it.",
+      "name": "02 Repos — Admin (create)",
+      "description": "Admin-only repo lifecycle. Must run BEFORE Admin Tokens so the token's repo allowlist references an existing repo (otherwise /api/admin/tokens rejects it — see admin.feature).",
+      "item": [
+        {
+          "name": "Create repo (scaffold Formidable)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{repoName}}\",\n  \"scaffold_formidable\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/repos", "host": ["{{baseUrl}}"], "path": ["api", "repos"] },
+            "description": "noauth override → Postman sends only the admin session cookie. POST /api/repos is ActionManageRepos, denied for token callers."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 or already-exists', () => pm.expect([201, 409]).to.include(pm.response.code));",
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test('name echoed', () => pm.expect(body.name).to.eql(pm.variables.get('repoName')));",
+                  "  pm.test('not empty (scaffolded)', () => pm.expect(body.empty).to.eql(false));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Admin Tokens",
+      "description": "Issue / list / rescope subscription keys. The Issue request captures the new token into {{subscriptionToken}} so the bearer-authed folders downstream can use it.",
       "item": [
         {
           "name": "Issue token (saves {{subscriptionToken}})",
@@ -168,10 +228,11 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
                   "pm.test('token returned', () => pm.expect(body.token).to.be.a('string').and.not.empty);",
-                  "pm.collectionVariables.set('subscriptionToken', body.token);"
+                  "pm.test('repos echoed', () => pm.expect(body.repos).to.include(pm.variables.get('repoName')));",
+                  "pm.setBoth('subscriptionToken', body.token);"
                 ]
               }
             }
@@ -194,7 +255,7 @@
                   "const body = pm.response.json();",
                   "pm.test('tokens array', () => pm.expect(body.tokens).to.be.an('array'));",
                   "pm.test('includes ours', () => {",
-                  "  const ours = pm.collectionVariables.get('subscriptionToken');",
+                  "  const ours = pm.variables.get('subscriptionToken');",
                   "  pm.expect(body.tokens.some(t => t.token === ours)).to.eql(true);",
                   "});"
                 ]
@@ -203,7 +264,7 @@
           ]
         },
         {
-          "name": "Rescope token",
+          "name": "Rescope token (same repo)",
           "request": {
             "auth": { "type": "noauth" },
             "method": "PATCH",
@@ -229,8 +290,8 @@
       ]
     },
     {
-      "name": "03 Admin Credentials",
-      "description": "Outbound credential vault. The Create request writes a synthetic PAT and captures {{credentialName}}. The secret is write-only — list/get never return it.",
+      "name": "04 Admin Credentials",
+      "description": "Outbound credential vault. Every request overrides to noauth so the admin session cookie drives the call — bearer tokens get authenticated first by the server, which would block these as management actions.",
       "item": [
         {
           "name": "Create credential",
@@ -250,10 +311,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                  "const body = pm.response.json();",
-                  "pm.test('name echoed', () => pm.expect(body.name).to.eql(pm.collectionVariables.get('credentialName')));",
-                  "pm.test('secret never echoed', () => pm.expect(body.secret).to.be.undefined);"
+                  "pm.test('201 or already-exists', () => pm.expect([201, 409]).to.include(pm.response.code));",
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test('name echoed', () => pm.expect(body.name).to.eql(pm.variables.get('credentialName')));",
+                  "  pm.test('secret never echoed', () => pm.expect(body.secret).to.be.undefined);",
+                  "}"
                 ]
               }
             }
@@ -337,7 +400,7 @@
       ]
     },
     {
-      "name": "04 Client Enrollment",
+      "name": "05 Client Enrollment",
       "description": "Enroll a synthetic client pubkey so the server can seal responses. Re-running with the same client_id + pubkey is idempotent; different pubkey returns 409.",
       "item": [
         {
@@ -360,7 +423,7 @@
                 "exec": [
                   "pm.test('201 Created', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
-                  "pm.test('client_id echoed', () => pm.expect(body.client_id).to.eql(pm.collectionVariables.get('clientId')));",
+                  "pm.test('client_id echoed', () => pm.expect(body.client_id).to.eql(pm.variables.get('clientId')));",
                   "pm.test('server_public_key returned', () => pm.expect(body.server_public_key).to.be.a('string').and.not.empty);"
                 ]
               }
@@ -394,37 +457,9 @@
       ]
     },
     {
-      "name": "05 Repos",
-      "description": "Create / inspect / list repositories. Create uses scaffold_formidable:true so GET /head works immediately on the fresh repo.",
+      "name": "06 Repos — Read (bearer)",
+      "description": "Read-only repo introspection using the subscription token from folder 03. These routes are bearer-gated with per-repo scoping; the token issued above is already allow-listed for {{repoName}}.",
       "item": [
-        {
-          "name": "Create repo (scaffold Formidable)",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"{{repoName}}\",\n  \"scaffold_formidable\": true\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/api/repos", "host": ["{{baseUrl}}"], "path": ["api", "repos"] }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 or already-exists', () => pm.expect([201, 409]).to.include(pm.response.code));",
-                  "if (pm.response.code === 201) {",
-                  "  const body = pm.response.json();",
-                  "  pm.test('name echoed', () => pm.expect(body.name).to.eql(pm.collectionVariables.get('repoName')));",
-                  "  pm.test('not empty (scaffolded)', () => pm.expect(body.empty).to.eql(false));",
-                  "}"
-                ]
-              }
-            }
-          ]
-        },
         {
           "name": "List repos",
           "request": {
@@ -440,7 +475,7 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
                   "pm.test('our repo is in the list', () => {",
-                  "  const r = pm.collectionVariables.get('repoName');",
+                  "  const r = pm.variables.get('repoName');",
                   "  pm.expect(body.repos.some(x => x.name === r)).to.eql(true);",
                   "});"
                 ]
@@ -540,7 +575,7 @@
       ]
     },
     {
-      "name": "06 Sync — Read",
+      "name": "07 Sync — Read",
       "description": "Structured read endpoints. GET /head captures {{headVersion}} so the write folder can use it as parent_version.",
       "item": [
         {
@@ -562,7 +597,7 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
                   "pm.test('version non-empty', () => pm.expect(body.version).to.be.a('string').and.not.empty);",
-                  "pm.collectionVariables.set('headVersion', body.version);"
+                  "pm.setBoth('headVersion', body.version);"
                 ]
               }
             }
@@ -669,7 +704,7 @@
       ]
     },
     {
-      "name": "07 Sync — Write",
+      "name": "08 Sync — Write",
       "description": "Exercise the structured write path. Each request uses {{headVersion}} captured earlier as parent_version; after a successful write, the response's new version is saved back into {{headVersion}} so the next write fast-forwards.",
       "item": [
         {
@@ -697,7 +732,7 @@
                   "const body = pm.response.json();",
                   "pm.test('new version returned', () => pm.expect(body.version).to.be.a('string').and.not.empty);",
                   "pm.test('fast-forward', () => pm.expect(body.fast_forward).to.eql(true));",
-                  "pm.collectionVariables.set('headVersion', body.version);"
+                  "pm.setBoth('headVersion', body.version);"
                 ]
               }
             }
@@ -727,7 +762,7 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
                   "pm.test('new version returned', () => pm.expect(body.version).to.be.a('string').and.not.empty);",
-                  "pm.collectionVariables.set('headVersion', body.version);"
+                  "pm.setBoth('headVersion', body.version);"
                 ]
               }
             }
@@ -763,8 +798,8 @@
       ]
     },
     {
-      "name": "08 Formidable Records",
-      "description": "Formidable-first record query endpoint. The demo repo is scaffolded with a basic.yaml template but no records, so the list starts empty. Put a record first if you want non-zero results.",
+      "name": "09 Formidable Records",
+      "description": "Formidable-first record query endpoint. The demo repo is scaffolded with a basic.yaml template but no records until this folder PUTs one.",
       "item": [
         {
           "name": "PUT a record (so the next list has a row)",
@@ -789,7 +824,7 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
-                  "pm.collectionVariables.set('headVersion', body.version);"
+                  "pm.setBoth('headVersion', body.version);"
                 ]
               }
             }
@@ -821,8 +856,8 @@
       ]
     },
     {
-      "name": "09 Admin Destinations",
-      "description": "Per-repo mirror destinations. The Create request references {{credentialName}} from folder 03; deleting that credential would return 409 until the destination is removed (credential-vault.md §5).",
+      "name": "10 Admin Destinations",
+      "description": "Per-repo mirror destinations. The Create request references {{credentialName}} from folder 04; deleting that credential while a destination still points at it returns 409 (credential-vault.md §5).",
       "item": [
         {
           "name": "Create destination (saves {{destinationId}})",
@@ -849,7 +884,7 @@
                   "pm.test('201 Created', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
                   "pm.test('id returned', () => pm.expect(body.id).to.be.a('string').and.not.empty);",
-                  "pm.collectionVariables.set('destinationId', body.id);"
+                  "pm.setBoth('destinationId', body.id);"
                 ]
               }
             }
@@ -959,7 +994,7 @@
       ]
     },
     {
-      "name": "10 Legacy Tokens",
+      "name": "11 Legacy Tokens",
       "description": "Backward-compat shim. New integrations should use /api/admin/tokens; this folder exists so regressions in the legacy path are caught.",
       "item": [
         {
@@ -979,10 +1014,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
                   "pm.test('token returned', () => pm.expect(body.token).to.be.a('string').and.not.empty);",
-                  "pm.collectionVariables.set('legacyToken', body.token);"
+                  "pm.setBoth('legacyToken', body.token);"
                 ]
               }
             }
@@ -1014,8 +1049,8 @@
       ]
     },
     {
-      "name": "11 Teardown",
-      "description": "Remove the artefacts this collection created so a second run starts from a clean slate. Destinations → credential → repo → token → logout.",
+      "name": "12 Teardown",
+      "description": "Remove the artefacts this collection created so a second run starts from a clean slate. Destination → credential → repo → token → logout.",
       "item": [
         {
           "name": "Delete destination",
@@ -1066,12 +1101,14 @@
         {
           "name": "Delete repo",
           "request": {
+            "auth": { "type": "noauth" },
             "method": "DELETE",
             "url": {
               "raw": "{{baseUrl}}/api/repos/{{repoName}}",
               "host": ["{{baseUrl}}"],
               "path": ["api", "repos", "{{repoName}}"]
-            }
+            },
+            "description": "noauth override → session cookie. DELETE /api/repos/{name} is ActionManageRepos, denied for token callers."
           },
           "event": [
             {

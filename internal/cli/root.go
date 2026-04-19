@@ -70,6 +70,16 @@ func Execute() {
 			log.Fatalf("wipe: %v", err)
 		}
 		return
+	case ModeAddDemoSetup:
+		if err := runAddDemoSetup(cfg, os.Stdout); err != nil {
+			log.Fatalf("add-demo-setup: %v", err)
+		}
+		return
+	case ModeRemoveDemoSetup:
+		if err := runRemoveDemoSetup(cfg, os.Stdout); err != nil {
+			log.Fatalf("remove-demo-setup: %v", err)
+		}
+		return
 	case ModeServe:
 		fmt.Printf("GiGot server starting on %s:%d\n", cfg.Server.Host, cfg.Server.Port)
 		fmt.Printf("Repository root: %s\n", cfg.Storage.RepoRoot)

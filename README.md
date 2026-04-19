@@ -93,6 +93,26 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Postman demo setup CLI.** `./gigot -add-demo-setup` provisions
+      the exact state the shipped Postman collection expects — admin
+      `demo` / password `demo-password`, scaffolded repo
+      `postman-demo`, credential `postman-pat`, plus a fresh
+      subscription token printed to stdout. `./gigot -remove-demo-setup`
+      tears it back down, revoking every token ever issued to the
+      demo user (repeat `-add` runs stack, so `-remove` sweeps all of
+      them). Mutually exclusive with the rest of the one-shot family
+      (`-init` / `-add-admin` / `-rotate-keys` / `-wipe-*` /
+      `-factory-reset`). Re-running `-add-demo-setup` is idempotent
+      on the admin/repo/credential and cumulative on tokens.
+      Scaffolding moved from `internal/server/scaffold/` to the new
+      leaf package `internal/scaffold/` so both the HTTP handler and
+      the CLI seed the same embedded files — no drift. Unit coverage
+      in `internal/cli/demo_test.go` asserts the provisioned state
+      (admin bcrypt, scaffolded tree, credential kind, token in the
+      sealed store) and the idempotent-remove contract. See the
+      [Command-Line Interface](#command-line-interface) section for
+      the flag reference and `docs/postman/` for the companion
+      collection.
 - [x] **Factory-reset / granular wipe CLI.** Seven granular
       `-wipe-*` one-shots (`-wipe-repos`, `-wipe-admins`,
       `-wipe-tokens`, `-wipe-clients`, `-wipe-sessions`,
@@ -347,6 +367,13 @@ idempotent — removing a target that is already absent is not an error.
 | `-wipe-destinations`   | Remove `data/destinations.enc`. All per-repo mirror-sync destinations dropped.                                                 |
 | `-factory-reset`       | Superset of every wipe above, **plus** the keypair (`data/server.key` / `data/server.pub`) and all rotation backups (`data/*.bak.*`). Restores a clean-install state, preserving only `gigot.json`. Rejected when combined with any granular `-wipe-*` flag. **Stop the server first.** |
 | `-yes`                 | Skip the confirmation prompt. Valid only with a `-wipe-*` or `-factory-reset` flag.                                            |
+
+**Demo setup (for the shipped Postman collection):**
+
+| Flag                   | Description                                                                                                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-add-demo-setup`      | Provisions admin `demo` / password `demo-password`, scaffolded repo `postman-demo`, credential `postman-pat`, and prints a fresh subscription token. Re-runnable; tokens stack. **Stop the server first.** |
+| `-remove-demo-setup`   | Reverses `-add-demo-setup`. Revokes every token ever issued to the demo user, removes the credential, the repo, and the admin. Idempotent on a clean data dir.                              |
 
 **Help:**
 

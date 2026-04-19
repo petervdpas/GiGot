@@ -102,6 +102,16 @@ func TestParse_Success(t *testing.T) {
 				Sessions: true, Credentials: true, Destinations: true, Keys: true,
 			}, WipeAssumeYes: true},
 		},
+		{
+			name: "-add-demo-setup triggers provisioning mode",
+			args: []string{"-add-demo-setup"},
+			want: Options{Mode: ModeAddDemoSetup},
+		},
+		{
+			name: "-remove-demo-setup triggers teardown mode",
+			args: []string{"-remove-demo-setup"},
+			want: Options{Mode: ModeRemoveDemoSetup},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
