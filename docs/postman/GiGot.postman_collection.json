@@ -1,0 +1,1134 @@
+{
+  "info": {
+    "_postman_id": "a9e6f2f1-0000-4000-8000-000000000001",
+    "name": "GiGot",
+    "description": "End-to-end test collection for GiGot.\n\nRun the folders in order (or the whole collection with Run Collection) — later requests consume variables captured by earlier ones (subscriptionToken, repoName, headVersion, credentialName, destinationId).\n\nPrerequisites:\n1. GiGot is running (`./gigot`) and reachable at `{{baseUrl}}`.\n2. An admin account exists. Create one out of band: `./gigot -add-admin alice`, then set `{{adminUser}}` + `{{adminPass}}` in your environment.\n3. `auth.enabled = true` in gigot.json if you want the token-scoped requests to actually gate — with auth disabled they all succeed regardless of `subscriptionToken`.\n\nThe legacy `POST /api/auth/token` endpoint is exercised in the final folder so you can prove the backward-compat shim still works.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{subscriptionToken}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:3417" },
+    { "key": "adminUser", "value": "alice" },
+    { "key": "adminPass", "value": "" },
+    { "key": "subscriptionToken", "value": "" },
+    { "key": "repoName", "value": "postman-demo" },
+    { "key": "headVersion", "value": "" },
+    { "key": "credentialName", "value": "postman-pat" },
+    { "key": "destinationId", "value": "" },
+    { "key": "clientId", "value": "postman-client" },
+    { "key": "legacyToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Bootstrap",
+      "description": "Unauthenticated endpoints. Good smoke-test before touching auth.",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/health", "host": ["{{baseUrl}}"], "path": ["api", "health"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('status: ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Server pubkey",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/crypto/pubkey", "host": ["{{baseUrl}}"], "path": ["api", "crypto", "pubkey"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('pubkey present', () => pm.expect(body.public_key).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Root status page (HTML)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/", "host": ["{{baseUrl}}"], "path": [""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('HTML body', () => pm.expect(pm.response.text()).to.match(/<html/i));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Admin Session",
+      "description": "Cookie-based admin auth for /api/admin/* routes. Postman keeps the gigot_session cookie in its cookie jar for the host, so subsequent admin folders don't need to re-authenticate.",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUser}}\",\n  \"password\": \"{{adminPass}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/login", "host": ["{{baseUrl}}"], "path": ["admin", "login"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('session cookie set', () => {",
+                  "  const jar = pm.cookies;",
+                  "  pm.expect(jar.has('gigot_session')).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Current session",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/admin/session", "host": ["{{baseUrl}}"], "path": ["api", "admin", "session"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('username echoed', () => pm.expect(body.username).to.eql(pm.collectionVariables.get('adminUser')));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Admin Tokens",
+      "description": "Issue / list / rescope / revoke subscription keys. The Issue request captures the new token into {{subscriptionToken}} so the later bearer-authed folders can use it.",
+      "item": [
+        {
+          "name": "Issue token (saves {{subscriptionToken}})",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUser}}\",\n  \"repos\": [\"{{repoName}}\"]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/tokens", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tokens"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('token returned', () => pm.expect(body.token).to.be.a('string').and.not.empty);",
+                  "pm.collectionVariables.set('subscriptionToken', body.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List tokens",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/admin/tokens", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tokens"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('tokens array', () => pm.expect(body.tokens).to.be.an('array'));",
+                  "pm.test('includes ours', () => {",
+                  "  const ours = pm.collectionVariables.get('subscriptionToken');",
+                  "  pm.expect(body.tokens.some(t => t.token === ours)).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rescope token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{subscriptionToken}}\",\n  \"repos\": [\"{{repoName}}\"]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/tokens", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tokens"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Admin Credentials",
+      "description": "Outbound credential vault. The Create request writes a synthetic PAT and captures {{credentialName}}. The secret is write-only — list/get never return it.",
+      "item": [
+        {
+          "name": "Create credential",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{credentialName}}\",\n  \"kind\": \"github_pat\",\n  \"secret\": \"ghp_postman_test_dummy_not_a_real_token\",\n  \"notes\": \"Created by Postman collection run\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/credentials", "host": ["{{baseUrl}}"], "path": ["api", "admin", "credentials"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('name echoed', () => pm.expect(body.name).to.eql(pm.collectionVariables.get('credentialName')));",
+                  "pm.test('secret never echoed', () => pm.expect(body.secret).to.be.undefined);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List credentials",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/admin/credentials", "host": ["{{baseUrl}}"], "path": ["api", "admin", "credentials"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('credentials array', () => pm.expect(body.credentials).to.be.an('array'));",
+                  "pm.test('no secrets leaked', () => body.credentials.forEach(c => pm.expect(c.secret).to.be.undefined));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get one credential",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/credentials/{{credentialName}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "credentials", "{{credentialName}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('kind github_pat', () => pm.expect(pm.response.json().kind).to.eql('github_pat'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rotate credential (PATCH)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"secret\": \"ghp_postman_rotated_still_a_dummy\",\n  \"notes\": \"Rotated by Postman collection run\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/credentials/{{credentialName}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "credentials", "{{credentialName}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('secret still hidden', () => pm.expect(pm.response.json().secret).to.be.undefined);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Client Enrollment",
+      "description": "Enroll a synthetic client pubkey so the server can seal responses. Re-running with the same client_id + pubkey is idempotent; different pubkey returns 409.",
+      "item": [
+        {
+          "name": "Enroll client",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_id\": \"{{clientId}}\",\n  \"public_key\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/clients/enroll", "host": ["{{baseUrl}}"], "path": ["api", "clients", "enroll"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('client_id echoed', () => pm.expect(body.client_id).to.eql(pm.collectionVariables.get('clientId')));",
+                  "pm.test('server_public_key returned', () => pm.expect(body.server_public_key).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Re-enroll same key (idempotent)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_id\": \"{{clientId}}\",\n  \"public_key\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/clients/enroll", "host": ["{{baseUrl}}"], "path": ["api", "clients", "enroll"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 (idempotent)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Repos",
+      "description": "Create / inspect / list repositories. Create uses scaffold_formidable:true so GET /head works immediately on the fresh repo.",
+      "item": [
+        {
+          "name": "Create repo (scaffold Formidable)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{repoName}}\",\n  \"scaffold_formidable\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/repos", "host": ["{{baseUrl}}"], "path": ["api", "repos"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 or already-exists', () => pm.expect([201, 409]).to.include(pm.response.code));",
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test('name echoed', () => pm.expect(body.name).to.eql(pm.collectionVariables.get('repoName')));",
+                  "  pm.test('not empty (scaffolded)', () => pm.expect(body.empty).to.eql(false));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List repos",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/repos", "host": ["{{baseUrl}}"], "path": ["api", "repos"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('our repo is in the list', () => {",
+                  "  const r = pm.collectionVariables.get('repoName');",
+                  "  pm.expect(body.repos.some(x => x.name === r)).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get one repo",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Repo status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "status"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Repo branches",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/branches",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "branches"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Repo log",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/log?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "log"],
+              "query": [{ "key": "limit", "value": "10" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 Sync — Read",
+      "description": "Structured read endpoints. GET /head captures {{headVersion}} so the write folder can use it as parent_version.",
+      "item": [
+        {
+          "name": "Head (saves {{headVersion}})",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/head",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "head"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('version non-empty', () => pm.expect(body.version).to.be.a('string').and.not.empty);",
+                  "pm.collectionVariables.set('headVersion', body.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tree at HEAD",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/tree",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "tree"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('files array', () => pm.expect(pm.response.json().files).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Snapshot at HEAD",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/snapshot",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "snapshot"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('files base64-encoded', () => {",
+                  "  if (body.files.length === 0) return;",
+                  "  pm.expect(body.files[0].content_b64).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "File at HEAD (README.md)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/files/README.md",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "files", "README.md"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 or 404', () => pm.expect([200, 404]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('content_b64 present', () => pm.expect(pm.response.json().content_b64).to.be.a('string'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Changes since HEAD (expect empty)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/changes?since={{headVersion}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "changes"],
+              "query": [{ "key": "since", "value": "{{headVersion}}" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 Sync — Write",
+      "description": "Exercise the structured write path. Each request uses {{headVersion}} captured earlier as parent_version; after a successful write, the response's new version is saved back into {{headVersion}} so the next write fast-forwards.",
+      "item": [
+        {
+          "name": "PUT one file (fast-forward)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parent_version\": \"{{headVersion}}\",\n  \"content_b64\": \"aGVsbG8gZnJvbSBwb3N0bWFuCg==\",\n  \"message\": \"postman: add hello.txt\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/files/hello.txt",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "files", "hello.txt"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('new version returned', () => pm.expect(body.version).to.be.a('string').and.not.empty);",
+                  "pm.test('fast-forward', () => pm.expect(body.fast_forward).to.eql(true));",
+                  "pm.collectionVariables.set('headVersion', body.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST multi-file commit",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parent_version\": \"{{headVersion}}\",\n  \"changes\": [\n    { \"op\": \"put\", \"path\": \"notes/a.md\", \"content_b64\": \"YWFhCg==\" },\n    { \"op\": \"put\", \"path\": \"notes/b.md\", \"content_b64\": \"YmJiCg==\" }\n  ],\n  \"message\": \"postman: add two notes\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/commits",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "commits"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('new version returned', () => pm.expect(body.version).to.be.a('string').and.not.empty);",
+                  "pm.collectionVariables.set('headVersion', body.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT with stale parent (expect 409)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parent_version\": \"0000000000000000000000000000000000000000\",\n  \"content_b64\": \"c3RhbGUK\",\n  \"message\": \"postman: stale write should conflict\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/files/hello.txt",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "files", "hello.txt"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('stale parent is a 4xx', () => pm.expect(pm.response.code).to.be.within(400, 499));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 Formidable Records",
+      "description": "Formidable-first record query endpoint. The demo repo is scaffolded with a basic.yaml template but no records, so the list starts empty. Put a record first if you want non-zero results.",
+      "item": [
+        {
+          "name": "PUT a record (so the next list has a row)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parent_version\": \"{{headVersion}}\",\n  \"content_b64\": \"eyJtZXRhIjp7ImlkIjoicG9zdG1hbi0xIiwidGVtcGxhdGUiOiJiYXNpYy55YW1sIiwiY3JlYXRlZCI6IjIwMjYtMDEtMDFUMDA6MDA6MDBaIiwidXBkYXRlZCI6IjIwMjYtMDEtMDFUMDA6MDA6MDBaIn0sImRhdGEiOnsibmFtZSI6IlBvc3RtYW4gUmVjb3JkIn19Cg==\",\n  \"message\": \"postman: add one record\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/files/storage/basic.yaml/postman-1.meta.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "files", "storage", "basic.yaml", "postman-1.meta.json"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('headVersion', body.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List records for template",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}/records/basic.yaml",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}", "records", "basic.yaml"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('records array', () => pm.expect(pm.response.json().records).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 Admin Destinations",
+      "description": "Per-repo mirror destinations. The Create request references {{credentialName}} from folder 03; deleting that credential would return 409 until the destination is removed (credential-vault.md §5).",
+      "item": [
+        {
+          "name": "Create destination (saves {{destinationId}})",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://mirror.example.test/{{repoName}}.git\",\n  \"credential_name\": \"{{credentialName}}\",\n  \"enabled\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/repos/{{repoName}}/destinations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "repos", "{{repoName}}", "destinations"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('id returned', () => pm.expect(body.id).to.be.a('string').and.not.empty);",
+                  "pm.collectionVariables.set('destinationId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List destinations",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/repos/{{repoName}}/destinations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "repos", "{{repoName}}", "destinations"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('destinations array', () => pm.expect(pm.response.json().destinations).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get one destination",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/repos/{{repoName}}/destinations/{{destinationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "repos", "{{repoName}}", "destinations", "{{destinationId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disable destination (PATCH)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/repos/{{repoName}}/destinations/{{destinationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "repos", "{{repoName}}", "destinations", "{{destinationId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('enabled flipped', () => pm.expect(pm.response.json().enabled).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete-credential-while-referenced (expect 409)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/credentials/{{credentialName}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "credentials", "{{credentialName}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('ref_repos present', () => pm.expect(body.ref_repos).to.be.an('array').that.is.not.empty);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 Legacy Tokens",
+      "description": "Backward-compat shim. New integrations should use /api/admin/tokens; this folder exists so regressions in the legacy path are caught.",
+      "item": [
+        {
+          "name": "Issue (legacy)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"legacy-postman\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/token", "host": ["{{baseUrl}}"], "path": ["api", "auth", "token"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('token returned', () => pm.expect(body.token).to.be.a('string').and.not.empty);",
+                  "pm.collectionVariables.set('legacyToken', body.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke (legacy)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{legacyToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/token", "host": ["{{baseUrl}}"], "path": ["api", "auth", "token"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11 Teardown",
+      "description": "Remove the artefacts this collection created so a second run starts from a clean slate. Destinations → credential → repo → token → logout.",
+      "item": [
+        {
+          "name": "Delete destination",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/repos/{{repoName}}/destinations/{{destinationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "repos", "{{repoName}}", "destinations", "{{destinationId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete credential",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/credentials/{{credentialName}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "credentials", "{{credentialName}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete repo",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/repos/{{repoName}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "repos", "{{repoName}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 or 204', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke subscription token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{subscriptionToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/tokens", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tokens"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/admin/logout", "host": ["{{baseUrl}}"], "path": ["admin", "logout"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
