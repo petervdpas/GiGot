@@ -1504,7 +1504,8 @@ paths:
         scaffold_formidable: true to seed the fresh repo with a
         starter Formidable context (README, templates/basic.yaml,
         storage/.gitkeep, and the .formidable/context.json marker)
-        in an initial commit.
+        in an initial commit. POST appends one `repo_create` entry
+        to refs/audit/main — see docs/design/audit-trail.md.
       parameters:
       - description: Create-repo body (POST)
         in: body
@@ -1551,7 +1552,8 @@ paths:
         scaffold_formidable: true to seed the fresh repo with a
         starter Formidable context (README, templates/basic.yaml,
         storage/.gitkeep, and the .formidable/context.json marker)
-        in an initial commit.
+        in an initial commit. POST appends one `repo_create` entry
+        to refs/audit/main — see docs/design/audit-trail.md.
       parameters:
       - description: Create-repo body (POST)
         in: body
@@ -1739,7 +1741,9 @@ paths:
         given parent_version as a single commit. Returns 200 with
         the new version on success (fast-forward or auto-merged).
         Returns 409 with conflicts[] if any path conflicts — the
-        whole commit is rejected, no partial apply.
+        whole commit is rejected, no partial apply. On success,
+        appends one `commit` entry to refs/audit/main — see
+        docs/design/audit-trail.md.
       parameters:
       - description: Repository name
         in: path
@@ -1842,7 +1846,9 @@ paths:
         commit (merged_from/merged_with populated on auto-merge).
         Returns 409 with base/theirs/yours blobs on a real conflict,
         or 409 with only current_version + yours when parent_version
-        is not an ancestor of HEAD.
+        is not an ancestor of HEAD. On success, appends one
+        `file_put` entry to refs/audit/main — see
+        docs/design/audit-trail.md.
       parameters:
       - description: Repository name
         in: path

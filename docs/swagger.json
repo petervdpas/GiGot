@@ -1453,7 +1453,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "GET lists all repositories, POST creates a new one. Set\nscaffold_formidable: true to seed the fresh repo with a\nstarter Formidable context (README, templates/basic.yaml,\nstorage/.gitkeep, and the .formidable/context.json marker)\nin an initial commit.",
+                "description": "GET lists all repositories, POST creates a new one. Set\nscaffold_formidable: true to seed the fresh repo with a\nstarter Formidable context (README, templates/basic.yaml,\nstorage/.gitkeep, and the .formidable/context.json marker)\nin an initial commit. POST appends one `repo_create` entry\nto refs/audit/main — see docs/design/audit-trail.md.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1519,7 +1519,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "GET lists all repositories, POST creates a new one. Set\nscaffold_formidable: true to seed the fresh repo with a\nstarter Formidable context (README, templates/basic.yaml,\nstorage/.gitkeep, and the .formidable/context.json marker)\nin an initial commit.",
+                "description": "GET lists all repositories, POST creates a new one. Set\nscaffold_formidable: true to seed the fresh repo with a\nstarter Formidable context (README, templates/basic.yaml,\nstorage/.gitkeep, and the .formidable/context.json marker)\nin an initial commit. POST appends one `repo_create` entry\nto refs/audit/main — see docs/design/audit-trail.md.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1797,7 +1797,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Applies an ordered list of put/delete changes against the\ngiven parent_version as a single commit. Returns 200 with\nthe new version on success (fast-forward or auto-merged).\nReturns 409 with conflicts[] if any path conflicts — the\nwhole commit is rejected, no partial apply.",
+                "description": "Applies an ordered list of put/delete changes against the\ngiven parent_version as a single commit. Returns 200 with\nthe new version on success (fast-forward or auto-merged).\nReturns 409 with conflicts[] if any path conflicts — the\nwhole commit is rejected, no partial apply. On success,\nappends one `commit` entry to refs/audit/main — see\ndocs/design/audit-trail.md.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1942,7 +1942,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Commits one file against the given parent_version. Returns\n200 with the new version for a fast-forward or auto-merged\ncommit (merged_from/merged_with populated on auto-merge).\nReturns 409 with base/theirs/yours blobs on a real conflict,\nor 409 with only current_version + yours when parent_version\nis not an ancestor of HEAD.",
+                "description": "Commits one file against the given parent_version. Returns\n200 with the new version for a fast-forward or auto-merged\ncommit (merged_from/merged_with populated on auto-merge).\nReturns 409 with base/theirs/yours blobs on a real conflict,\nor 409 with only current_version + yours when parent_version\nis not an ancestor of HEAD. On success, appends one\n`file_put` entry to refs/audit/main — see\ndocs/design/audit-trail.md.",
                 "consumes": [
                     "application/json"
                 ],

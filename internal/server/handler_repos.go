@@ -19,7 +19,8 @@ import (
 // @Description  scaffold_formidable: true to seed the fresh repo with a
 // @Description  starter Formidable context (README, templates/basic.yaml,
 // @Description  storage/.gitkeep, and the .formidable/context.json marker)
-// @Description  in an initial commit.
+// @Description  in an initial commit. POST appends one `repo_create` entry
+// @Description  to refs/audit/main — see docs/design/audit-trail.md.
 // @Tags         repos
 // @Accept       json
 // @Produce      json

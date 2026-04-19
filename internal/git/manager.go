@@ -232,6 +232,7 @@ func (m *Manager) InitBare(name string) error {
 	}
 
 	m.enableReceivePack(path)
+	_ = m.installAuditGuard(path)
 	return nil
 }
 
@@ -254,6 +255,7 @@ func (m *Manager) CloneBare(name, sourceURL string) error {
 	}
 
 	m.enableReceivePack(path)
+	_ = m.installAuditGuard(path)
 	return nil
 }
 
@@ -261,6 +263,64 @@ func (m *Manager) CloneBare(name, sourceURL string) error {
 // effort — failure here is non-fatal for the caller.
 func (m *Manager) enableReceivePack(path string) {
 	exec.Command("git", "-C", path, "config", "http.receivepack", "true").Run()
+}
+
+// auditGuardHook is the POSIX-sh pre-receive hook that refuses any client
+// push whose refname lives under refs/audit/*. Server-side writes via
+// update-ref (AppendAudit) bypass hooks and are unaffected. Kept as a tiny
+// inline script so the installation is a single file write with no
+// dependencies on the host toolchain beyond /bin/sh.
+const auditGuardHook = `#!/bin/sh
+# GiGot: reject client pushes to refs/audit/* (server-owned).
+while read -r _old _new ref; do
+    case "$ref" in
+        refs/audit/*)
+            echo "GiGot: refs/audit/* is server-owned; rejecting $ref" >&2
+            exit 1
+            ;;
+    esac
+done
+`
+
+// installAuditGuard writes hooks/pre-receive into the named bare repo.
+// Overwrites any prior content because the guard is load-bearing for the
+// audit-trail tamper-proof property — a hand-edited hook is always wrong.
+// Best-effort — failure here is non-fatal for the caller, but is surfaced
+// as a returned error so callers who care (EnsureAuditGuards) can report
+// partial failure.
+func (m *Manager) installAuditGuard(repoPath string) error {
+	hooksDir := filepath.Join(repoPath, "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir hooks: %w", err)
+	}
+	hookPath := filepath.Join(hooksDir, "pre-receive")
+	if err := os.WriteFile(hookPath, []byte(auditGuardHook), 0o755); err != nil {
+		return fmt.Errorf("write pre-receive: %w", err)
+	}
+	return nil
+}
+
+// EnsureAuditGuards re-installs the audit-guard hook on every repo under
+// the manager's root. Intended to run once at server start so repos
+// created before the guard existed are migrated without operator work.
+// Repo-level failures are collected and returned joined; a successful
+// return means every repo is guarded.
+func (m *Manager) EnsureAuditGuards() error {
+	names, err := m.List()
+	if err != nil {
+		return fmt.Errorf("list repos: %w", err)
+	}
+	var failures []string
+	for _, name := range names {
+		if err := m.installAuditGuard(m.RepoPath(name)); err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", name, err))
+		}
+	}
+	if len(failures) > 0 {
+		return fmt.Errorf("install audit guard failed on %d repo(s): %s",
+			len(failures), strings.Join(failures, "; "))
+	}
+	return nil
 }
 
 // List returns the names of all repositories.

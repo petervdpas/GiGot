@@ -131,6 +131,14 @@ func New(cfg *config.Config) *Server {
 		policy:          policy.TokenRepoPolicy{},
 		mux:             http.NewServeMux(),
 	}
+	// Retro-install the refs/audit/* pre-receive guard on any repos
+	// created before slice 2 shipped. Newly-created repos get it in
+	// InitBare/CloneBare. Logged but not fatal — a running server with
+	// some unguarded legacy repos is still strictly better than
+	// failing to boot.
+	if err := s.git.EnsureAuditGuards(); err != nil {
+		log.Printf("server: EnsureAuditGuards: %v", err)
+	}
 	s.routes()
 	return s
 }

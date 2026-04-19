@@ -65,17 +65,13 @@ tracker and is the source of truth for "what's next."
       **Must also** include `refs/audit/*` in the push refspec so the
       audit chain travels to mirrors alongside `refs/heads/*` (see
       [`docs/design/audit-trail.md`](docs/design/audit-trail.md)).
-- [ ] **Audit trail — slice 2 (`git-receive-pack` coverage + guardrail).**
-      Current audit chain on `refs/audit/main` covers `PUT /files`,
-      `POST /commits`, and `POST /api/repos` (see Done below). Missing:
-      snapshot-diff audit events for the CLI `git push` path
-      (`handler_git.go`), and a pre-receive hook installed in every bare
-      repo that rejects any ref update under `refs/audit/*`. Without
-      the hook, a client who knows the ref name could push to it
-      directly — low risk (they would need to forge the GiGot Audit
-      identity) but worth closing. See
-      [`docs/design/audit-trail.md`](docs/design/audit-trail.md)
-      "Guardrails".
+- [ ] **Audit trail — `git-receive-pack` event coverage.** The
+      tamper-proof guard is shipped (see below); still outstanding is
+      emitting `push_received` audit entries when a client pushes via
+      the smart-HTTP path. Approach: snapshot `git for-each-ref` before
+      and after `git-receive-pack` in `handler_git.go`, diff the two,
+      and append one audit entry per changed ref (branch creates,
+      updates, deletes). Low risk, one handler touched.
 - [ ] **Mirror-sync — admin UI (slice 3).** "Destinations" section on
       the repo detail page with add/edit/delete rows and a prominent
       privacy-warning checkbox per §3.7 of the remote-sync design.
@@ -97,6 +93,22 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Audit trail — tamper-proof guard (slice 2 of 3).**
+      Every bare repo now carries a `hooks/pre-receive` that rejects any
+      ref update under `refs/audit/*` from `git-receive-pack`. Installed
+      by `InitBare`/`CloneBare` on new repos and retro-installed by
+      `Manager.EnsureAuditGuards()` at server start on any legacy repo.
+      Server-side writes via `AppendAudit` bypass hooks (they use
+      `update-ref` directly), so the guard does not inhibit GiGot's
+      own writes. Unit coverage in
+      `internal/git/audit_guard_test.go` proves end-to-end push
+      rejection: a forced client push of a forged commit to
+      `refs/audit/main` is refused, and the ref still points at the
+      server-written entry afterwards. Combined with the hash-chain
+      tamper-evidence from slice 1, the audit chain is now both
+      tamper-proof (cannot be overwritten by a client) and
+      tamper-evident (any unauthorised modification changes every
+      downstream SHA).
 - [x] **Audit trail on `refs/audit/main` (slice 1).** Every repo carries
       a server-authored, append-only audit chain written as git commits
       on `refs/audit/main`. One entry per audited operation, chained by

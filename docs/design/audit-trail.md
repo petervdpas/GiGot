@@ -104,16 +104,31 @@ fetches.
 
 ## Guardrails
 
-**Current.** GiGot is the only writer by convention. The Formidable
-write paths (`PUT /files`, `POST /commits`, `POST /api/repos`) call
-`AppendAudit` after their git op succeeds; no other code path writes
-to `refs/audit/*`.
+### Tamper-proof (shipped — slice 2)
 
-**Slice 2 (deferred).** A pre-receive hook installed in every bare repo
-that rejects any ref update under `refs/audit/*` from `git-receive-pack`.
-Paired with snapshot-diff audit events for `git-receive-pack` itself,
-so CLI `git push` is instrumented and client writes to the audit ref are
-blocked at the protocol layer.
+Every bare repo carries a `hooks/pre-receive` that refuses any ref update
+whose refname starts with `refs/audit/`. The hook is installed by
+`Manager.InitBare` / `Manager.CloneBare` on new repos and retro-installed
+by `Manager.EnsureAuditGuards()` at server start on repos that predate
+the guard. The hook body is the canonical text stored in
+`internal/git.auditGuardHook`; re-running the installer overwrites any
+hand-edited version because the guard is load-bearing.
+
+`AppendAudit` uses `git update-ref` directly, which bypasses hooks by
+design in git's plumbing layer. So the hook blocks client pushes via
+`git-receive-pack` without interfering with server-side writes.
+
+**Combined with slice 1's hash chain, the audit trail is now both
+tamper-proof (cannot be overwritten by a client) and tamper-evident
+(any out-of-band modification changes every downstream SHA).**
+
+### Still outstanding (slice 3)
+
+Emit `push_received` audit entries for the `git-receive-pack` path so
+CLI `git push` operations are instrumented. Approach: snapshot
+`git for-each-ref` before and after the receive-pack subprocess runs,
+diff the two, and append one entry per changed ref. Tracked in the
+README roadmap.
 
 ## Open questions
 

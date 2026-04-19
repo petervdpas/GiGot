@@ -236,7 +236,9 @@ type WriteFileConflictResponse struct {
 // @Description  commit (merged_from/merged_with populated on auto-merge).
 // @Description  Returns 409 with base/theirs/yours blobs on a real conflict,
 // @Description  or 409 with only current_version + yours when parent_version
-// @Description  is not an ancestor of HEAD.
+// @Description  is not an ancestor of HEAD. On success, appends one
+// @Description  `file_put` entry to refs/audit/main — see
+// @Description  docs/design/audit-trail.md.
 // @Tags         sync
 // @Accept       json
 // @Produce      json
@@ -392,7 +394,9 @@ type CommitRecordConflictResponse struct {
 // @Description  given parent_version as a single commit. Returns 200 with
 // @Description  the new version on success (fast-forward or auto-merged).
 // @Description  Returns 409 with conflicts[] if any path conflicts — the
-// @Description  whole commit is rejected, no partial apply.
+// @Description  whole commit is rejected, no partial apply. On success,
+// @Description  appends one `commit` entry to refs/audit/main — see
+// @Description  docs/design/audit-trail.md.
 // @Tags         sync
 // @Accept       json
 // @Produce      json
