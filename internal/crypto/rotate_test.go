@@ -146,6 +146,7 @@ func TestDefaultSealedFiles(t *testing.T) {
 		"/var/lib/gigot/data/clients.enc",
 		"/var/lib/gigot/data/credentials.enc",
 		"/var/lib/gigot/data/destinations.enc",
+		"/var/lib/gigot/data/sessions.enc",
 		"/var/lib/gigot/data/tokens.enc",
 	}
 	if len(got) != len(want) {

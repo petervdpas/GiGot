@@ -50,6 +50,23 @@ Feature: Admin subscription-key management
     And I log in as admin "alice" with password "hunter2"
     Then the response status should be 200
 
+  Scenario: Admin session survives a server restart
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And the server restarts
+    And I GET "/api/admin/tokens"
+    Then the response status should be 200
+
+  Scenario: Logout persists across a restart
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/admin/logout" with body ''
+    And the server restarts
+    And I GET "/api/admin/tokens"
+    Then the response status should be 401
+
   Scenario: Admin login page is served as HTML
     Given the server is running
     When I GET "/admin"

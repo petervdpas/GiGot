@@ -108,6 +108,13 @@ func New(cfg *config.Config) *Server {
 	}
 
 	session := auth.NewSessionStrategy(12 * time.Hour)
+	sessionStore, err := auth.NewSealedSessionStore(filepath.Join(cfg.Crypto.DataDir, "sessions.enc"), enc)
+	if err != nil {
+		log.Fatalf("server: open session store: %v", err)
+	}
+	if err := session.SetPersister(sessionStore); err != nil {
+		log.Fatalf("server: attach session persister: %v", err)
+	}
 	ap.Register(session)
 
 	s := &Server{

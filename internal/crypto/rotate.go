@@ -139,6 +139,7 @@ func DefaultSealedFiles(dataDir string) []string {
 		filepath.Join(dataDir, "clients.enc"),
 		filepath.Join(dataDir, "credentials.enc"),
 		filepath.Join(dataDir, "destinations.enc"),
+		filepath.Join(dataDir, "sessions.enc"),
 		filepath.Join(dataDir, "tokens.enc"),
 	}
 }

@@ -80,11 +80,21 @@ tracker and is the source of truth for "what's next."
       with curve25519 challenge/response, admin keypair held in the
       browser (passphrase-encrypted in localStorage). Password path stays
       available as a fallback. Requires vendoring `tweetnacl-js`.
-- [ ] **HA-friendly admin sessions.** Persist sessions in a sealed store
-      instead of in-memory so admins don't re-login after every restart.
 
 Done and shipping:
 
+- [x] **Persistent admin sessions.** Sessions now round-trip through
+      `data/sessions.enc` (sealed, rewrapped by `-rotate-keys` alongside
+      the other stores), so admins no longer re-login after every
+      restart or key rotation. `auth.SessionStrategy.SetPersister`
+      drops already-expired entries on load and scrubs them from disk
+      so the file doesn't grow unbounded. Originally listed as
+      "HA-friendly admin sessions" — relabeled because a file-backed
+      store fixes *restart-survives* but not *multi-instance-shared
+      state*; true HA still needs Redis/DB. Security-model writeup in
+      [§Security Model and Tradeoffs](#security-model-and-tradeoffs)
+      updated to reflect the reversed posture (session IDs now exist
+      on disk, sealed).
 - [x] **Mirror-sync — destinations data model + admin API (slice 1 of 3).**
       New `internal/destinations` package and sealed `data/destinations.enc`
       (rewrapped by `-rotate-keys`). Admin endpoints under
@@ -335,7 +345,7 @@ config file, not the process's working directory. This makes it safe to invoke
 | ----------------- | ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | private_key_path  | string | `"./data/server.key"` | The server's curve25519 private key, base64-encoded in a 0600 file. Generated automatically on first run if missing.                       |
 | public_key_path   | string | `"./data/server.pub"` | Matching public key in a 0644 file. Also generated on first run.                                                                           |
-| data_dir          | string | `"./data"`            | Where encrypted stores live: `clients.enc` (enrolled Formidable clients), `tokens.enc` (subscription keys), `admins.enc` (admin accounts), `credentials.enc` (outbound credential vault), `destinations.enc` (per-repo mirror destinations). |
+| data_dir          | string | `"./data"`            | Where encrypted stores live: `clients.enc` (enrolled Formidable clients), `tokens.enc` (subscription keys), `admins.enc` (admin accounts), `credentials.enc` (outbound credential vault), `destinations.enc` (per-repo mirror destinations), `sessions.enc` (active admin sessions). |
 
 ### `logging`
 
@@ -374,14 +384,15 @@ After `-init` and a first run, you'll see something like:
     ├── tokens.enc            # sealed: issued subscription keys
     ├── admins.enc            # sealed: admin accounts + bcrypt hashes
     ├── credentials.enc       # sealed: outbound credentials (PATs, SSH keys, …)
-    └── destinations.enc      # sealed: per-repo mirror-sync destinations
+    ├── destinations.enc      # sealed: per-repo mirror-sync destinations
+    └── sessions.enc          # sealed: active admin sessions (restart-survives)
 ```
 
-The five `.enc` files are NaCl-sealed to the server's own public key. **Only a
+The six `.enc` files are NaCl-sealed to the server's own public key. **Only a
 GiGot process holding the matching `server.key` can read them.** If you lose
 `server.key`, you lose every admin account, every subscription key, every
-enrolled client pubkey, every stored outbound credential, and every configured
-mirror destination — there is no recovery.
+enrolled client pubkey, every stored outbound credential, every configured
+mirror destination, and every active admin session — there is no recovery.
 
 **Back up `server.key` somewhere safe.**
 
@@ -736,9 +747,18 @@ login when you're already authenticated at the gateway.
   the rotation. Once the server comes back up, an admin can log in, and any
   Formidable clients reconnect, run `rm data/*.bak.*` to purge the backups.
   They are rollback-only insurance; they are not ongoing history.
-- **In-memory sessions.** Admin sessions live in process memory and are lost on
-  restart — admins re-log in. This is deliberate: it avoids persisting session
-  tokens at all. It means the admin UI is not HA-friendly yet.
+- **Persistent admin sessions.** Admin sessions are stored in the sealed
+  `data/sessions.enc` file so they survive a restart — no re-login after
+  `./gigot -rotate-keys`, a routine deploy, or an ordinary bounce. The
+  tradeoff is that an attacker holding `server.key` can now read active
+  session IDs in addition to admins/tokens/credentials/destinations;
+  in practice the blast radius of a compromised server key is already
+  "full server takeover," so this moves the needle marginally. Expired
+  entries are scrubbed from the file on load so the file never grows
+  unbounded. A true multi-instance-HA setup (two GiGot processes behind a
+  load balancer sharing state) still needs a shared store like Redis —
+  the sealed-file approach only handles *restart-survives*, not
+  *concurrent-writers*.
 - **Bearer tokens are opaque, not JWTs.** GiGot issues random 32-byte tokens
   that are looked up server-side. They can be revoked. They do not carry claims.
   Each token is bound to an **allowlist of repositories** the bearer may
