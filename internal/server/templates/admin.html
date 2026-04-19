@@ -68,7 +68,8 @@
         </div>
         <div class="card">
           <h2>Existing repositories</h2>
-          <ul id="repo-list" class="repo-list-ul"></ul>
+          <div id="repo-grid" class="card-grid"></div>
+          <div id="repo-empty" class="muted hidden">No repositories yet — create one above.</div>
         </div>
       </div>
 
@@ -90,10 +91,8 @@
         </div>
         <div class="card">
           <h2>Active keys</h2>
-          <table>
-            <thead><tr><th>Username</th><th>Repos</th><th>Token</th><th></th></tr></thead>
-            <tbody id="token-rows"></tbody>
-          </table>
+          <div id="token-grid" class="card-grid"></div>
+          <div id="token-empty" class="muted hidden">No active keys — issue one above.</div>
         </div>
       </div>
     </main>

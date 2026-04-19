@@ -1,9 +1,19 @@
 package server
 
-// RepoInfo describes a repository.
+// RepoInfo describes a repository. Enrichment fields (Head,
+// DefaultBranch, HasFormidable, DestinationCount) are populated by
+// the list endpoint so the admin UI can render rich cards in a
+// single round-trip — a repo that has never been written to (bare,
+// no commits) reports Empty=true and leaves the head fields zero.
 type RepoInfo struct {
-	Name string `json:"name" example:"my-templates"`
-	Path string `json:"path" example:"repos/my-templates.git"`
+	Name             string `json:"name" example:"my-templates"`
+	Path             string `json:"path" example:"repos/my-templates.git"`
+	Empty            bool   `json:"empty" example:"false"`
+	Commits          int    `json:"commits" example:"42"`
+	Head             string `json:"head,omitempty" example:"a1b2c3d4e5f6"`
+	DefaultBranch    string `json:"default_branch,omitempty" example:"main"`
+	HasFormidable    bool   `json:"has_formidable" example:"false"`
+	DestinationCount int    `json:"destination_count" example:"0"`
 }
 
 // RepoListResponse is returned when listing repositories.

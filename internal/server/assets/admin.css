@@ -206,3 +206,109 @@ a:hover { text-decoration: underline; }
 .issue-repos-label { margin-bottom: 0.25rem; }
 .repo-list-ul { list-style: none; }
 .repo-list-ul li { padding: 0.3rem 0; }
+
+/* Card grid used for repositories and subscription-key lists. */
+.card-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.info-card {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.info-card .ic-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.info-card .ic-title {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+  color: #f0f6fc;
+  word-break: break-all;
+}
+.info-card .ic-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.8rem;
+  color: #8b949e;
+}
+.info-card .ic-stats .stat-label {
+  color: #6e7681;
+  margin-right: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.7rem;
+}
+.info-card .ic-stats .stat-value {
+  color: #c9d1d9;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.info-card .ic-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.info-card .ic-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: auto;
+  padding-top: 0.3rem;
+  flex-wrap: wrap;
+}
+
+/* Small pill used for status tags (Formidable, Empty, etc). */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.badge.formidable { background: #1f6feb33; color: #79c0ff; border-color: #1f6feb66; }
+.badge.empty { background: #21262d; color: #8b949e; border-color: #30363d; }
+.badge.warn { background: #9e6a0322; color: #e3b341; border-color: #9e6a0366; }
+
+/* Token field inside a subscription-key card — tall enough to wrap the
+   full hex, with a small copy button aligned flush-right. */
+.token-field {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+}
+.token-field code {
+  background: transparent;
+  padding: 0;
+  flex: 1;
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+.token-field .copy-btn {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.token-field .copy-btn:hover { background: #30363d; }
+.token-field .copy-btn.ok { color: #3fb950; border-color: #238636; }

@@ -2852,6 +2852,30 @@
         "server.RepoInfo": {
             "type": "object",
             "properties": {
+                "commits": {
+                    "type": "integer",
+                    "example": 42
+                },
+                "default_branch": {
+                    "type": "string",
+                    "example": "main"
+                },
+                "destination_count": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "empty": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "has_formidable": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "head": {
+                    "type": "string",
+                    "example": "a1b2c3d4e5f6"
+                },
                 "name": {
                     "type": "string",
                     "example": "my-templates"

@@ -1,7 +1,9 @@
 package server
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -61,16 +63,43 @@ func (s *Server) listRepos(w http.ResponseWriter, r *http.Request) {
 
 	repos := make([]RepoInfo, 0, len(names))
 	for _, name := range names {
-		repos = append(repos, RepoInfo{
-			Name: name,
-			Path: s.git.RepoPath(name),
-		})
+		repos = append(repos, s.repoInfo(name))
 	}
 
 	writeJSON(w, http.StatusOK, RepoListResponse{
 		Repos: repos,
 		Count: len(repos),
 	})
+}
+
+// repoInfo collects the enriched metadata the admin UI renders on each
+// repo card: HEAD SHA + branch, Formidable marker presence, count of
+// attached mirror destinations. Empty repos (no commits yet) return
+// with Empty=true and head fields unset — callers shouldn't treat that
+// as an error, it's a normal state for a fresh bare repo.
+func (s *Server) repoInfo(name string) RepoInfo {
+	info := RepoInfo{
+		Name: name,
+		Path: s.git.RepoPath(name),
+	}
+	if head, err := s.git.Head(name); err == nil {
+		info.Head = head.Version
+		info.DefaultBranch = head.DefaultBranch
+		// Only a non-empty repo can carry a marker — and reading a
+		// non-existent blob returns ErrPathNotFound, which is fine.
+		if blob, ferr := s.git.File(name, "", formidableMarkerPath); ferr == nil {
+			if raw, derr := base64.StdEncoding.DecodeString(blob.ContentB64); derr == nil && isValidFormidableMarker(raw) {
+				info.HasFormidable = true
+			}
+		}
+	} else if errors.Is(err, gitmanager.ErrRepoEmpty) {
+		info.Empty = true
+	}
+	if n, err := s.git.CommitCount(name); err == nil {
+		info.Commits = n
+	}
+	info.DestinationCount = len(s.destinations.All(name))
+	return info
 }
 
 // filterReposForToken narrows a repo-name list to just the entries the token
@@ -220,10 +249,7 @@ func (s *Server) getRepo(w http.ResponseWriter, r *http.Request, name string) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, RepoInfo{
-		Name: name,
-		Path: s.git.RepoPath(name),
-	})
+	writeJSON(w, http.StatusOK, s.repoInfo(name))
 }
 
 func (s *Server) deleteRepo(w http.ResponseWriter, r *http.Request, name string) {

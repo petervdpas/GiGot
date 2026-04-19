@@ -83,7 +83,12 @@ const api = {
 const loginView = document.getElementById('login');
 const appView = document.getElementById('app');
 
-let repoCache = [];
+// repoInfoCache carries the full RepoInfo objects returned by the list
+// endpoint so renderers that need more than just the name (cards,
+// pickers) don't have to re-fetch. repoNames() exists because the
+// picker and the issue form still just want the name set.
+let repoInfoCache = [];
+function repoNames() { return repoInfoCache.map(r => r.name); }
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -91,14 +96,17 @@ function escapeHtml(s) {
   }[c]));
 }
 
+function shortSha(sha) { return sha ? sha.slice(0, 7) : ''; }
+
 function renderRepoPicker(container, selected) {
   const sel = new Set(selected || []);
   container.innerHTML = '';
-  if (repoCache.length === 0) {
+  const names = repoNames();
+  if (names.length === 0) {
     container.innerHTML = '<span class="muted">No repos exist yet — create one above.</span>';
     return;
   }
-  for (const name of repoCache) {
+  for (const name of names) {
     const label = document.createElement('label');
     label.innerHTML =
       '<input type="checkbox" value="' + escapeHtml(name) + '"' +
@@ -112,67 +120,130 @@ function selectedReposFromPicker(container) {
     .map(cb => cb.value);
 }
 
+function renderRepoCard(r) {
+  const card = document.createElement('div');
+  card.className = 'info-card';
+
+  const badges = [];
+  if (r.has_formidable) badges.push('<span class="badge formidable" title="Scaffolded as a Formidable context">Formidable</span>');
+  if (r.empty) badges.push('<span class="badge empty" title="No commits yet — nothing has been pushed to this repo">empty</span>');
+
+  // Stats always show so a card never renders with just a name and a
+  // delete button. An empty repo displays COMMITS 0 explicitly — no
+  // HEAD/Branch lines (there is no HEAD), but the zero-commits stat
+  // makes the state unambiguous.
+  const stats = [];
+  const commitLabel = r.commits === 1 ? 'commit' : 'commits';
+  stats.push('<span><span class="stat-label">' + commitLabel + '</span><span class="stat-value">' + r.commits + '</span></span>');
+  if (!r.empty) {
+    stats.push('<span><span class="stat-label">HEAD</span><span class="stat-value">' + escapeHtml(shortSha(r.head)) + '</span></span>');
+    if (r.default_branch) {
+      stats.push('<span><span class="stat-label">Branch</span><span class="stat-value">' + escapeHtml(r.default_branch) + '</span></span>');
+    }
+  }
+  stats.push('<span><span class="stat-label">Destinations</span><span class="stat-value">' + r.destination_count + '</span></span>');
+
+  card.innerHTML =
+    '<div class="ic-header">' +
+      '<div class="ic-title">' + escapeHtml(r.name) + '</div>' +
+      '<div class="ic-chips">' + badges.join('') + '</div>' +
+    '</div>' +
+    '<div class="ic-stats">' + stats.join('') + '</div>' +
+    '<div class="ic-actions">' +
+      '<button class="small danger delete-btn">Delete</button>' +
+    '</div>';
+
+  card.querySelector('.delete-btn').addEventListener('click', async () => {
+    if (!confirm('Delete repo "' + r.name + '"? This is destructive — the bare repo and any attached destinations are dropped.')) return;
+    try {
+      await api.deleteRepo(r.name);
+      await refreshRepos();
+      await refreshTokens();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  return card;
+}
+
 async function refreshRepos() {
   try {
     const data = await api.listRepos();
-    repoCache = data.repos.map(r => r.name);
+    repoInfoCache = data.repos || [];
     document.getElementById('repo-count').textContent = data.count;
-    const list = document.getElementById('repo-list');
-    list.replaceChildren(...repoCache.map(name => {
-      const li = document.createElement('li');
-      li.innerHTML =
-        '<code>' + escapeHtml(name) + '</code> ' +
-        '<button class="small danger" data-repo="' + escapeHtml(name) + '">Delete</button>';
-      return li;
-    }));
-    list.querySelectorAll('button.danger').forEach(b => {
-      b.addEventListener('click', async () => {
-        if (!confirm('Delete repo "' + b.dataset.repo + '"? This is destructive.')) return;
-        try {
-          await api.deleteRepo(b.dataset.repo);
-          await refreshRepos();
-          await refreshTokens();
-        } catch (e) {
-          alert(e.message);
-        }
-      });
-    });
+    const grid = document.getElementById('repo-grid');
+    const empty = document.getElementById('repo-empty');
+    grid.replaceChildren(...repoInfoCache.map(renderRepoCard));
+    empty.classList.toggle('hidden', repoInfoCache.length !== 0);
     renderRepoPicker(document.getElementById('issue-repos'), []);
   } catch (e) {
     console.error(e);
   }
 }
 
-function renderTokenRow(t) {
-  const tr = document.createElement('tr');
-  tr.dataset.token = t.token;
+async function copyToClipboard(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const prev = btn.textContent;
+    btn.textContent = 'Copied';
+    btn.classList.add('ok');
+    setTimeout(() => {
+      btn.textContent = prev;
+      btn.classList.remove('ok');
+    }, 1200);
+  } catch {
+    // Clipboard API can be blocked in insecure contexts — fall back to
+    // selecting the code so the user can ⌘/Ctrl-C manually.
+    const code = btn.parentElement.querySelector('code');
+    if (code) {
+      const range = document.createRange();
+      range.selectNodeContents(code);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }
+}
+
+function renderTokenCard(t) {
+  const card = document.createElement('div');
+  card.className = 'info-card';
+  card.dataset.token = t.token;
 
   const repos = (t.repos && t.repos.length)
-    ? t.repos.map(r => '<span class="repo-chip">' + escapeHtml(r) + '</span>').join(' ')
+    ? t.repos.map(r => '<span class="repo-chip">' + escapeHtml(r) + '</span>').join('')
     : '<span class="repo-chip none">no repos</span>';
 
-  tr.innerHTML =
-    '<td>' + escapeHtml(t.username) + '</td>' +
-    '<td class="cell-repos"><span class="repo-list">' + repos + '</span></td>' +
-    '<td><code>' + escapeHtml(t.token) + '</code></td>' +
-    '<td class="row cell-actions">' +
-      '<button class="small secondary edit-btn">Edit access</button> ' +
+  card.innerHTML =
+    '<div class="ic-header">' +
+      '<div class="ic-title">' + escapeHtml(t.username) + '</div>' +
+      '<div class="ic-chips"><span class="badge formidable">' + (t.repos ? t.repos.length : 0) + ' ' +
+        ((t.repos && t.repos.length === 1) ? 'repo' : 'repos') + '</span></div>' +
+    '</div>' +
+    '<div class="ic-chips cell-repos">' + repos + '</div>' +
+    '<div class="token-field">' +
+      '<code class="token-value">' + escapeHtml(t.token) + '</code>' +
+      '<button type="button" class="copy-btn">Copy</button>' +
+    '</div>' +
+    '<div class="ic-actions cell-actions">' +
+      '<button class="small secondary edit-btn">Edit access</button>' +
       '<button class="small danger revoke-btn">Revoke</button>' +
-    '</td>';
+    '</div>';
 
-  tr.querySelector('.revoke-btn').addEventListener('click', async () => {
+  card.querySelector('.copy-btn').addEventListener('click', e => copyToClipboard(t.token, e.currentTarget));
+  card.querySelector('.revoke-btn').addEventListener('click', async () => {
     if (!confirm('Revoke this key?')) return;
     await api.revokeToken(t.token);
     refreshTokens();
   });
-
-  tr.querySelector('.edit-btn').addEventListener('click', () => enterEditMode(tr, t));
-  return tr;
+  card.querySelector('.edit-btn').addEventListener('click', () => enterEditMode(card, t));
+  return card;
 }
 
-function enterEditMode(tr, t) {
-  const cellRepos = tr.querySelector('.cell-repos');
-  const cellActions = tr.querySelector('.cell-actions');
+function enterEditMode(card, t) {
+  const cellRepos = card.querySelector('.cell-repos');
+  const cellActions = card.querySelector('.cell-actions');
 
   const picker = document.createElement('div');
   picker.className = 'repo-picker';
@@ -203,8 +274,8 @@ function enterEditMode(tr, t) {
   });
 
   cancel.addEventListener('click', () => {
-    const fresh = renderTokenRow(t);
-    tr.replaceWith(fresh);
+    const fresh = renderTokenCard(t);
+    card.replaceWith(fresh);
   });
 }
 
@@ -212,8 +283,11 @@ async function refreshTokens() {
   try {
     const data = await api.listTokens();
     document.getElementById('count').textContent = data.count;
-    const tbody = document.getElementById('token-rows');
-    tbody.replaceChildren(...data.tokens.map(renderTokenRow));
+    const grid = document.getElementById('token-grid');
+    const empty = document.getElementById('token-empty');
+    const tokens = data.tokens || [];
+    grid.replaceChildren(...tokens.map(renderTokenCard));
+    empty.classList.toggle('hidden', tokens.length !== 0);
   } catch (e) {
     console.error(e);
   }

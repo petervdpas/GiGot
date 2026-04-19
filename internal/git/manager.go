@@ -338,6 +338,31 @@ func (m *Manager) Branches(name string) ([]BranchInfo, error) {
 	return branches, nil
 }
 
+// CommitCount returns the number of commits reachable from HEAD.
+// An empty repo reports 0 rather than an error, so callers rendering a
+// "repo card" can display "0 commits" without special-casing.
+func (m *Manager) CommitCount(name string) (int, error) {
+	path := m.RepoPath(name)
+	if !m.Exists(name) {
+		return 0, fmt.Errorf("repository %q does not exist", name)
+	}
+	out, err := exec.Command("git", "-C", path, "rev-list", "--count", "HEAD").Output()
+	if err != nil {
+		// rev-list exits non-zero on repos with no commits — that's "0",
+		// not an error condition from the caller's perspective.
+		return 0, nil
+	}
+	s := strings.TrimSpace(string(out))
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, fmt.Errorf("unexpected rev-list output: %q", s)
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, nil
+}
+
 // LogEntry describes a single commit.
 type LogEntry struct {
 	Hash    string `json:"hash"`

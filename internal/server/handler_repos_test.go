@@ -170,6 +170,104 @@ func TestGetRepo(t *testing.T) {
 	}
 }
 
+func TestRepoInfo_EnrichedFields(t *testing.T) {
+	// This test pins down that the admin UI's card data — empty flag,
+	// HEAD, default branch, Formidable marker presence, destination
+	// count — all come from the list endpoint. Breaking any of these
+	// will make a card render stale or empty data.
+	srv, sess := adminTestServer(t)
+
+	// Empty repo: Empty=true, no HEAD, no branch, no marker, zero dests.
+	if err := srv.git.InitBare("fresh"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Scaffolded repo: HasFormidable=true, HEAD set, branch populated.
+	if _, err := srv.createRepoForTest("scaffolded", true); err != nil {
+		t.Fatalf("create scaffolded: %v", err)
+	}
+
+	// Attach a destination to the scaffolded repo so DestinationCount=1.
+	rec := do(t, srv, http.MethodPost, "/api/admin/repos/scaffolded/destinations",
+		map[string]any{
+			"url":             "https://example.org/mirror.git",
+			"credential_name": "github-personal",
+		}, sess)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("destination seed failed: %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec = do(t, srv, http.MethodGet, "/api/repos", nil, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list failed: %d", rec.Code)
+	}
+	var list RepoListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]RepoInfo{}
+	for _, r := range list.Repos {
+		byName[r.Name] = r
+	}
+
+	fresh, ok := byName["fresh"]
+	if !ok {
+		t.Fatal("fresh repo missing from list")
+	}
+	if !fresh.Empty {
+		t.Errorf("fresh.Empty = false, want true")
+	}
+	if fresh.Head != "" || fresh.DefaultBranch != "" {
+		t.Errorf("fresh repo should have no head fields, got %+v", fresh)
+	}
+	if fresh.HasFormidable {
+		t.Errorf("fresh.HasFormidable = true, want false")
+	}
+	if fresh.DestinationCount != 0 {
+		t.Errorf("fresh.DestinationCount = %d, want 0", fresh.DestinationCount)
+	}
+	if fresh.Commits != 0 {
+		t.Errorf("fresh.Commits = %d, want 0", fresh.Commits)
+	}
+
+	scaf, ok := byName["scaffolded"]
+	if !ok {
+		t.Fatal("scaffolded repo missing from list")
+	}
+	if scaf.Empty {
+		t.Error("scaffolded.Empty = true, want false")
+	}
+	if len(scaf.Head) < 7 {
+		t.Errorf("scaffolded.Head looks wrong: %q", scaf.Head)
+	}
+	if scaf.DefaultBranch == "" {
+		t.Error("scaffolded.DefaultBranch empty")
+	}
+	if !scaf.HasFormidable {
+		t.Error("scaffolded.HasFormidable = false, want true")
+	}
+	if scaf.DestinationCount != 1 {
+		t.Errorf("scaffolded.DestinationCount = %d, want 1", scaf.DestinationCount)
+	}
+	if scaf.Commits != 1 {
+		// Scaffold writes exactly one commit (the initial seeded tree).
+		t.Errorf("scaffolded.Commits = %d, want 1", scaf.Commits)
+	}
+}
+
+// createRepoForTest is a small helper that drives POST /api/repos so
+// test setup can reuse the real creation pipeline (scaffold, marker
+// stamp) instead of bypassing it with InitBare.
+func (s *Server) createRepoForTest(name string, scaffold bool) (*http.Response, error) {
+	body := map[string]any{"name": name, "scaffold_formidable": scaffold}
+	buf, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/repos", bytes.NewBuffer(buf))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	return rec.Result(), nil
+}
+
 func TestGetRepoNotFound(t *testing.T) {
 	srv := testServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/repos/nonexistent", nil)
