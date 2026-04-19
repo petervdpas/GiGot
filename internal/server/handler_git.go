@@ -4,10 +4,12 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os/exec"
 	"strings"
 
+	gitmanager "github.com/petervdpas/GiGot/internal/git"
 	"github.com/petervdpas/GiGot/internal/policy"
 )
 
@@ -149,15 +151,59 @@ func (s *Server) handleGitService(w http.ResponseWriter, r *http.Request, servic
 	cmd.Stdin = body
 	cmd.Stderr = nil
 
+	// For pushes, snapshot refs around the subprocess so we can emit one
+	// push_received audit entry per ref that actually moved. Snapshot
+	// failures are logged but never block the push — audit is observability
+	// for an operation that already took its user-facing write.
+	var preRefs map[string]string
+	if service == "receive-pack" {
+		snap, snapErr := s.git.RefSnapshot(name)
+		if snapErr != nil {
+			log.Printf("audit: pre-push ref snapshot failed on repo %q: %v", name, snapErr)
+		} else {
+			preRefs = snap
+		}
+	}
+
 	out, err := cmd.Output()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "git error")
 		return
 	}
 
+	if service == "receive-pack" && preRefs != nil {
+		s.auditPushedRefs(r, name, preRefs)
+	}
+
 	w.Header().Set("Content-Type", fmt.Sprintf("application/x-git-%s-result", service))
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Write(out)
+}
+
+// auditPushedRefs diffs the post-push ref snapshot against the supplied
+// pre-push snapshot and appends one push_received audit entry per ref that
+// the client actually moved. A receive-pack that rejected every update
+// (non-ff, hook refusal) produces an empty diff and so no audit noise.
+func (s *Server) auditPushedRefs(r *http.Request, name string, preRefs map[string]string) {
+	postRefs, err := s.git.RefSnapshot(name)
+	if err != nil {
+		log.Printf("audit: post-push ref snapshot failed on repo %q: %v", name, err)
+		return
+	}
+	actor := auditActor(r)
+	for _, change := range gitmanager.DiffRefSnapshots(preRefs, postRefs) {
+		sha := change.NewSHA
+		if change.Kind == gitmanager.RefDeleted {
+			sha = change.OldSHA
+		}
+		s.appendAudit(name, gitmanager.AuditEvent{
+			Type:  AuditTypePushReceived,
+			Actor: actor,
+			Ref:   change.Ref,
+			SHA:   sha,
+			Notes: string(change.Kind),
+		})
+	}
 }
 
 // extractGitRepoName extracts the repo name from a git URL path.

@@ -330,6 +330,31 @@ func (tc *testContext) theAuditTopEventIs(repo, wantType string) error {
 	return nil
 }
 
+// aClientPushesOneCommitViaSmartHTTP drives a real `git push` against the
+// httptest server so the receive-pack audit path is exercised end-to-end
+// over the wire. Locks in the README roadmap item: smart-HTTP pushes are
+// instrumented with a push_received audit entry.
+func (tc *testContext) aClientPushesOneCommitViaSmartHTTP(repo string) error {
+	work := filepath.Join(tc.tmpDir, "push-work-"+repo)
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		return fmt.Errorf("mkdir work: %w", err)
+	}
+	cloneURL := tc.ts.URL + "/git/" + repo + ".git"
+	steps := [][]string{
+		{"clone", cloneURL, work},
+		{"-C", work, "config", "user.email", "push@example.com"},
+		{"-C", work, "config", "user.name", "Push"},
+		{"-C", work, "commit", "--allow-empty", "-m", "pushed-commit"},
+		{"-C", work, "push", "origin", "HEAD:refs/heads/main"},
+	}
+	for _, args := range steps {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, out)
+		}
+	}
+	return nil
+}
+
 func (tc *testContext) theRepositoryDoesNotContainFile(repo, file string) error {
 	path := tc.git.RepoPath(repo)
 	out, err := exec.Command("git", "-C", path, "ls-tree", "-r", "HEAD", "--name-only").Output()
@@ -1215,6 +1240,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the repository "([^"]*)" has (\d+) commits$`, tc.theRepositoryHasExactCommits)
 	ctx.Step(`^the audit ref in repo "([^"]*)" has (\d+) entries$`, tc.theAuditRefHasEntries)
 	ctx.Step(`^the top audit event in repo "([^"]*)" has type "([^"]*)"$`, tc.theAuditTopEventIs)
+	ctx.Step(`^a client pushes one commit to "([^"]*)" via smart-HTTP$`, tc.aClientPushesOneCommitViaSmartHTTP)
 	ctx.Step(`^the repository "([^"]*)" contains file "([^"]*)"$`, tc.theRepositoryContainsFile)
 	ctx.Step(`^the repository "([^"]*)" does not contain file "([^"]*)"$`, tc.theRepositoryDoesNotContainFile)
 	ctx.Step(`^the repository "([^"]*)" file "([^"]*)" is valid JSON with field "([^"]*)" equal to "([^"]*)"$`, tc.theRepositoryFileIsJSONWithField)

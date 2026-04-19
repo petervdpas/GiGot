@@ -72,13 +72,6 @@ tracker and is the source of truth for "what's next."
       "enabled/disabled" badge on the display row clickable to toggle
       via PATCH. Pause/resume is a management gesture on an existing
       thing, not a new-thing form field.
-- [ ] **Audit trail — `git-receive-pack` event coverage.** The
-      tamper-proof guard is shipped (see below); still outstanding is
-      emitting `push_received` audit entries when a client pushes via
-      the smart-HTTP path. Approach: snapshot `git for-each-ref` before
-      and after `git-receive-pack` in `handler_git.go`, diff the two,
-      and append one audit entry per changed ref (branch creates,
-      updates, deletes). Low risk, one handler touched.
 - [ ] **Mirror-sync — admin UI (slice 3).** "Destinations" section on
       the repo detail page with add/edit/delete rows and a prominent
       privacy-warning checkbox per §3.7 of the remote-sync design.
@@ -100,6 +93,24 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Audit trail — `git-receive-pack` event coverage (slice 3 of 3).**
+      `handler_git.go` now snapshots `git for-each-ref` (excluding
+      `refs/audit/*`) before the receive-pack subprocess runs, snapshots
+      again on success, and appends one `push_received` audit entry per
+      ref that actually moved — one per create/update/delete. The
+      snapshot helpers live in `internal/git/refs.go`
+      (`Manager.RefSnapshot` and pure `DiffRefSnapshots`). Receive-packs
+      that reject every update (non-ff, hook refusal) produce an empty
+      diff and so no audit noise. Unit coverage in
+      `internal/git/refs_test.go` (create/update/delete diff + audit-ref
+      exclusion), handler coverage in
+      `internal/server/handler_git_test.go::TestGitPushEmitsPushReceivedAudit`
+      (asserts ref, SHA, and `push_received` type on the top audit
+      event), Cucumber scenario in `audit_trail.feature`
+      ("A client push via smart-HTTP emits a push_received audit
+      entry"). Combined with slices 1 and 2, the audit chain now covers
+      every user-triggered write path: `repo_create`, `file_put`,
+      `commit`, and `push_received`.
 - [x] **Audit trail — tamper-proof guard (slice 2 of 3).**
       Every bare repo now carries a `hooks/pre-receive` that rejects any
       ref update under `refs/audit/*` from `git-receive-pack`. Installed

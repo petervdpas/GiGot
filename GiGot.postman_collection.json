@@ -1,0 +1,112 @@
+{
+  "info": {
+    "_postman_id": "6ac42350-dc9f-4b3b-b1b1-c416baec7631",
+    "name": "GiGot",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "4483"
+  },
+  "item": [
+    {
+      "name": "Repos",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "771d765b910c74462e2da924f74254e6e404492b3bdce1792410f6b5611ad4c9",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:3417/api/repos",
+          "protocol": "http",
+          "host": [
+            "127",
+            "0",
+            "0",
+            "1"
+          ],
+          "port": "3417",
+          "path": [
+            "api",
+            "repos"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Repo Braindamage",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "771d765b910c74462e2da924f74254e6e404492b3bdce1792410f6b5611ad4c9",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:3417/api/repos/BrainDamage",
+          "protocol": "http",
+          "host": [
+            "127",
+            "0",
+            "0",
+            "1"
+          ],
+          "port": "3417",
+          "path": [
+            "api",
+            "repos",
+            "BrainDamage"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Repo Braindamage Status",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "771d765b910c74462e2da924f74254e6e404492b3bdce1792410f6b5611ad4c9",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:3417/api/repos/BrainDamage/status",
+          "protocol": "http",
+          "host": [
+            "127",
+            "0",
+            "0",
+            "1"
+          ],
+          "port": "3417",
+          "path": [
+            "api",
+            "repos",
+            "BrainDamage",
+            "status"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

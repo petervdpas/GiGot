@@ -35,3 +35,12 @@ Feature: Tamper-evident audit trail on refs/audit/main
     Then the response status should be 200
     And the audit ref in repo "audit-commit" has 2 entries
     And the top audit event in repo "audit-commit" has type "commit"
+
+  Scenario: A client push via smart-HTTP emits a push_received audit entry
+    Given the server is running
+    When I POST "/api/repos" with body '{"name":"audit-push"}'
+    Then the response status should be 201
+    And the audit ref in repo "audit-push" has 1 entries
+    When a client pushes one commit to "audit-push" via smart-HTTP
+    Then the audit ref in repo "audit-push" has 2 entries
+    And the top audit event in repo "audit-push" has type "push_received"

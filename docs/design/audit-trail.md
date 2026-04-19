@@ -65,7 +65,7 @@ reader branches on, so it is required.
 | `repo_create`   | `POST /api/repos` success (both init and clone paths)   |
 | `file_put`      | `PUT /api/repos/{name}/files/{path}` success            |
 | `commit`        | `POST /api/repos/{name}/commits` success                |
-| `push_received` | *(deferred to slice 2)* `git-receive-pack` success      |
+| `push_received` | `git-receive-pack` success — one entry per moved ref    |
 
 New types can be added without schema migration — unknown types are
 ignorable by older readers.
@@ -122,13 +122,28 @@ design in git's plumbing layer. So the hook blocks client pushes via
 tamper-proof (cannot be overwritten by a client) and tamper-evident
 (any out-of-band modification changes every downstream SHA).**
 
-### Still outstanding (slice 3)
+### `push_received` coverage (shipped — slice 3)
 
-Emit `push_received` audit entries for the `git-receive-pack` path so
-CLI `git push` operations are instrumented. Approach: snapshot
-`git for-each-ref` before and after the receive-pack subprocess runs,
-diff the two, and append one entry per changed ref. Tracked in the
-README roadmap.
+`handler_git.go::handleGitService` snapshots refs around the
+receive-pack subprocess and appends one `push_received` audit entry per
+ref that actually moved. Snapshots live in `internal/git/refs.go`:
+
+- `Manager.RefSnapshot(name)` runs `git for-each-ref` and returns a
+  `map[ref]sha`, deliberately excluding `refs/audit/*` so the audit
+  writer's own advance never registers as a pushed change.
+- `DiffRefSnapshots(before, after)` returns one `RefChange` per create,
+  update, or delete; alphabetical order for stable audit output.
+
+Each `RefChange` maps to one audit entry whose `type` is
+`push_received`, `ref` is the full ref name, `sha` is the new SHA
+(or the old SHA for deletes), and `notes` is the change kind
+(`created` / `updated` / `deleted`). A receive-pack that rejects every
+update (non-ff, pre-receive refusal) leaves the two snapshots equal and
+so produces no audit noise.
+
+**Combined with slices 1 and 2, the audit chain now covers every
+user-triggered write path end-to-end: `repo_create`, `file_put`,
+`commit`, and `push_received`.**
 
 ## Open questions
 
