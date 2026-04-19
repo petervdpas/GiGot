@@ -12,6 +12,9 @@
 // @in header
 // @name Authorization
 // @description Enter your bearer token as: Bearer <token>
+//
+// @securityDefinitions.basic BasicAuth
+// @description HTTP Basic with the subscription token as the password. The username is ignored — tokens are self-identifying. This is the form `git clone http://user:<token>@host/git/repo` produces, so git-over-HTTP works out of the box.
 package main
 
 import "github.com/petervdpas/GiGot/internal/cli"

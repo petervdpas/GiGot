@@ -93,6 +93,43 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Basic auth narrowed to `/git/*` (defence in depth).** After
+      adding Basic-auth support so git-over-HTTP works, the middleware
+      initially accepted Basic on every bearer-gated route — more
+      surface than needed. Tightened to match the Swagger spec's
+      narrower claim: `Provider.MarkBasicPrefix` whitelists prefixes
+      where Basic is accepted, server registers `/git/` as the only
+      one. Outside those prefixes a Basic header gets a `401` +
+      `WWW-Authenticate: Bearer realm="gigot"` so confused callers are
+      told what scheme to use. The 401 challenge is path-aware — `/git/*`
+      gets `Basic` (what git understands), `/api/*` gets `Bearer`.
+      Unit coverage in `internal/auth/auth_test.go` is arranged as
+      deliberate positive/negative pairs: Basic on `/git/` allowed vs.
+      Basic on `/api/repos` rejected, Bearer on `/api/repos` allowed
+      vs. per-path challenge scheme. Bearer acceptance is unchanged
+      everywhere.
+- [x] **Token auth accepts HTTP Basic (git-over-HTTP).** The README
+      has always advertised
+      `git clone http://user:<subscription-key>@host/git/repo` but
+      until now `TokenStrategy.Authenticate` and `EntryFromRequest`
+      only recognised `Authorization: Bearer ...`. Git sends
+      `Authorization: Basic base64(user:token)`, so the auth
+      middleware rejected every clone with "unauthorized" — the
+      README lied. Fix: one `tokenFromRequest` helper accepts both
+      schemes (username ignored on Basic, password is the token),
+      shared by `Authenticate` and `EntryFromRequest` so the policy
+      layer sees the same token allowlist regardless of scheme. The
+      401 middleware response now sends
+      `WWW-Authenticate: Basic realm="gigot"` so git (which holds off
+      on credentials until it sees a challenge) retries with its
+      stored token. Unit coverage in `internal/auth/token_test.go`
+      (Basic-valid, Basic-invalid, Basic-empty-password, unknown
+      scheme) plus `handler_git_test.go::TestGitCloneBasicAuthWithToken`
+      which runs a real `git clone` against the httptest server with
+      `auth.enabled=true`. A scope-check variant
+      (`TestGitCloneBasicAuthWithUnscopedToken`) locks in that Basic
+      support isn't a policy bypass — per-repo allowlists still
+      apply.
 - [x] **Convert-to-Formidable admin action.** New endpoint
       `POST /api/admin/repos/{name}/formidable` stamps
       `.formidable/context.json` on top of HEAD, flipping an existing

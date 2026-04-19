@@ -146,6 +146,73 @@ func TestGitPushIntegration(t *testing.T) {
 	}
 }
 
+// TestGitCloneBasicAuthWithToken proves the end-to-end flow the README
+// advertises: `git clone http://user:<token>@host/git/repo` on an
+// auth-enabled server. Git sends Authorization: Basic with the token
+// as the password; the server must accept that in addition to Bearer.
+// If this test regresses, the README lies and demo-setup users hit
+// the "unauthorized" wall — which is exactly the bug this covers.
+func TestGitCloneBasicAuthWithToken(t *testing.T) {
+	srv := testServer(t)
+	srv.auth.SetEnabled(true)
+	srv.git.InitBare("basic-clone")
+
+	// Seed a commit so the clone has something to fetch.
+	repoPath := srv.git.RepoPath("basic-clone")
+	tmpWork := t.TempDir()
+	run(t, "git", "clone", repoPath, tmpWork+"/seed")
+	run(t, "git", "-C", tmpWork+"/seed", "commit", "--allow-empty", "-m", "seed")
+	run(t, "git", "-C", tmpWork+"/seed", "push", "origin", "master")
+
+	token, err := srv.TokenStrategy().Issue("client-1", []string{"basic-clone"})
+	if err != nil {
+		t.Fatalf("Issue token: %v", err)
+	}
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// Inject the token as HTTP Basic password. Username is cosmetic —
+	// use a nonsense value to prove it doesn't matter.
+	u := strings.Replace(ts.URL, "http://", "http://nobody:"+token+"@", 1)
+	cloneDest := filepath.Join(t.TempDir(), "cloned")
+	cmd := exec.Command("git", "clone", u+"/git/basic-clone", cloneDest)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Basic-auth clone failed: %v\n%s", err, out)
+	}
+	// Sanity-check the clone contains the seed commit.
+	logOut := runOut(t, "git", "-C", cloneDest, "log", "--oneline")
+	if !strings.Contains(logOut, "seed") {
+		t.Errorf("cloned repo missing seed commit: %s", logOut)
+	}
+}
+
+// TestGitCloneBasicAuthWithUnscopedToken proves a token is still
+// subject to the per-repo allowlist even when delivered via Basic
+// auth — otherwise Basic support would be a silent policy bypass.
+func TestGitCloneBasicAuthWithUnscopedToken(t *testing.T) {
+	srv := testServer(t)
+	srv.auth.SetEnabled(true)
+	srv.git.InitBare("scope-test")
+
+	token, err := srv.TokenStrategy().Issue("client-2", []string{"some-other-repo"})
+	if err != nil {
+		t.Fatalf("Issue token: %v", err)
+	}
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	u := strings.Replace(ts.URL, "http://", "http://x:"+token+"@", 1)
+	cloneDest := filepath.Join(t.TempDir(), "blocked")
+	cmd := exec.Command("git", "clone", u+"/git/scope-test", cloneDest)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("clone should have been rejected, got success: %s", out)
+	}
+}
+
 // TestGitPushEmitsPushReceivedAudit proves the receive-pack path wires one
 // push_received audit entry per ref that actually moved. Locks in the
 // README roadmap item: smart-HTTP pushes are now instrumented.

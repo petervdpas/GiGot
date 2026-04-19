@@ -58,10 +58,18 @@ type Strategy interface {
 
 // Provider manages multiple strategies and acts as HTTP middleware.
 type Provider struct {
-	strategies      []Strategy
-	enabled         bool
-	publicExact     []string
-	publicPrefixes  []string
+	strategies     []Strategy
+	enabled        bool
+	publicExact    []string
+	publicPrefixes []string
+	// basicPrefixes lists URL prefixes where HTTP Basic auth is
+	// accepted. Outside these prefixes a Basic header is treated as
+	// "no credentials" and the 401 challenge advertises Bearer only.
+	// Populated via MarkBasicPrefix — we deliberately narrow Basic's
+	// surface because it exists solely to make git-over-HTTP work
+	// (git-the-binary can't send Bearer). Every other client of the
+	// JSON API can and should use Bearer.
+	basicPrefixes []string
 }
 
 // NewProvider creates a new auth Provider.
@@ -88,6 +96,39 @@ func (p *Provider) MarkPublic(path string) {
 // prefix should be a concrete directory (e.g. "/admin/" or "/swagger/").
 func (p *Provider) MarkPublicPrefix(prefix string) {
 	p.publicPrefixes = append(p.publicPrefixes, prefix)
+}
+
+// MarkBasicPrefix whitelists a URL prefix for HTTP Basic auth. Outside
+// any whitelisted prefix the middleware rejects Basic with a 401 that
+// advertises Bearer only — so a caller who somehow ended up sending
+// Basic to /api/admin/* hears "use Bearer" explicitly instead of
+// silently getting token lookup + policy evaluation. Narrowing Basic's
+// surface is a defence-in-depth move; the token strategy would accept
+// it anyway since tokens are self-identifying.
+func (p *Provider) MarkBasicPrefix(prefix string) {
+	p.basicPrefixes = append(p.basicPrefixes, prefix)
+}
+
+// basicAllowedFor reports whether the path sits under any prefix
+// registered via MarkBasicPrefix.
+func (p *Provider) basicAllowedFor(urlPath string) bool {
+	for _, pp := range p.basicPrefixes {
+		if strings.HasPrefix(urlPath, pp) {
+			return true
+		}
+	}
+	return false
+}
+
+// requestUsesBasic reports whether the incoming Authorization header
+// is a Basic challenge. Used by the middleware to path-scope Basic.
+func requestUsesBasic(r *http.Request) bool {
+	h := r.Header.Get("Authorization")
+	if h == "" {
+		return false
+	}
+	parts := strings.SplitN(h, " ", 2)
+	return len(parts) == 2 && strings.EqualFold(parts[0], "Basic")
 }
 
 // isPublic reports whether the request path is marked public.
@@ -142,8 +183,30 @@ func (p *Provider) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// Path-scope Basic: outside registered prefixes, refuse Basic
+		// outright rather than running token lookup + policy. This
+		// keeps the Basic attack surface limited to /git/* (where git
+		// the binary actually needs it) instead of every bearer-gated
+		// route. Bearer is always accepted.
+		basicAllowedHere := p.basicAllowedFor(r.URL.Path)
+		if !basicAllowedHere && requestUsesBasic(r) {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="gigot"`)
+			http.Error(w, "unauthorized (use Bearer on this path)", http.StatusUnauthorized)
+			return
+		}
+
 		id, err := p.Authenticate(r)
 		if err != nil {
+			// Challenge advertises whichever scheme the caller would be
+			// able to retry with on this path. /git/* gets Basic (which
+			// is what git-the-binary understands); everything else gets
+			// Bearer. Keeps the "what credential should I send?" answer
+			// in the response itself.
+			scheme := "Bearer"
+			if basicAllowedHere {
+				scheme = "Basic"
+			}
+			w.Header().Set("WWW-Authenticate", scheme+` realm="gigot"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

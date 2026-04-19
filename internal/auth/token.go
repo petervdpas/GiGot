@@ -77,20 +77,48 @@ func (s *TokenStrategy) Name() string {
 	return "token"
 }
 
-// Authenticate checks the Authorization header for a valid Bearer token.
-func (s *TokenStrategy) Authenticate(r *http.Request) (*Identity, error) {
+// tokenFromRequest pulls the subscription token out of the request's
+// Authorization header. Two schemes are accepted:
+//
+//   - Bearer <token>            — the documented modern form.
+//   - Basic base64(user:token)  — the standard git-over-HTTP pattern
+//     used by GitHub, GitLab, Gitea, etc. The Basic username is
+//     cosmetic (ignored); the password is the subscription token.
+//
+// Supporting Basic lets `git clone http://user:<token>@host/git/repo`
+// work out of the box, which is the usage the README documents.
+// Returns "" for non-token requests (no header, unknown scheme, empty
+// password) so callers can treat "" as "no credentials presented".
+func tokenFromRequest(r *http.Request) string {
 	header := r.Header.Get("Authorization")
 	if header == "" {
-		return nil, ErrNoCredentials
+		return ""
 	}
-
 	parts := strings.SplitN(header, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+	if len(parts) != 2 {
+		return ""
+	}
+	switch {
+	case strings.EqualFold(parts[0], "Bearer"):
+		return strings.TrimSpace(parts[1])
+	case strings.EqualFold(parts[0], "Basic"):
+		if _, pass, ok := r.BasicAuth(); ok {
+			return strings.TrimSpace(pass)
+		}
+	}
+	return ""
+}
+
+// Authenticate checks the Authorization header for a valid token.
+// See tokenFromRequest for the accepted schemes.
+func (s *TokenStrategy) Authenticate(r *http.Request) (*Identity, error) {
+	if r.Header.Get("Authorization") == "" {
 		return nil, ErrNoCredentials
 	}
-
-	token := strings.TrimSpace(parts[1])
+	token := tokenFromRequest(r)
 	if token == "" {
+		// Header present but not a token scheme — let a later strategy
+		// (session) take a shot.
 		return nil, ErrNoCredentials
 	}
 
@@ -169,19 +197,17 @@ func (s *TokenStrategy) Get(token string) *TokenEntry {
 	return s.tokens[token]
 }
 
-// EntryFromRequest extracts the bearer token from the Authorization header
-// and returns the matching TokenEntry. Returns nil for non-token requests
-// (including admin session requests).
+// EntryFromRequest extracts the token (Bearer or Basic password) from
+// the Authorization header and returns the matching TokenEntry. Must
+// accept both schemes — the policy layer uses this to pull the repo
+// allowlist off the request, and Basic-auth callers (git) would
+// otherwise reach the policy with a nil entry and get denied.
 func (s *TokenStrategy) EntryFromRequest(r *http.Request) *TokenEntry {
-	header := r.Header.Get("Authorization")
-	if header == "" {
+	token := tokenFromRequest(r)
+	if token == "" {
 		return nil
 	}
-	parts := strings.SplitN(header, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return nil
-	}
-	return s.Get(strings.TrimSpace(parts[1]))
+	return s.Get(token)
 }
 
 // UpdateRepos replaces the repo allowlist on an existing token. Returns

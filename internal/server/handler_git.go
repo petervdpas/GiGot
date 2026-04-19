@@ -34,6 +34,7 @@ import (
 // @Failure      403  {object}  ErrorResponse
 // @Failure      404  {object}  ErrorResponse
 // @Security     BearerAuth
+// @Security     BasicAuth
 // @Router       /git/{name}.git/info/refs [get]
 func (s *Server) handleGitInfoRefs(w http.ResponseWriter, r *http.Request) {
 	name, err := s.extractGitRepoName(r.URL.Path, "/info/refs")
@@ -92,6 +93,7 @@ func (s *Server) handleGitInfoRefs(w http.ResponseWriter, r *http.Request) {
 // @Success      200
 // @Failure      404  {object}  ErrorResponse
 // @Security     BearerAuth
+// @Security     BasicAuth
 // @Router       /git/{name}.git/git-upload-pack [post]
 func (s *Server) handleGitUploadPack(w http.ResponseWriter, r *http.Request) {
 	s.handleGitService(w, r, "upload-pack")
@@ -107,6 +109,7 @@ func (s *Server) handleGitUploadPack(w http.ResponseWriter, r *http.Request) {
 // @Success      200
 // @Failure      404  {object}  ErrorResponse
 // @Security     BearerAuth
+// @Security     BasicAuth
 // @Router       /git/{name}.git/git-receive-pack [post]
 func (s *Server) handleGitReceivePack(w http.ResponseWriter, r *http.Request) {
 	s.handleGitService(w, r, "receive-pack")

@@ -47,14 +47,70 @@ func TestTokenAuthenticateNoHeader(t *testing.T) {
 	}
 }
 
-func TestTokenAuthenticateWrongScheme(t *testing.T) {
+// TestTokenAuthenticateBasicWithValidToken proves the Basic-auth path
+// works — this is the shape `git clone http://user:<token>@host/...`
+// produces, so Basic support is load-bearing for the documented
+// clone flow.
+func TestTokenAuthenticateBasicWithValidToken(t *testing.T) {
+	s := NewTokenStrategy()
+	token, err := s.Issue("alice", nil)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/", nil)
+	// Git's default username from the URL is ignored — the password is
+	// the credential. Use a non-matching username to prove that.
+	req.SetBasicAuth("whatever", token)
+
+	id, err := s.Authenticate(req)
+	if err != nil {
+		t.Fatalf("expected success on Basic auth with valid token, got %v", err)
+	}
+	if id.Username != "alice" {
+		t.Errorf("identity username from token entry, not URL: got %q, want %q", id.Username, "alice")
+	}
+}
+
+// TestTokenAuthenticateBasicWithInvalidToken locks in: a Basic auth
+// attempt with a non-existent token is a hard reject (ErrInvalidToken),
+// not a silent pass-through to the next strategy.
+func TestTokenAuthenticateBasicWithInvalidToken(t *testing.T) {
 	s := NewTokenStrategy()
 	req := httptest.NewRequest("GET", "/", nil)
-	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
+	req.SetBasicAuth("user", "totally-not-a-real-token")
+
+	_, err := s.Authenticate(req)
+	if err != ErrInvalidToken {
+		t.Errorf("expected ErrInvalidToken for bogus Basic password, got %v", err)
+	}
+}
+
+// TestTokenAuthenticateBasicWithEmptyPassword degrades to
+// ErrNoCredentials so a subsequent strategy gets a chance — a Basic
+// header with no password is equivalent to "no credentials provided".
+func TestTokenAuthenticateBasicWithEmptyPassword(t *testing.T) {
+	s := NewTokenStrategy()
+	req := httptest.NewRequest("GET", "/", nil)
+	req.SetBasicAuth("user", "")
 
 	_, err := s.Authenticate(req)
 	if err != ErrNoCredentials {
-		t.Errorf("expected ErrNoCredentials for Basic scheme, got %v", err)
+		t.Errorf("expected ErrNoCredentials for empty Basic password, got %v", err)
+	}
+}
+
+// TestTokenAuthenticateUnknownScheme guards the fallthrough: schemes
+// other than Bearer / Basic must return ErrNoCredentials so the next
+// strategy in the provider chain gets tried.
+func TestTokenAuthenticateUnknownScheme(t *testing.T) {
+	s := NewTokenStrategy()
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Digest nonsense")
+
+	_, err := s.Authenticate(req)
+	if err != ErrNoCredentials {
+		t.Errorf("expected ErrNoCredentials for unknown scheme, got %v", err)
 	}
 }
 

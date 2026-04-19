@@ -1366,6 +1366,9 @@ const docTemplate = `{
                 "security": [
                     {
                         "BearerAuth": []
+                    },
+                    {
+                        "BasicAuth": []
                     }
                 ],
                 "description": "Git smart HTTP protocol — receives packfile data for push operations",
@@ -1406,6 +1409,9 @@ const docTemplate = `{
                 "security": [
                     {
                         "BearerAuth": []
+                    },
+                    {
+                        "BasicAuth": []
                     }
                 ],
                 "description": "Git smart HTTP protocol — serves packfile data for clone and fetch operations",
@@ -1446,6 +1452,9 @@ const docTemplate = `{
                 "security": [
                     {
                         "BearerAuth": []
+                    },
+                    {
+                        "BasicAuth": []
                     }
                 ],
                 "description": "Git smart HTTP protocol — advertise refs for clone/fetch/push",
@@ -3197,6 +3206,9 @@ const docTemplate = `{
         }
     },
     "securityDefinitions": {
+        "BasicAuth": {
+            "type": "basic"
+        },
         "BearerAuth": {
             "description": "Enter your bearer token as: Bearer \u003ctoken\u003e",
             "type": "apiKey",
@@ -3213,7 +3225,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api",
 	Schemes:          []string{},
 	Title:            "GiGot API",
-	Description:      "Git-backed sync server for Formidable — local-first, server-optional.",
+	Description:      "HTTP Basic with the subscription token as the password. The username is ignored — tokens are self-identifying. This is the form `git clone http://user:<token>@host/git/repo` produces, so git-over-HTTP works out of the box.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

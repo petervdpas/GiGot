@@ -67,6 +67,11 @@ func New(cfg *config.Config) *Server {
 	ap.MarkPublic("/admin/credentials/")
 	ap.MarkPublicPrefix("/swagger/")
 	ap.MarkPublicPrefix("/assets/")
+	// Basic auth is only meaningful for /git/* — git-the-binary can't
+	// send Bearer. Everywhere else, Bearer-only (tightened defence in
+	// depth; the middleware rejects Basic headers outside this prefix
+	// with a 401 + WWW-Authenticate: Bearer).
+	ap.MarkBasicPrefix("/git/")
 
 	ts := auth.NewTokenStrategy()
 	ap.Register(ts)

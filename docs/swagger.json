@@ -1,7 +1,7 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "Git-backed sync server for Formidable — local-first, server-optional.",
+        "description": "HTTP Basic with the subscription token as the password. The username is ignored — tokens are self-identifying. This is the form `git clone http://user:\u003ctoken\u003e@host/git/repo` produces, so git-over-HTTP works out of the box.",
         "title": "GiGot API",
         "contact": {
             "name": "Peter van de Pas"
@@ -1360,6 +1360,9 @@
                 "security": [
                     {
                         "BearerAuth": []
+                    },
+                    {
+                        "BasicAuth": []
                     }
                 ],
                 "description": "Git smart HTTP protocol — receives packfile data for push operations",
@@ -1400,6 +1403,9 @@
                 "security": [
                     {
                         "BearerAuth": []
+                    },
+                    {
+                        "BasicAuth": []
                     }
                 ],
                 "description": "Git smart HTTP protocol — serves packfile data for clone and fetch operations",
@@ -1440,6 +1446,9 @@
                 "security": [
                     {
                         "BearerAuth": []
+                    },
+                    {
+                        "BasicAuth": []
                     }
                 ],
                 "description": "Git smart HTTP protocol — advertise refs for clone/fetch/push",
@@ -3191,6 +3200,9 @@
         }
     },
     "securityDefinitions": {
+        "BasicAuth": {
+            "type": "basic"
+        },
         "BearerAuth": {
             "description": "Enter your bearer token as: Bearer \u003ctoken\u003e",
             "type": "apiKey",
