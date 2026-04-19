@@ -65,6 +65,11 @@ func Execute() {
 			log.Fatalf("rotate-keys: %v", err)
 		}
 		return
+	case ModeWipe:
+		if err := runWipe(cfg, opts.Wipe, opts.WipeAssumeYes, os.Stdout, os.Stdin); err != nil {
+			log.Fatalf("wipe: %v", err)
+		}
+		return
 	case ModeServe:
 		fmt.Printf("GiGot server starting on %s:%d\n", cfg.Server.Host, cfg.Server.Port)
 		fmt.Printf("Repository root: %s\n", cfg.Storage.RepoRoot)

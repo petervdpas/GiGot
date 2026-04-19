@@ -27,7 +27,34 @@ const (
 	// ModeRotateKeys rotates the server keypair and rewraps sealed
 	// stores.
 	ModeRotateKeys
+	// ModeWipe destructively removes on-disk state. Which slice of
+	// state is controlled by WipeTargets on Options.
+	ModeWipe
 )
+
+// WipeTargets is the set of on-disk artefacts a ModeWipe invocation
+// should remove. -factory-reset sets every field; the granular
+// -wipe-* flags each set exactly one.
+type WipeTargets struct {
+	Repos        bool
+	Admins       bool
+	Tokens       bool
+	Clients      bool
+	Sessions     bool
+	Credentials  bool
+	Destinations bool
+	// Keys is only set via -factory-reset. A standalone keypair wipe
+	// would leave every sealed store unreadable, which is indistinguishable
+	// from a bricked server; we refuse to offer that footgun on its own.
+	Keys bool
+}
+
+// Any reports whether at least one target is selected. Used by Parse
+// to distinguish "wipe mode" from "no wipe flags at all".
+func (w WipeTargets) Any() bool {
+	return w.Repos || w.Admins || w.Tokens || w.Clients ||
+		w.Sessions || w.Credentials || w.Destinations || w.Keys
+}
 
 // Options is the parsed, validated CLI invocation. Holding the result as
 // a value — rather than calling into the flag package from Execute —
@@ -38,6 +65,8 @@ type Options struct {
 	ConfigPath          string
 	InitFormidableFirst bool
 	AddAdminUsername    string
+	Wipe                WipeTargets
+	WipeAssumeYes       bool
 }
 
 // ErrHelpRequested is returned by Parse when -help / -h was passed so
@@ -62,13 +91,22 @@ func Parse(args []string) (Options, error) {
 	fs.Usage = func() { fmt.Fprint(fs.Output(), helpText()) }
 
 	var (
-		help           bool
-		helpShort      bool
-		configPath     string
-		initFlag       bool
-		formidableFirst bool
-		addAdmin       string
-		rotateKeys     bool
+		help             bool
+		helpShort        bool
+		configPath       string
+		initFlag         bool
+		formidableFirst  bool
+		addAdmin         string
+		rotateKeys       bool
+		wipeRepos        bool
+		wipeAdmins       bool
+		wipeTokens       bool
+		wipeClients      bool
+		wipeSessions     bool
+		wipeCredentials  bool
+		wipeDestinations bool
+		factoryReset     bool
+		assumeYes        bool
 	)
 	fs.BoolVar(&help, "help", false, "show this help and exit")
 	fs.BoolVar(&helpShort, "h", false, "alias for -help")
@@ -77,6 +115,15 @@ func Parse(args []string) (Options, error) {
 	fs.BoolVar(&formidableFirst, "formidable-first", false, "with -init, pre-enable server.formidable_first in the emitted config")
 	fs.StringVar(&addAdmin, "add-admin", "", "create/update an admin account with the given username and exit")
 	fs.BoolVar(&rotateKeys, "rotate-keys", false, "rotate the server keypair and rewrap sealed stores (stop the server first)")
+	fs.BoolVar(&wipeRepos, "wipe-repos", false, "delete every bare repository under storage.repo_root (stop the server first)")
+	fs.BoolVar(&wipeAdmins, "wipe-admins", false, "delete data/admins.enc (all admin accounts)")
+	fs.BoolVar(&wipeTokens, "wipe-tokens", false, "delete data/tokens.enc (all subscription keys)")
+	fs.BoolVar(&wipeClients, "wipe-clients", false, "delete data/clients.enc (all enrolled client pubkeys)")
+	fs.BoolVar(&wipeSessions, "wipe-sessions", false, "delete data/sessions.enc (all active admin sessions)")
+	fs.BoolVar(&wipeCredentials, "wipe-credentials", false, "delete data/credentials.enc (outbound credential vault)")
+	fs.BoolVar(&wipeDestinations, "wipe-destinations", false, "delete data/destinations.enc (per-repo mirror destinations)")
+	fs.BoolVar(&factoryReset, "factory-reset", false, "wipe every sealed store, every repo, the keypair, and rotation backups (stop the server first)")
+	fs.BoolVar(&assumeYes, "yes", false, "skip the interactive confirmation prompt for wipe flags")
 
 	if err := fs.Parse(args); err != nil {
 		// flag.ErrHelp is returned when the flag package's builtin
@@ -97,6 +144,17 @@ func Parse(args []string) (Options, error) {
 		return Options{Mode: ModeHelp}, ErrHelpRequested
 	}
 
+	granularWipes := WipeTargets{
+		Repos:        wipeRepos,
+		Admins:       wipeAdmins,
+		Tokens:       wipeTokens,
+		Clients:      wipeClients,
+		Sessions:     wipeSessions,
+		Credentials:  wipeCredentials,
+		Destinations: wipeDestinations,
+	}
+	wantsWipe := factoryReset || granularWipes.Any()
+
 	// Validate mutually-exclusive one-shot commands. Running the
 	// server is the implicit default only when no one-shot was
 	// requested.
@@ -110,8 +168,11 @@ func Parse(args []string) (Options, error) {
 	if rotateKeys {
 		oneShots++
 	}
+	if wantsWipe {
+		oneShots++
+	}
 	if oneShots > 1 {
-		return Options{}, fmt.Errorf("only one of -init, -add-admin, -rotate-keys can be used per invocation")
+		return Options{}, fmt.Errorf("only one of -init, -add-admin, -rotate-keys, or the -wipe-*/-factory-reset family can be used per invocation")
 	}
 
 	// -formidable-first only makes sense alongside -init. Silently
@@ -120,10 +181,24 @@ func Parse(args []string) (Options, error) {
 		return Options{}, fmt.Errorf("-formidable-first is only valid with -init")
 	}
 
+	// -factory-reset already implies every granular wipe, so combining
+	// the two is always a user mistake — reject it rather than silently
+	// treating the granular flags as redundant.
+	if factoryReset && granularWipes.Any() {
+		return Options{}, fmt.Errorf("-factory-reset already covers every -wipe-* target; do not combine them")
+	}
+
+	// -yes is meaningless outside a wipe invocation. Catching it here
+	// avoids the confusing UX of "I passed -yes and nothing happened".
+	if assumeYes && !wantsWipe {
+		return Options{}, fmt.Errorf("-yes is only valid with a -wipe-* or -factory-reset flag")
+	}
+
 	opts := Options{
 		ConfigPath:          configPath,
 		InitFormidableFirst: formidableFirst,
 		AddAdminUsername:    addAdmin,
+		WipeAssumeYes:       assumeYes,
 	}
 	switch {
 	case initFlag:
@@ -132,6 +207,21 @@ func Parse(args []string) (Options, error) {
 		opts.Mode = ModeAddAdmin
 	case rotateKeys:
 		opts.Mode = ModeRotateKeys
+	case factoryReset:
+		opts.Mode = ModeWipe
+		opts.Wipe = WipeTargets{
+			Repos:        true,
+			Admins:       true,
+			Tokens:       true,
+			Clients:      true,
+			Sessions:     true,
+			Credentials:  true,
+			Destinations: true,
+			Keys:         true,
+		}
+	case granularWipes.Any():
+		opts.Mode = ModeWipe
+		opts.Wipe = granularWipes
 	default:
 		opts.Mode = ModeServe
 	}
@@ -160,6 +250,26 @@ One-shot commands (each exits after running; mutually exclusive):
                           a password on stdin.
   -rotate-keys            Rotate the server keypair and rewrap every
                           sealed store. Stop the server first.
+  -wipe-repos             Delete every bare repository under
+                          storage.repo_root. Stop the server first.
+  -wipe-admins            Delete data/admins.enc (all admin accounts).
+  -wipe-tokens            Delete data/tokens.enc (all subscription keys).
+  -wipe-clients           Delete data/clients.enc (all enrolled clients).
+  -wipe-sessions          Delete data/sessions.enc (all admin sessions).
+  -wipe-credentials       Delete data/credentials.enc (credential vault).
+  -wipe-destinations      Delete data/destinations.enc (mirror targets).
+  -factory-reset          Wipe every sealed store, every repo, the
+                          keypair, and rotation backups — restores a
+                          fresh-install state, preserving only
+                          gigot.json. Stop the server first.
+    -yes                  Skip the interactive confirmation prompt for
+                          any -wipe-* or -factory-reset invocation
+                          (intended for non-interactive scripts).
+
+  The -wipe-* flags compose (e.g. -wipe-admins -wipe-tokens removes
+  both stores in one invocation). -factory-reset is a shorthand that
+  covers every target; combining it with granular -wipe-* flags is
+  rejected.
 
 Help:
   -help, -h               Show this help and exit.

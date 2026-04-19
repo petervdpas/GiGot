@@ -71,6 +71,37 @@ func TestParse_Success(t *testing.T) {
 			args: []string{"-rotate-keys", "-config", "/c.json"},
 			want: Options{Mode: ModeRotateKeys, ConfigPath: "/c.json"},
 		},
+		{
+			name: "-wipe-admins alone selects admins target",
+			args: []string{"-wipe-admins"},
+			want: Options{Mode: ModeWipe, Wipe: WipeTargets{Admins: true}},
+		},
+		{
+			name: "multiple granular wipes compose",
+			args: []string{"-wipe-admins", "-wipe-tokens", "-wipe-repos"},
+			want: Options{Mode: ModeWipe, Wipe: WipeTargets{Admins: true, Tokens: true, Repos: true}},
+		},
+		{
+			name: "-wipe-admins with -yes bypasses the prompt",
+			args: []string{"-wipe-admins", "-yes"},
+			want: Options{Mode: ModeWipe, Wipe: WipeTargets{Admins: true}, WipeAssumeYes: true},
+		},
+		{
+			name: "-factory-reset sets every target including keys",
+			args: []string{"-factory-reset"},
+			want: Options{Mode: ModeWipe, Wipe: WipeTargets{
+				Repos: true, Admins: true, Tokens: true, Clients: true,
+				Sessions: true, Credentials: true, Destinations: true, Keys: true,
+			}},
+		},
+		{
+			name: "-factory-reset with -yes",
+			args: []string{"-factory-reset", "-yes"},
+			want: Options{Mode: ModeWipe, Wipe: WipeTargets{
+				Repos: true, Admins: true, Tokens: true, Clients: true,
+				Sessions: true, Credentials: true, Destinations: true, Keys: true,
+			}, WipeAssumeYes: true},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -158,6 +189,26 @@ func TestParse_ValidationErrors(t *testing.T) {
 			args:      []string{"-add-admin"},
 			wantMatch: "flag needs an argument",
 		},
+		{
+			name:      "-factory-reset combined with a granular wipe is rejected",
+			args:      []string{"-factory-reset", "-wipe-admins"},
+			wantMatch: "-factory-reset already covers",
+		},
+		{
+			name:      "-wipe-admins combined with -rotate-keys is rejected",
+			args:      []string{"-wipe-admins", "-rotate-keys"},
+			wantMatch: "only one of",
+		},
+		{
+			name:      "-wipe-repos combined with -init is rejected",
+			args:      []string{"-wipe-repos", "-init"},
+			wantMatch: "only one of",
+		},
+		{
+			name:      "-yes without any wipe flag is rejected",
+			args:      []string{"-yes"},
+			wantMatch: "-yes is only valid",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -186,6 +237,15 @@ func TestHelpText_AdvertisesEveryFlag(t *testing.T) {
 		"-formidable-first",
 		"-add-admin",
 		"-rotate-keys",
+		"-wipe-repos",
+		"-wipe-admins",
+		"-wipe-tokens",
+		"-wipe-clients",
+		"-wipe-sessions",
+		"-wipe-credentials",
+		"-wipe-destinations",
+		"-factory-reset",
+		"-yes",
 		"-help",
 		"-h",
 	}

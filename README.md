@@ -93,6 +93,26 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Factory-reset / granular wipe CLI.** Seven granular
+      `-wipe-*` one-shots (`-wipe-repos`, `-wipe-admins`,
+      `-wipe-tokens`, `-wipe-clients`, `-wipe-sessions`,
+      `-wipe-credentials`, `-wipe-destinations`) compose with each
+      other; `-factory-reset` is the nuclear shorthand that also
+      removes the keypair and rotation backups, restoring a clean-
+      install state where only `gigot.json` survives. All destructive
+      flags prompt for the literal word `yes` (bypass with `-yes` for
+      scripts), treat missing paths as already-done so the operation
+      is idempotent, and refuse to combine with `-init` /
+      `-add-admin` / `-rotate-keys` (or each other, in the
+      `-factory-reset`/granular mix). Planning is pure
+      (`buildWipePlan`) so the prompt copy is exactly what
+      `executeWipePlan` acts on. Unit coverage in
+      `internal/cli/cli_test.go` (every parse + validation branch)
+      and `internal/cli/wipe_test.go` (granular / repos-only /
+      factory-reset / prompt refusal / prompt acceptance /
+      idempotence / empty-targets refusal). CLI reference table in
+      the [Command-Line Interface](#command-line-interface) section
+      lists every flag.
 - [x] **Audit trail — `git-receive-pack` event coverage (slice 3 of 3).**
       `handler_git.go` now snapshots `git for-each-ref` (excluding
       `refs/audit/*`) before the receive-pack subprocess runs, snapshots
@@ -289,10 +309,11 @@ git -C repos/my-templates.git ls-tree -r HEAD --name-only
 
 ## Command-Line Interface
 
-The `gigot` binary has one daemon mode and three one-shot commands.
-`-init`, `-add-admin`, and `-rotate-keys` are mutually exclusive; running
-`gigot` with none of them starts the HTTP server. `gigot -help` prints
-the same grouped help shown below.
+The `gigot` binary has one daemon mode and four one-shot command
+families. `-init`, `-add-admin`, `-rotate-keys`, and the
+`-wipe-*` / `-factory-reset` destructive family are mutually exclusive
+with each other; running `gigot` with none of them starts the HTTP
+server. `gigot -help` prints the same grouped help shown below.
 
 **Run mode (default when no one-shot flag is set):**
 
@@ -308,6 +329,24 @@ the same grouped help shown below.
 | &nbsp;&nbsp;`-formidable-first` | Sub-flag of `-init`: pre-enables `server.formidable_first` in the emitted config, so both init and clone stamp the Formidable context marker by default (design doc §2.5/§2.7). Rejected when used without `-init`. |
 | `-add-admin <username>`    | Creates (or overwrites) an admin account with the given username and exits. Prompts for a password on stdin.                             |
 | `-rotate-keys`             | Generates a fresh server keypair, re-encrypts all sealed stores under it, backs up the previous files as `.bak.{timestamp}`, and exits. **Stop the server first.** |
+
+**Destructive one-shots (compose with each other; mutually exclusive with `-init` / `-add-admin` / `-rotate-keys`):**
+
+All destructive flags prompt for the literal word `yes` before acting.
+Pass `-yes` to bypass the prompt in scripted contexts. Every wipe is
+idempotent — removing a target that is already absent is not an error.
+
+| Flag                   | Description                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `-wipe-repos`          | Remove every bare repository under `storage.repo_root`, including their audit chains. **Stop the server first.**               |
+| `-wipe-admins`         | Remove `data/admins.enc`. All admin accounts gone; recreate with `-add-admin`.                                                 |
+| `-wipe-tokens`         | Remove `data/tokens.enc`. All subscription keys revoked.                                                                       |
+| `-wipe-clients`        | Remove `data/clients.enc`. All enrolled client pubkeys dropped; clients will need to re-enroll.                                |
+| `-wipe-sessions`       | Remove `data/sessions.enc`. All active admin sessions dropped; operators must log in again.                                    |
+| `-wipe-credentials`    | Remove `data/credentials.enc`. Outbound credential vault emptied. Mirror destinations referencing these credentials will dangle until you also wipe or re-create them. |
+| `-wipe-destinations`   | Remove `data/destinations.enc`. All per-repo mirror-sync destinations dropped.                                                 |
+| `-factory-reset`       | Superset of every wipe above, **plus** the keypair (`data/server.key` / `data/server.pub`) and all rotation backups (`data/*.bak.*`). Restores a clean-install state, preserving only `gigot.json`. Rejected when combined with any granular `-wipe-*` flag. **Stop the server first.** |
+| `-yes`                 | Skip the confirmation prompt. Valid only with a `-wipe-*` or `-factory-reset` flag.                                            |
 
 **Help:**
 
@@ -338,6 +377,16 @@ rm data/*.bak.*
 
 # Add an admin non-interactively (e.g. from a deploy script)
 printf 'hunter2\nhunter2\n' | ./gigot -add-admin ci-admin
+
+# Wipe just the subscription keys after a suspected leak, keeping admin
+# accounts, repos, and the keypair intact. Stops to confirm unless -yes.
+./gigot -wipe-tokens
+
+# Compose several granular wipes into one invocation.
+./gigot -wipe-tokens -wipe-sessions -yes
+
+# Nuke everything back to a clean-install state. Only gigot.json survives.
+./gigot -factory-reset
 ```
 
 > The password prompt uses `golang.org/x/term` when stdin is a TTY (so nothing is
