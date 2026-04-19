@@ -234,6 +234,14 @@ func (s *Server) deleteRepo(w http.ResponseWriter, r *http.Request, name string)
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
+	// Drop any destinations scoped to this repo so they can't dangle
+	// under a name that no longer exists.
+	if err := s.destinations.RemoveAll(name); err != nil {
+		// Repo is gone; surface the cleanup failure as 500 so the
+		// admin knows the destinations file needs manual attention.
+		writeError(w, http.StatusInternalServerError, "repo deleted but destinations cleanup failed: "+err.Error())
+		return
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }

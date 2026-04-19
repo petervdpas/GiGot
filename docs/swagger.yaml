@@ -209,6 +209,15 @@ definitions:
       secret:
         type: string
     type: object
+  server.CreateDestinationRequest:
+    properties:
+      credential_name:
+        type: string
+      enabled:
+        type: boolean
+      url:
+        type: string
+    type: object
   server.CreateRepoRequest:
     properties:
       name:
@@ -243,6 +252,34 @@ definitions:
       name:
         type: string
       notes:
+        type: string
+    type: object
+  server.DestinationListResponse:
+    properties:
+      count:
+        type: integer
+      destinations:
+        items:
+          $ref: '#/definitions/server.DestinationView'
+        type: array
+    type: object
+  server.DestinationView:
+    properties:
+      created_at:
+        type: string
+      credential_name:
+        type: string
+      enabled:
+        type: boolean
+      id:
+        type: string
+      last_sync_at:
+        type: string
+      last_sync_error:
+        type: string
+      last_sync_status:
+        type: string
+      url:
         type: string
     type: object
   server.EnrollRequest:
@@ -401,6 +438,15 @@ definitions:
       notes:
         type: string
       secret:
+        type: string
+    type: object
+  server.UpdateDestinationRequest:
+    properties:
+      credential_name:
+        type: string
+      enabled:
+        type: boolean
+      url:
         type: string
     type: object
   server.UpdateTokenReposRequest:
@@ -713,6 +759,259 @@ paths:
         "204":
           description: No Content
       summary: Admin logout
+      tags:
+      - admin
+  /admin/repos/{name}/destinations:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        GET lists destinations; POST adds a new one. Each
+        destination points at a named credential in the vault —
+        see docs/design/credential-vault.md §5 and
+        docs/design/remote-sync.md §3.1. Session-cookie authenticated.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET response
+          schema:
+            $ref: '#/definitions/server.DestinationListResponse'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Repo not found, or credential_name unknown
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: List or create mirror-sync destinations on a repo (admin only)
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      description: |-
+        GET lists destinations; POST adds a new one. Each
+        destination points at a named credential in the vault —
+        see docs/design/credential-vault.md §5 and
+        docs/design/remote-sync.md §3.1. Session-cookie authenticated.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET response
+          schema:
+            $ref: '#/definitions/server.DestinationListResponse'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Repo not found, or credential_name unknown
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: List or create mirror-sync destinations on a repo (admin only)
+      tags:
+      - admin
+  /admin/repos/{name}/destinations/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the destination; PATCH updates any of url/
+        credential_name/enabled (omitted fields are left
+        unchanged); DELETE removes it. Session-cookie authenticated.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Destination id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage one destination by id (admin only)
+      tags:
+      - admin
+    get:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the destination; PATCH updates any of url/
+        credential_name/enabled (omitted fields are left
+        unchanged); DELETE removes it. Session-cookie authenticated.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Destination id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage one destination by id (admin only)
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the destination; PATCH updates any of url/
+        credential_name/enabled (omitted fields are left
+        unchanged); DELETE removes it. Session-cookie authenticated.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Destination id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage one destination by id (admin only)
       tags:
       - admin
   /admin/session:

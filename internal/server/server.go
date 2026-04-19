@@ -21,6 +21,7 @@ import (
 	"github.com/petervdpas/GiGot/internal/config"
 	"github.com/petervdpas/GiGot/internal/credentials"
 	"github.com/petervdpas/GiGot/internal/crypto"
+	"github.com/petervdpas/GiGot/internal/destinations"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
 	"github.com/petervdpas/GiGot/internal/policy"
 
@@ -41,6 +42,7 @@ type Server struct {
 	clients         *clients.Store
 	admins          *admins.Store
 	credentials     *credentials.Store
+	destinations    *destinations.Store
 	policy          policy.Evaluator
 	mux             *http.ServeMux
 }
@@ -100,6 +102,11 @@ func New(cfg *config.Config) *Server {
 		log.Fatalf("server: open credential store: %v", err)
 	}
 
+	destinationStore, err := destinations.Open(filepath.Join(cfg.Crypto.DataDir, "destinations.enc"), enc)
+	if err != nil {
+		log.Fatalf("server: open destination store: %v", err)
+	}
+
 	session := auth.NewSessionStrategy(12 * time.Hour)
 	ap.Register(session)
 
@@ -113,6 +120,7 @@ func New(cfg *config.Config) *Server {
 		clients:         clientStore,
 		admins:          adminStore,
 		credentials:     credentialStore,
+		destinations:    destinationStore,
 		policy:          policy.TokenRepoPolicy{},
 		mux:             http.NewServeMux(),
 	}
@@ -220,6 +228,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/admin/tokens", s.handleAdminTokens)
 	s.mux.HandleFunc("/api/admin/credentials", s.handleAdminCredentials)
 	s.mux.HandleFunc("/api/admin/credentials/", s.handleAdminCredential)
+	// Admin repo destinations live under /api/admin/repos/{name}/destinations[/{id}].
+	// A prefix handler dispatches both list/create and per-id forms.
+	s.mux.HandleFunc("/api/admin/repos/", s.handleAdminRepoDestinations)
 
 	// Git smart HTTP transport
 	s.mux.HandleFunc("/git/", s.handleGitRouter)

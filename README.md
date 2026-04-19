@@ -53,15 +53,19 @@ the sealed bodies of GiGot requests and responses.
 Open work, in rough priority order. This list mirrors the in-project task
 tracker and is the source of truth for "what's next."
 
-- [ ] **Mirror-sync gigot repos to external remotes.** Whether to build this
-      at all is still an open question — see
-      [`docs/design/remote-sync.md`](docs/design/remote-sync.md). If it ships:
-      per-repo list of destinations, each one pointing at a named entry in
-      the credential vault (already in place), plus a post-receive push
-      worker and admin UI for destination health. §5 of
-      [`credential-vault.md`](docs/design/credential-vault.md) (destinations,
-      repo→credential linking, 409 on delete when referenced) lands with
-      this work.
+- [ ] **Mirror-sync — push worker (slice 2).** The destinations data
+      model and admin API are shipped (see below); the remaining work
+      is the actual `git push` path: async queue on post-receive, retry/
+      backoff, per-destination `last_sync_*` status updates, and
+      `credentials.Touch` on success. Privacy tension from
+      [`docs/design/remote-sync.md`](docs/design/remote-sync.md) §2.2
+      (mirroring plaintext git objects defeats GiGot's sealed-body
+      promise for that repo) should be re-examined here before the
+      worker actually fires — that's the right decision gate.
+- [ ] **Mirror-sync — admin UI (slice 3).** "Destinations" section on
+      the repo detail page with add/edit/delete rows and a prominent
+      privacy-warning checkbox per §3.7 of the remote-sync design.
+      Surfaces `last_sync_status` once slice 2 populates it.
 - [ ] **Credential vault — Expires field in the admin UI.** Store and API
       already accept `expires`; the `/admin/credentials` form and table
       don't surface it yet. Design doc §3 calls for an input on the form,
@@ -81,6 +85,19 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Mirror-sync — destinations data model + admin API (slice 1 of 3).**
+      New `internal/destinations` package and sealed `data/destinations.enc`
+      (rewrapped by `-rotate-keys`). Admin endpoints under
+      `/api/admin/repos/{name}/destinations[/{id}]` support list / create /
+      get / patch / delete, session-gated, Swagger-annotated. Creating or
+      updating a destination rejects unknown `credential_name` with a 404
+      against the vault; deleting a credential that is still referenced
+      by any destination returns **409** with `{ ref_repos: [...] }`
+      (credential-vault.md §5). Deleting a repo cascades — destinations
+      under that name are dropped so they can't dangle. No push worker
+      and no UI yet — those are slices 2 and 3. See
+      [`docs/design/credential-vault.md`](docs/design/credential-vault.md) §5
+      and [`docs/design/remote-sync.md`](docs/design/remote-sync.md) §3.1.
 - [x] **Credential vault — storage + admin API + page (design §§1–4, §6, §7).**
       New sealed store `data/credentials.enc` (NaCl-boxed to the server
       pubkey, rewrapped by `-rotate-keys` alongside the other `.enc`
@@ -318,7 +335,7 @@ config file, not the process's working directory. This makes it safe to invoke
 | ----------------- | ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | private_key_path  | string | `"./data/server.key"` | The server's curve25519 private key, base64-encoded in a 0600 file. Generated automatically on first run if missing.                       |
 | public_key_path   | string | `"./data/server.pub"` | Matching public key in a 0644 file. Also generated on first run.                                                                           |
-| data_dir          | string | `"./data"`            | Where encrypted stores live: `clients.enc` (enrolled Formidable clients), `tokens.enc` (subscription keys), `admins.enc` (admin accounts), `credentials.enc` (outbound credential vault). |
+| data_dir          | string | `"./data"`            | Where encrypted stores live: `clients.enc` (enrolled Formidable clients), `tokens.enc` (subscription keys), `admins.enc` (admin accounts), `credentials.enc` (outbound credential vault), `destinations.enc` (per-repo mirror destinations). |
 
 ### `logging`
 
@@ -356,14 +373,15 @@ After `-init` and a first run, you'll see something like:
     ├── clients.enc           # sealed: enrolled clients + their pubkeys
     ├── tokens.enc            # sealed: issued subscription keys
     ├── admins.enc            # sealed: admin accounts + bcrypt hashes
-    └── credentials.enc       # sealed: outbound credentials (PATs, SSH keys, …)
+    ├── credentials.enc       # sealed: outbound credentials (PATs, SSH keys, …)
+    └── destinations.enc      # sealed: per-repo mirror-sync destinations
 ```
 
-The four `.enc` files are NaCl-sealed to the server's own public key. **Only a
+The five `.enc` files are NaCl-sealed to the server's own public key. **Only a
 GiGot process holding the matching `server.key` can read them.** If you lose
 `server.key`, you lose every admin account, every subscription key, every
-enrolled client pubkey, and every stored outbound credential — there is no
-recovery.
+enrolled client pubkey, every stored outbound credential, and every configured
+mirror destination — there is no recovery.
 
 **Back up `server.key` somewhere safe.**
 
@@ -543,7 +561,12 @@ The account is stored in `data/admins.enc` (sealed), so it survives restarts.
 | POST   | `/api/admin/credentials`          | Creates a credential. Body: `{ "name", "kind", "secret", "expires?", "notes?" }`.      |
 | GET    | `/api/admin/credentials/{name}`   | Metadata for one credential.                                                            |
 | PATCH  | `/api/admin/credentials/{name}`   | Rotate/update metadata. Any omitted field is left unchanged.                            |
-| DELETE | `/api/admin/credentials/{name}`   | Remove a credential.                                                                    |
+| DELETE | `/api/admin/credentials/{name}`   | Remove a credential. **409** with `{ ref_repos: [...] }` when any repo destination still points at it. |
+| GET    | `/api/admin/repos/{name}/destinations`        | Lists mirror-sync destinations attached to a repo.                          |
+| POST   | `/api/admin/repos/{name}/destinations`        | Adds a destination. Body: `{ "url", "credential_name", "enabled?" }`. **404** if `credential_name` is not in the vault. |
+| GET    | `/api/admin/repos/{name}/destinations/{id}`   | Metadata for one destination.                                               |
+| PATCH  | `/api/admin/repos/{name}/destinations/{id}`   | Update any of `url` / `credential_name` / `enabled`; omitted fields unchanged. |
+| DELETE | `/api/admin/repos/{name}/destinations/{id}`   | Remove a destination.                                                        |
 
 The legacy unauthenticated `POST /api/auth/token` still exists for backward
 compatibility, but the admin UI uses `/api/admin/tokens` (session-gated) for
@@ -766,12 +789,16 @@ swag init -g main.go -o docs
 
 ### Useful test paths
 
-- `internal/crypto/*_test.go` — NaCl box roundtrips, tamper detection, on-disk keypair.
+- `internal/crypto/*_test.go` — NaCl box roundtrips, tamper detection, on-disk keypair, `-rotate-keys` rewrap flow.
 - `internal/clients/*_test.go` — enrollment store, idempotent re-enrollment.
 - `internal/auth/*_test.go` — token strategy, session strategy, sealed token persister.
 - `internal/admins/*_test.go` — admin store + bcrypt verify.
-- `internal/server/*_test.go` — HTTP handlers, index page, repo router.
-- `integration/features/*.feature` — end-to-end scenarios for every route.
+- `internal/credentials/*_test.go` — credential vault store (create / rotate / delete / persist / touch).
+- `internal/destinations/*_test.go` — per-repo mirror destinations store (CRUD + `Refs` + cascade cleanup).
+- `internal/formidable/*_test.go` — record-merge rules from structured-sync-api.md §10.
+- `internal/policy/*_test.go` — `TokenRepoPolicy` per-repo scope decisions.
+- `internal/server/*_test.go` — HTTP handlers, index page, repo router, admin endpoints.
+- `integration/features/*.feature` — end-to-end Cucumber scenarios for every route.
 
 ---
 
@@ -781,7 +808,9 @@ swag init -g main.go -o docs
 GiGot/
 ├── main.go                           # Entry point — just calls cli.Execute
 ├── gigot.json                        # Server config (generated with -init)
-├── docs/                             # Generated Swagger assets
+├── docs/                             # Generated Swagger assets + design docs
+│   ├── swagger.json / swagger.yaml   # Machine-generated OpenAPI
+│   └── design/                       # Narrative design docs (hand-written)
 ├── integration/                      # Cucumber feature tests
 │   ├── integration_test.go
 │   └── features/*.feature
@@ -793,22 +822,34 @@ GiGot/
     │   └── root.go                   # Execute() dispatch + runAddAdmin/runRotateKeys
     ├── clients/                      # Enrolled client pubkeys (sealed file)
     ├── config/                       # JSON config loading + defaults
+    ├── credentials/                  # Outbound credential vault (sealed file)
     ├── crypto/                       # NaCl box wrappers + keypair bootstrap (leaf package)
-    ├── git/                          # Bare repo management
-    └── server/                       # HTTP server, routes, middleware, admin page
+    ├── destinations/                 # Per-repo mirror-sync destinations (sealed file)
+    ├── formidable/                   # Record merge rules (structured-sync-api.md §10)
+    ├── git/                          # Bare repo management + sync primitives
+    ├── policy/                       # TokenRepoPolicy: per-repo scope decisions
+    └── server/                       # HTTP server, routes, middleware, admin UI
         ├── server.go                 # Wiring
+        ├── router.go                 # Sub-routers for /api/repos and /git
+        ├── respond.go                # JSON + error helpers
         ├── middleware_sealed.go      # Sealed-body request/response middleware
-        ├── handler_admin.go          # Admin auth + token management
-        ├── handler_admin_page.go     # /admin HTML+JS
+        ├── handler_admin.go          # Admin login/logout + tokens
+        ├── handler_admin_page.go     # /admin + /admin/credentials pages
+        ├── handler_admin_credentials.go    # Credential vault REST
+        ├── handler_admin_destinations.go   # Per-repo destinations REST
         ├── handler_clients.go        # Client enrollment
         ├── handler_crypto.go         # Server pubkey
         ├── handler_auth.go           # Legacy token endpoints
-        ├── handler_repos.go          # Repository CRUD
+        ├── handler_repos.go          # Repository CRUD (with destinations cascade)
         ├── handler_health.go         # /api/health
         ├── handler_git.go            # Git smart-HTTP proxy
-        ├── router.go                 # Sub-routers for /api/repos and /git
-        ├── respond.go                # JSON helpers
-        └── models.go                 # Request/response DTOs
+        ├── handler_sync.go           # Structured sync — /head /tree /snapshot /files /commits /changes
+        ├── handler_records.go        # Formidable-first record query endpoint
+        ├── formidable_merge.go       # Record-merge pipeline wired into PUT/commits
+        ├── formidable_scaffold.go    # Formidable-context scaffold payload
+        ├── repo_scope.go             # Token → allowlist filter used by handlers
+        ├── templates.go / assets.go  # Embedded HTML + CSS/JS for /admin
+        └── models*.go                # Request/response DTOs, split per concern
 ```
 
 Every package aims to keep one clear responsibility. `internal/crypto` is a leaf

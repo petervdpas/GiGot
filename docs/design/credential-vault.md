@@ -1,10 +1,19 @@
 # Credential vault
 
-Status: proposed. A generic place to store secrets the server uses on
-your behalf when it talks to outside systems (GitHub, Azure DevOps,
-Gitea, anything future). Written UI-first, because the point of the
-vault is that a normal admin can manage it without knowing the
-plumbing.
+Status: **shipped** (storage + admin API + admin page + §5 destination
+linkage). A generic place to store secrets the server uses on your
+behalf when it talks to outside systems (GitHub, Azure DevOps, Gitea,
+anything future). Written UI-first, because the point of the vault is
+that a normal admin can manage it without knowing the plumbing.
+
+Implementation lives in `internal/credentials/` (store) and
+`internal/server/handler_admin_credentials.go` (REST); destinations
+in `internal/destinations/` and
+`internal/server/handler_admin_destinations.go`. Cucumber coverage in
+`integration/features/credentials.feature` +
+`integration/features/destinations.feature`. The only UI gap still
+open is surfacing the `Expires` field on `/admin/credentials` — see
+the README roadmap.
 
 ---
 
@@ -102,6 +111,13 @@ Those live in the implementation. The UI stays in plain terms.
 ---
 
 ## 5. Linking credentials to repos
+
+Status: **REST + storage shipped.** The admin UI section below
+describes the target experience; the Destinations panel on the repo
+detail page is not built yet (tracked as "Mirror-sync — admin UI
+(slice 3)" in the README roadmap). The 409-on-delete behaviour is
+live — try `DELETE /api/admin/credentials/<name>` while a destination
+still references it and you get `{ error, ref_repos: [...] }`.
 
 The repo is the owner of the link. Each repo carries a list of
 destinations:

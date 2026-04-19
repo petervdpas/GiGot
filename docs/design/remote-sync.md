@@ -1,9 +1,15 @@
 # Remote sync — does GiGot need it, and if so, what shape?
 
-Status: open question, not a committed feature. This document exists to
-decide whether mirror-sync to external remotes belongs in GiGot at all
-before any code gets written, and — if it does — to pin down the design
-shape that the current README roadmap entry under-specifies.
+Status: **partially shipped.** The data-model and admin-API half of §3
+— per-repo destinations + credential linkage — is live (slice 1 of 3;
+see README roadmap). The push worker (§3.3–§3.5) and the admin UI
+(§3.6) with its privacy-warning gate (§3.7) are still the *open
+question*: the tension in §2.2 between mirror-sync and GiGot's
+sealed-body promise has not been resolved, and slice 2 should not start
+until someone re-reads §2.2 and is willing to sign off on what it
+trades away. This document still decides whether the push worker
+belongs in GiGot at all; the storage substrate is built either way
+(credential-vault.md §5 needed it).
 
 ---
 

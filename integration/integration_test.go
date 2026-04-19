@@ -153,6 +153,13 @@ func (tc *testContext) theResponseBodyShouldContain(text string) error {
 	return nil
 }
 
+func (tc *testContext) theResponseBodyShouldNotContain(text string) error {
+	if contains(tc.respBody, text) {
+		return fmt.Errorf("expected body NOT to contain %q, got: %s", text, tc.respBody)
+	}
+	return nil
+}
+
 func (tc *testContext) aRepositoryExists(name string) error {
 	return tc.git.InitBare(name)
 }
@@ -792,14 +799,14 @@ func (tc *testContext) iGET(path string) error {
 }
 
 func (tc *testContext) iPOSTWithBody(path, body string) error {
-	return tc.doRequest(http.MethodPost, path, tc.expandSaved(body))
+	return tc.doRequest(http.MethodPost, tc.expandSaved(path), tc.expandSaved(body))
 }
 
 // iPUTWithBody sends a PUT with JSON body. Tokens of the form ${key} in the
 // body are expanded from the savedValues map, so scenarios can chain a GET
 // /head → save → PUT cycle without hardcoding SHAs.
 func (tc *testContext) iPUTWithBody(path, body string) error {
-	return tc.doRequest(http.MethodPut, path, tc.expandSaved(body))
+	return tc.doRequest(http.MethodPut, tc.expandSaved(path), tc.expandSaved(body))
 }
 
 func (tc *testContext) expandSaved(s string) string {
@@ -810,7 +817,13 @@ func (tc *testContext) expandSaved(s string) string {
 }
 
 func (tc *testContext) iDELETE(path string) error {
-	return tc.doRequest(http.MethodDelete, path, "")
+	return tc.doRequest(http.MethodDelete, tc.expandSaved(path), "")
+}
+
+// iPATCHWithBody sends a PATCH with JSON body. Same substitution rules as
+// iPUTWithBody — ${key} tokens get expanded from savedValues.
+func (tc *testContext) iPATCHWithBody(path, body string) error {
+	return tc.doRequest(http.MethodPatch, tc.expandSaved(path), tc.expandSaved(body))
 }
 
 func (tc *testContext) iDELETEWithSavedToken(path, key string) error {
@@ -1147,6 +1160,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the response should contain JSON key "([^"]*)" with value "([^"]*)"$`, tc.theResponseShouldContainJSONKeyWithValue)
 	ctx.Step(`^the response content type should contain "([^"]*)"$`, tc.theResponseContentTypeShouldContain)
 	ctx.Step(`^the response body should contain "([^"]*)"$`, tc.theResponseBodyShouldContain)
+	ctx.Step(`^the response body should not contain "([^"]*)"$`, tc.theResponseBodyShouldNotContain)
 	ctx.Step(`^a repository "([^"]*)" exists$`, tc.aRepositoryExists)
 	ctx.Step(`^a local git source "([^"]*)" exists$`, tc.aLocalGitSourceExists)
 	ctx.Step(`^a local git source "([^"]*)" exists with a formidable marker$`, tc.aLocalGitSourceExistsWithMarker)
@@ -1207,6 +1221,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I GET "([^"]*)"$`, tc.iGET)
 	ctx.Step(`^I POST "([^"]*)" with body '([^']*)'$`, tc.iPOSTWithBody)
 	ctx.Step(`^I PUT "([^"]*)" with body '([^']*)'$`, tc.iPUTWithBody)
+	ctx.Step(`^I PATCH "([^"]*)" with body '([^']*)'$`, tc.iPATCHWithBody)
 	ctx.Step(`^I DELETE "([^"]*)"$`, tc.iDELETE)
 	ctx.Step(`^I DELETE "([^"]*)" with saved token "([^"]*)"$`, tc.iDELETEWithSavedToken)
 	ctx.Step(`^the JSON response "([^"]*)" should be (\d+)$`, tc.theJSONResponseShouldBe)

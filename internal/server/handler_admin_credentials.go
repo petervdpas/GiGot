@@ -201,6 +201,16 @@ func (s *Server) adminUpdateCredential(w http.ResponseWriter, r *http.Request, n
 }
 
 func (s *Server) adminDeleteCredential(w http.ResponseWriter, _ *http.Request, name string) {
+	// Credential-vault.md §5: block deletion when any repo destination
+	// still points at this credential, so the admin can't silently
+	// orphan a live mirror target.
+	if refs := s.destinations.Refs(name); len(refs) > 0 {
+		writeJSON(w, http.StatusConflict, CredentialDeleteConflictResponse{
+			Error:    "credential is referenced by one or more destinations",
+			RefRepos: refs,
+		})
+		return
+	}
 	if err := s.credentials.Remove(name); err != nil {
 		if errors.Is(err, credentials.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "credential not found")
