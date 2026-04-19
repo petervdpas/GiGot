@@ -62,6 +62,20 @@ tracker and is the source of truth for "what's next."
       (mirroring plaintext git objects defeats GiGot's sealed-body
       promise for that repo) should be re-examined here before the
       worker actually fires — that's the right decision gate.
+      **Must also** include `refs/audit/*` in the push refspec so the
+      audit chain travels to mirrors alongside `refs/heads/*` (see
+      [`docs/design/audit-trail.md`](docs/design/audit-trail.md)).
+- [ ] **Audit trail — slice 2 (`git-receive-pack` coverage + guardrail).**
+      Current audit chain on `refs/audit/main` covers `PUT /files`,
+      `POST /commits`, and `POST /api/repos` (see Done below). Missing:
+      snapshot-diff audit events for the CLI `git push` path
+      (`handler_git.go`), and a pre-receive hook installed in every bare
+      repo that rejects any ref update under `refs/audit/*`. Without
+      the hook, a client who knows the ref name could push to it
+      directly — low risk (they would need to forge the GiGot Audit
+      identity) but worth closing. See
+      [`docs/design/audit-trail.md`](docs/design/audit-trail.md)
+      "Guardrails".
 - [ ] **Mirror-sync — admin UI (slice 3).** "Destinations" section on
       the repo detail page with add/edit/delete rows and a prominent
       privacy-warning checkbox per §3.7 of the remote-sync design.
@@ -83,6 +97,24 @@ tracker and is the source of truth for "what's next."
 
 Done and shipping:
 
+- [x] **Audit trail on `refs/audit/main` (slice 1).** Every repo carries
+      a server-authored, append-only audit chain written as git commits
+      on `refs/audit/main`. One entry per audited operation, chained by
+      git's parent link (tamper-evident), authored and committed by
+      `GiGot Audit <audit@gigot.local>` regardless of the actor.
+      `internal/git.Manager.AppendAudit` is the sole writer, using
+      `git hash-object` + `git mktree` + CAS `update-ref` with
+      contention retry. Wired into `PUT /files`, `POST /commits`, and
+      `POST /api/repos` success paths; event types so far are
+      `file_put`, `commit`, and `repo_create`. Clients consume the
+      chain via `git fetch refs/audit/main` — no new HTTP surface.
+      Unit tests cover the CAS retry, parent chaining, and JSON
+      roundtrip; Cucumber `audit_trail.feature` proves the ref advances
+      by exactly one per wired operation and the top event's `type`
+      matches. Slice 2 (`git-receive-pack` coverage + pre-receive hook
+      to reject client writes to `refs/audit/*`) is listed under Open
+      above. Design doc:
+      [`docs/design/audit-trail.md`](docs/design/audit-trail.md).
 - [x] **Persistent admin sessions.** Sessions now round-trip through
       `data/sessions.enc` (sealed, rewrapped by `-rotate-keys` alongside
       the other stores), so admins no longer re-login after every
@@ -816,6 +848,7 @@ swag init -g main.go -o docs
 - `internal/credentials/*_test.go` — credential vault store (create / rotate / delete / persist / touch).
 - `internal/destinations/*_test.go` — per-repo mirror destinations store (CRUD + `Refs` + cascade cleanup).
 - `internal/formidable/*_test.go` — record-merge rules from structured-sync-api.md §10.
+- `internal/git/audit_test.go` — audit-chain append, CAS retry, JSON roundtrip on `refs/audit/main`.
 - `internal/policy/*_test.go` — `TokenRepoPolicy` per-repo scope decisions.
 - `internal/server/*_test.go` — HTTP handlers, index page, repo router, admin endpoints.
 - `integration/features/*.feature` — end-to-end Cucumber scenarios for every route.

@@ -312,3 +312,106 @@ a:hover { text-decoration: underline; }
 }
 .token-field .copy-btn:hover { background: #30363d; }
 .token-field .copy-btn.ok { color: #3fb950; border-color: #238636; }
+
+/* Relational sections on a repo card (subscriptions + mirror destination). */
+.info-card .ic-section {
+  border-top: 1px solid #21262d;
+  padding-top: 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.info-card .ic-section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.info-card .ic-section-title {
+  font-size: 0.75rem;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.info-card .ic-section-head .muted { font-size: 0.75rem; }
+.info-card .ic-section-head button.small { margin-left: auto; }
+.info-card .ic-section-empty { font-size: 0.8rem; color: #6e7681; }
+
+.sub-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.sub-chip {
+  background: #1f6feb22;
+  border: 1px solid #1f6feb44;
+  color: #c9d1d9;
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 0.8rem;
+}
+
+.dest-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+}
+.dest-row .dest-url code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.8rem;
+  color: #79c0ff;
+}
+.dest-row .dest-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: #8b949e;
+}
+.dest-row .dest-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.cred-pill {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.cred-pill.missing { color: #f85149; border-color: #da363366; background: #da363322; }
+
+.dest-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.dest-form .dest-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+}
+.dest-form .dest-field.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+.dest-form .dest-field input[type="text"],
+.dest-form .dest-field select {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  min-width: 0;
+}
+.dest-form .dest-field input[type="checkbox"] { min-width: 0; }
+.dest-form .dest-actions { display: flex; align-items: center; gap: 0.4rem; }
+.dest-form .dest-actions .dest-err { margin-left: 0.3rem; }

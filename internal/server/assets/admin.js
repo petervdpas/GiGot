@@ -78,6 +78,44 @@ const api = {
     });
     if (!r.ok) throw new Error('revoke failed');
   },
+  async listDestinations(repo) {
+    const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/destinations', {
+      credentials: 'same-origin',
+    });
+    if (!r.ok) throw new Error('list destinations failed');
+    return r.json();
+  },
+  async createDestination(repo, body) {
+    const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/destinations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || 'create destination failed');
+    return r.json();
+  },
+  async updateDestination(repo, id, body) {
+    const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/destinations/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || 'update destination failed');
+    return r.json();
+  },
+  async deleteDestination(repo, id) {
+    const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/destinations/' + encodeURIComponent(id), {
+      method: 'DELETE', credentials: 'same-origin',
+    });
+    if (!r.ok) throw new Error('delete destination failed');
+  },
+  async listCredentials() {
+    const r = await fetch('/api/admin/credentials', { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('list credentials failed');
+    return r.json();
+  },
 };
 
 const loginView = document.getElementById('login');
@@ -88,7 +126,24 @@ const appView = document.getElementById('app');
 // pickers) don't have to re-fetch. repoNames() exists because the
 // picker and the issue form still just want the name set.
 let repoInfoCache = [];
+// tokensCache and credentialsCache are kept in sync with repoInfoCache so
+// the relational repo card can render subscriptions (tokens granting
+// access to this repo) and the destination's credential dropdown without
+// extra round-trips per re-render.
+let tokensCache = [];
+let credentialsCache = [];
+// destinationsByRepo maps repo name → Destination (first one; the UI
+// treats destinations as 1:1 per repo per the diagram, even though the
+// data model allows N).
+let destinationsByRepo = {};
+// pendingKeysRepo is set when a repo card asks to jump to the keys panel
+// with itself pre-selected in the issue form. The keys panel picks this
+// up on activation and clears it.
+let pendingKeysRepo = '';
 function repoNames() { return repoInfoCache.map(r => r.name); }
+function subscriptionsForRepo(name) {
+  return tokensCache.filter(t => (t.repos || []).includes(name));
+}
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -122,16 +177,13 @@ function selectedReposFromPicker(container) {
 
 function renderRepoCard(r) {
   const card = document.createElement('div');
-  card.className = 'info-card';
+  card.className = 'info-card repo-card';
+  card.dataset.repo = r.name;
 
   const badges = [];
   if (r.has_formidable) badges.push('<span class="badge formidable" title="Scaffolded as a Formidable context">Formidable</span>');
   if (r.empty) badges.push('<span class="badge empty" title="No commits yet — nothing has been pushed to this repo">empty</span>');
 
-  // Stats always show so a card never renders with just a name and a
-  // delete button. An empty repo displays COMMITS 0 explicitly — no
-  // HEAD/Branch lines (there is no HEAD), but the zero-commits stat
-  // makes the state unambiguous.
   const stats = [];
   const commitLabel = r.commits === 1 ? 'commit' : 'commits';
   stats.push('<span><span class="stat-label">' + commitLabel + '</span><span class="stat-value">' + r.commits + '</span></span>');
@@ -141,7 +193,6 @@ function renderRepoCard(r) {
       stats.push('<span><span class="stat-label">Branch</span><span class="stat-value">' + escapeHtml(r.default_branch) + '</span></span>');
     }
   }
-  stats.push('<span><span class="stat-label">Destinations</span><span class="stat-value">' + r.destination_count + '</span></span>');
 
   card.innerHTML =
     '<div class="ic-header">' +
@@ -149,16 +200,20 @@ function renderRepoCard(r) {
       '<div class="ic-chips">' + badges.join('') + '</div>' +
     '</div>' +
     '<div class="ic-stats">' + stats.join('') + '</div>' +
+    '<div class="ic-section" data-section="subs"></div>' +
+    '<div class="ic-section" data-section="dest"></div>' +
     '<div class="ic-actions">' +
       '<button class="small danger delete-btn">Delete</button>' +
     '</div>';
+
+  renderSubscriptionsSection(card.querySelector('[data-section="subs"]'), r.name);
+  renderDestinationSection(card.querySelector('[data-section="dest"]'), r.name);
 
   card.querySelector('.delete-btn').addEventListener('click', async () => {
     if (!confirm('Delete repo "' + r.name + '"? This is destructive — the bare repo and any attached destinations are dropped.')) return;
     try {
       await api.deleteRepo(r.name);
       await refreshRepos();
-      await refreshTokens();
     } catch (e) {
       alert(e.message);
     }
@@ -167,15 +222,162 @@ function renderRepoCard(r) {
   return card;
 }
 
+function renderSubscriptionsSection(container, repoName) {
+  const subs = subscriptionsForRepo(repoName);
+  const header = '<div class="ic-section-head">' +
+    '<span class="ic-section-title">Subscriptions</span>' +
+    '<span class="muted">(' + subs.length + ')</span>' +
+    '<button type="button" class="small secondary issue-key-btn">+ Issue key</button>' +
+    '</div>';
+  const body = subs.length === 0
+    ? '<div class="muted ic-section-empty">No subscription keys grant access to this repo.</div>'
+    : '<div class="sub-chips">' +
+        subs.map(s => '<span class="sub-chip">' + escapeHtml(s.username) + '</span>').join('') +
+      '</div>';
+  container.innerHTML = header + body;
+  container.querySelector('.issue-key-btn').addEventListener('click', () => {
+    pendingKeysRepo = repoName;
+    activatePanel('keys');
+  });
+}
+
+function renderDestinationSection(container, repoName) {
+  const dest = destinationsByRepo[repoName] || null;
+  const header = '<div class="ic-section-head">' +
+    '<span class="ic-section-title">Mirror destination</span>' +
+    (dest ? '' : '<button type="button" class="small secondary add-dest-btn">+ Add</button>') +
+    '</div>';
+  if (!dest) {
+    container.innerHTML = header +
+      '<div class="muted ic-section-empty">Not mirrored. Add a destination to push this repo to an external git remote.</div>';
+    container.querySelector('.add-dest-btn').addEventListener('click', () => {
+      renderDestinationEditor(container, repoName, null);
+    });
+    return;
+  }
+  const credPill = dest.credential_name
+    ? '<span class="cred-pill">' + escapeHtml(dest.credential_name) + '</span>'
+    : '<span class="cred-pill missing">(no credential)</span>';
+  const enabledTag = dest.enabled
+    ? '<span class="badge formidable">enabled</span>'
+    : '<span class="badge empty">disabled</span>';
+  container.innerHTML = header +
+    '<div class="dest-row">' +
+      '<div class="dest-url"><span class="stat-label">URL</span> <code>' + escapeHtml(dest.url) + '</code></div>' +
+      '<div class="dest-meta">' +
+        '<span class="stat-label">Credential</span> ' + credPill + ' ' + enabledTag +
+      '</div>' +
+      '<div class="dest-actions">' +
+        '<button type="button" class="small secondary edit-dest-btn">Edit</button>' +
+        '<button type="button" class="small danger remove-dest-btn">Remove</button>' +
+      '</div>' +
+    '</div>';
+  container.querySelector('.edit-dest-btn').addEventListener('click', () => {
+    renderDestinationEditor(container, repoName, dest);
+  });
+  container.querySelector('.remove-dest-btn').addEventListener('click', async () => {
+    if (!confirm('Remove mirror destination from "' + repoName + '"?')) return;
+    try {
+      await api.deleteDestination(repoName, dest.id);
+      await refreshRepos();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+}
+
+function renderDestinationEditor(container, repoName, existing) {
+  const isEdit = !!existing;
+  const credOptions = credentialsCache.length === 0
+    ? '<option value="">(no credentials in the vault — add one first)</option>'
+    : ['<option value="">Select a credential…</option>']
+        .concat(credentialsCache.map(c => {
+          const sel = existing && existing.credential_name === c.name ? ' selected' : '';
+          return '<option value="' + escapeHtml(c.name) + '"' + sel + '>' + escapeHtml(c.name) + '</option>';
+        }))
+        .join('');
+  const urlVal = existing ? escapeHtml(existing.url) : '';
+  const enabledChecked = !existing || existing.enabled ? 'checked' : '';
+  container.innerHTML =
+    '<div class="ic-section-head">' +
+      '<span class="ic-section-title">' + (isEdit ? 'Edit mirror destination' : 'Add mirror destination') + '</span>' +
+    '</div>' +
+    '<form class="dest-form">' +
+      '<label class="dest-field"><span class="stat-label">URL</span>' +
+        '<input type="text" name="url" value="' + urlVal + '" placeholder="https://github.com/org/repo.git" required>' +
+      '</label>' +
+      '<label class="dest-field"><span class="stat-label">Credential</span>' +
+        '<select name="credential_name" required>' + credOptions + '</select>' +
+      '</label>' +
+      '<label class="dest-field inline">' +
+        '<input type="checkbox" name="enabled" ' + enabledChecked + '> enabled' +
+      '</label>' +
+      '<div class="dest-actions">' +
+        '<button type="submit" class="small">' + (isEdit ? 'Save' : 'Add') + '</button>' +
+        '<button type="button" class="small secondary cancel-btn">Cancel</button>' +
+        '<span class="dest-err error"></span>' +
+      '</div>' +
+    '</form>';
+  const form = container.querySelector('.dest-form');
+  const err = form.querySelector('.dest-err');
+  form.querySelector('.cancel-btn').addEventListener('click', () => {
+    renderDestinationSection(container, repoName);
+  });
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    err.textContent = '';
+    const body = {
+      url: form.url.value.trim(),
+      credential_name: form.credential_name.value,
+      enabled: form.enabled.checked,
+    };
+    try {
+      if (isEdit) {
+        await api.updateDestination(repoName, existing.id, body);
+      } else {
+        await api.createDestination(repoName, body);
+      }
+      await refreshRepos();
+    } catch (ex) {
+      err.textContent = ex.message;
+    }
+  });
+}
+
 async function refreshRepos() {
   try {
-    const data = await api.listRepos();
-    repoInfoCache = data.repos || [];
-    document.getElementById('repo-count').textContent = data.count;
+    const [repoData, tokenData, credData] = await Promise.all([
+      api.listRepos(),
+      api.listTokens().catch(() => ({ tokens: [], count: 0 })),
+      api.listCredentials().catch(() => ({ credentials: [], count: 0 })),
+    ]);
+    repoInfoCache = repoData.repos || [];
+    tokensCache = tokenData.tokens || [];
+    credentialsCache = credData.credentials || [];
+
+    // Destinations are admin-scoped and per-repo — one fetch per repo is
+    // fine at the size of admin workloads, and keeps the public /api/repos
+    // response free of admin-only fields.
+    const destEntries = await Promise.all(repoInfoCache.map(async r => {
+      try {
+        const d = await api.listDestinations(r.name);
+        return [r.name, (d.destinations || [])[0] || null];
+      } catch {
+        return [r.name, null];
+      }
+    }));
+    destinationsByRepo = Object.fromEntries(destEntries);
+
+    document.getElementById('repo-count').textContent = repoData.count;
     const grid = document.getElementById('repo-grid');
     const empty = document.getElementById('repo-empty');
     grid.replaceChildren(...repoInfoCache.map(renderRepoCard));
     empty.classList.toggle('hidden', repoInfoCache.length !== 0);
+
+    // Keep the global keys-panel views in sync with what we just fetched
+    // (the repo card is the relational view; the keys panel is the global
+    // list). refreshTokens() re-renders using tokensCache.
+    renderTokensGrid();
     renderRepoPicker(document.getElementById('issue-repos'), []);
   } catch (e) {
     console.error(e);
@@ -279,15 +481,29 @@ function enterEditMode(card, t) {
   });
 }
 
+// renderTokensGrid paints the keys panel from the module-level tokensCache.
+// Used when refreshRepos already fetched tokens — avoids a second fetch.
+function renderTokensGrid() {
+  document.getElementById('count').textContent = tokensCache.length;
+  const grid = document.getElementById('token-grid');
+  const empty = document.getElementById('token-empty');
+  grid.replaceChildren(...tokensCache.map(renderTokenCard));
+  empty.classList.toggle('hidden', tokensCache.length !== 0);
+}
+
+// refreshTokens re-fetches tokens from the server and re-renders. Called
+// after token-mutating actions (issue, revoke, edit) so the view is
+// authoritative; refreshRepos also updates tokensCache but goes the long
+// way (repos + destinations too).
 async function refreshTokens() {
   try {
     const data = await api.listTokens();
-    document.getElementById('count').textContent = data.count;
-    const grid = document.getElementById('token-grid');
-    const empty = document.getElementById('token-empty');
-    const tokens = data.tokens || [];
-    grid.replaceChildren(...tokens.map(renderTokenCard));
-    empty.classList.toggle('hidden', tokens.length !== 0);
+    tokensCache = data.tokens || [];
+    renderTokensGrid();
+    // Repo cards show subscriptions derived from tokensCache, so any
+    // token change has to re-paint them too.
+    const grid = document.getElementById('repo-grid');
+    if (grid) grid.replaceChildren(...repoInfoCache.map(renderRepoCard));
   } catch (e) {
     console.error(e);
   }
@@ -299,7 +515,9 @@ function show(who) {
   appView.classList.toggle('hidden', !loggedIn);
   if (loggedIn) {
     document.getElementById('me-name').textContent = who.username;
-    refreshRepos().then(refreshTokens);
+    // refreshRepos already fetches tokens + credentials + destinations
+    // and paints both grids, so no chained refreshTokens needed here.
+    refreshRepos();
   }
 }
 
@@ -312,6 +530,15 @@ function activatePanel(name) {
   });
   if (location.hash !== '#' + name) {
     history.replaceState(null, '', '#' + name);
+  }
+  // Honor "+ Issue key" deep-link from a repo card: re-render the picker
+  // with that repo pre-selected, focus the username input, then clear
+  // the pending flag so a subsequent plain panel activation is not sticky.
+  if (name === 'keys' && pendingKeysRepo) {
+    renderRepoPicker(document.getElementById('issue-repos'), [pendingKeysRepo]);
+    const u = document.querySelector('#issue-form [name="username"]');
+    if (u) u.focus();
+    pendingKeysRepo = '';
   }
 }
 

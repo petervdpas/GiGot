@@ -197,6 +197,11 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 	default:
 		msg += " created"
 	}
+	s.appendAudit(req.Name, gitmanager.AuditEvent{
+		Type:  AuditTypeRepoCreate,
+		Actor: auditActor(r),
+		Notes: msg,
+	})
 	writeJSON(w, http.StatusCreated, MessageResponse{Message: msg})
 }
 

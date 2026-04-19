@@ -166,7 +166,11 @@ func (tc *testContext) aRepositoryExists(name string) error {
 
 func (tc *testContext) theRepositoryHasCommits(name string, expected string) error {
 	path := tc.git.RepoPath(name)
-	out, err := exec.Command("git", "-C", path, "rev-list", "--all", "--max-count=1").Output()
+	// --branches scopes the check to refs/heads/* so server-owned refs like
+	// refs/audit/main (GiGot writes one on repo create) don't flip the
+	// "has commits" signal — the scenario cares whether user content
+	// landed, not whether bookkeeping exists.
+	out, err := exec.Command("git", "-C", path, "rev-list", "--branches", "--max-count=1").Output()
 	if err != nil {
 		return fmt.Errorf("rev-list %s: %w", name, err)
 	}
@@ -280,6 +284,48 @@ func (tc *testContext) theRepositoryHasExactCommits(repo string, want int) error
 	got := strings.TrimSpace(string(out))
 	if got != fmt.Sprintf("%d", want) {
 		return fmt.Errorf("repo %q commit count = %s, want %d", repo, got, want)
+	}
+	return nil
+}
+
+// theAuditRefHasEntries pins the count of commits on refs/audit/main so a
+// scenario can prove that a write path wrote exactly one audit entry (no
+// duplicates, no silent drops).
+func (tc *testContext) theAuditRefHasEntries(repo string, want int) error {
+	path := tc.git.RepoPath(repo)
+	out, err := exec.Command("git", "-C", path, "rev-list", "--count", "refs/audit/main").Output()
+	if err != nil {
+		// Missing ref → 0 entries, which is a legitimate answer for a repo
+		// that has not received any audited operation yet.
+		if want == 0 {
+			return nil
+		}
+		return fmt.Errorf("rev-list refs/audit/main on %s: %w", repo, err)
+	}
+	got := strings.TrimSpace(string(out))
+	if got != fmt.Sprintf("%d", want) {
+		return fmt.Errorf("repo %q audit-entry count = %s, want %d", repo, got, want)
+	}
+	return nil
+}
+
+// theAuditTopEventIs pulls event.json at refs/audit/main and asserts the
+// `type` field. Exact JSON equality is overkill — type is the discriminator
+// everything else hangs off.
+func (tc *testContext) theAuditTopEventIs(repo, wantType string) error {
+	path := tc.git.RepoPath(repo)
+	out, err := exec.Command("git", "-C", path, "show", "refs/audit/main:event.json").Output()
+	if err != nil {
+		return fmt.Errorf("show refs/audit/main:event.json on %s: %w", repo, err)
+	}
+	var ev struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(out, &ev); err != nil {
+		return fmt.Errorf("parse audit event on %s: %w", repo, err)
+	}
+	if ev.Type != wantType {
+		return fmt.Errorf("repo %q top audit event type = %q, want %q", repo, ev.Type, wantType)
 	}
 	return nil
 }
@@ -1167,6 +1213,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^a local git source "([^"]*)" exists with a broken formidable marker$`, tc.aLocalGitSourceExistsWithBrokenMarker)
 	ctx.Step(`^the repository "([^"]*)" (has commits|has no commits)$`, tc.theRepositoryHasCommits)
 	ctx.Step(`^the repository "([^"]*)" has (\d+) commits$`, tc.theRepositoryHasExactCommits)
+	ctx.Step(`^the audit ref in repo "([^"]*)" has (\d+) entries$`, tc.theAuditRefHasEntries)
+	ctx.Step(`^the top audit event in repo "([^"]*)" has type "([^"]*)"$`, tc.theAuditTopEventIs)
 	ctx.Step(`^the repository "([^"]*)" contains file "([^"]*)"$`, tc.theRepositoryContainsFile)
 	ctx.Step(`^the repository "([^"]*)" does not contain file "([^"]*)"$`, tc.theRepositoryDoesNotContainFile)
 	ctx.Step(`^the repository "([^"]*)" file "([^"]*)" is valid JSON with field "([^"]*)" equal to "([^"]*)"$`, tc.theRepositoryFileIsJSONWithField)

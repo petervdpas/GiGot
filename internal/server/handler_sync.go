@@ -340,6 +340,12 @@ func (s *Server) handleRepoFilePut(w http.ResponseWriter, r *http.Request) {
 		res.MergedFrom = originalParent
 		res.MergedWith = headVersion
 	}
+	s.appendAudit(name, gitmanager.AuditEvent{
+		Type:  AuditTypeFilePut,
+		Actor: auditActor(r),
+		SHA:   res.Version,
+		Notes: filePath,
+	})
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -524,6 +530,11 @@ func (s *Server) handleRepoCommits(w http.ResponseWriter, r *http.Request) {
 		writeSyncError(w, err)
 		return
 	}
+	s.appendAudit(name, gitmanager.AuditEvent{
+		Type:  AuditTypeCommit,
+		Actor: auditActor(r),
+		SHA:   res.Version,
+	})
 	writeJSON(w, http.StatusOK, res)
 }
 
