@@ -61,48 +61,12 @@ is schema-aware publishing (records → Azure DevOps wiki, Confluence,
 etc.) which explicitly belongs in Formidable's WikiWonder plugin, not
 here. The items below do not overlap with Track B.
 
-- [ ] **Token abilities — data model + admin surface.** `TokenEntry`
-      grows an `abilities []string` field (persisted in `tokens.enc`,
-      additive so no migration). `POST /api/admin/tokens` and
-      `PATCH /api/admin/tokens` accept an optional `abilities` array;
-      the admin tokens UI grows a checkbox column to set them. No
-      behavior change yet — this is the scaffolding for every future
-      token-scoped capability. Not a reintroduction of roles: abilities
-      are explicit claims attached to individual tokens, same shape as
-      the existing `repos: [...]` allowlist. Closest analogue is OAuth
-      scopes or GitHub fine-grained PAT permissions. See
-      [`remote-sync.md`](docs/design/remote-sync.md) §2.6.
-- [ ] **`mirror` ability + subscription-facing destinations API.**
-      First consumer of the ability model above. New leaf
-      `internal/policy.TokenAbilityPolicy`. New routes
-      `GET/POST/PATCH/DELETE /api/repos/{name}/destinations`
-      (Bearer-auth, gated by `TokenRepoPolicy` **and**
-      `TokenAbilityPolicy("mirror")`), delegating to the same
-      `internal/destinations` store as the admin path. Positive/negative
-      test pairs: token-with-`mirror` allowed, token-without-`mirror`
-      403, out-of-scope repo 403. Admins retain the existing
-      `/api/admin/repos/{name}/destinations` override path unchanged.
-      See [`remote-sync.md`](docs/design/remote-sync.md) §2.6.
-- [ ] **Refspec compatibility spike (manual, ~5 min).** Before the
-      push worker bakes in a refspec, manually `git push
-      +refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*` to one
-      throwaway GitHub repo and one Azure DevOps repo with a real PAT,
-      and confirm both accept `refs/audit/*`. If either rejects it,
-      the audit-chain-to-mirror contract in
-      [`audit-trail.md`](docs/design/audit-trail.md) needs a fallback
-      before slice 2 can ship. Not a code change — a go/no-go check.
-- [ ] **Mirror-sync — push worker (slice 2).** Track A delivery. The
-      destinations data model and admin API are shipped (see below);
-      the remaining work is the actual `git push` path: async queue on
-      post-receive, retry/backoff, per-destination `last_sync_*`
-      status updates, and `credentials.Touch` on success. The §2.2
-      privacy tension is resolved in
-      [`remote-sync.md`](docs/design/remote-sync.md) §2.4 (operator
-      opt-in via the §3.7 checkbox; sealed-body is a GiGot↔client
-      scope claim). **Must also** include `refs/audit/*` in the push
-      refspec so the audit chain travels to mirrors alongside
-      `refs/heads/*` (see
-      [`audit-trail.md`](docs/design/audit-trail.md)).
+- [ ] **Mirror-sync — post-receive worker (slice 2b).** Wraps slice
+      2a's `pushToDestination` in a queue + post-receive hook +
+      retry/backoff so every client push automatically fans out to
+      enabled destinations. Failure semantics per §3.4: silent-and-
+      log, client push still succeeds, admin UI shows the red
+      `last_sync_status`.
 - [ ] **Mirror-sync — admin UI (slice 3).** "Destinations" section on
       the repo detail page with add/edit/delete rows and a prominent
       privacy-warning checkbox per §3.7 of the remote-sync design.
@@ -131,6 +95,69 @@ here. The items below do not overlap with Track B.
 
 Done and shipping:
 
+- [x] **Mirror-sync — manual sync endpoint (slice 2a of mirror-sync).**
+      Track A first-fire. New `internal/server/mirror.go`
+      `executeMirrorPush` shells out to
+      `git push +refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*`
+      using a one-shot `GIT_ASKPASS` shim so the credential secret
+      never hits `/proc/*/cmdline` or the URL userinfo. Two
+      synchronous routes call it:
+      `POST /api/admin/repos/{name}/destinations/{id}/sync` (admin
+      session) and `POST /api/repos/{name}/destinations/{id}/sync`
+      (Bearer, gated by `TokenRepoPolicy` + `TokenAbilityPolicy("mirror")`).
+      Both populate `last_sync_status` / `last_sync_at` /
+      `last_sync_error`, redact the secret from captured output
+      before storing, and call `credentials.Touch` on success.
+      `enabled=false` destinations still accept a manual sync (the
+      flag gates the automatic fan-out in slice 2b, not explicit
+      operator action); a credential deleted out from under a
+      destination returns **409** rather than crashing the push.
+      `pushDest` is a swappable field on `Server` so tests stub the
+      shell-out. Unit coverage in
+      `internal/server/mirror_test.go` (real local bare-repo
+      push, secret-leak regression, redactor) and
+      `handler_sync_destination_test.go` (admin + subscriber
+      success, failure status wiring, mirror-ability gate, disabled
+      dest still syncs, missing credential 409, unknown id 404).
+      Cucumber scenarios in `destinations.feature` lock the route
+      existence + ability gate. Slice 2b (post-receive worker)
+      reuses `executeMirrorPush` unchanged.
+- [x] **Token abilities + `mirror` ability + subscriber-facing
+      destinations API (slice 2.5 of mirror-sync).** `TokenEntry`
+      grew an `abilities []string` field (additive, persisted in
+      `tokens.enc`, rewrapped by `-rotate-keys`); `POST` and
+      `PATCH /api/admin/tokens` accept an optional `abilities`
+      array; the admin tokens UI grows a checkbox column that
+      only shows a given ability when at least one credential
+      exists (held-but-inert abilities still render as stale
+      chips so admins can revoke them). First consumer is the
+      `mirror` ability: new leaf `internal/policy.TokenAbilityPolicy`
+      gates `GET/POST/PATCH/DELETE /api/repos/{name}/destinations`
+      (Bearer auth) with `TokenRepoPolicy` AND
+      `TokenAbilityPolicy("mirror")` — token-with-mirror allowed,
+      token-without-mirror 403, out-of-scope repo 403, no-token
+      401, and the admin override path `/api/admin/repos/{name}/destinations`
+      is unchanged. Abilities are explicit claims attached to
+      individual tokens (closest analogue: OAuth scopes), not a
+      reintroduction of roles. Unit coverage in
+      `internal/policy/policy_test.go`,
+      `internal/server/handler_admin_tokens_test.go`, and
+      `internal/server/handler_repo_destinations_test.go`;
+      Cucumber scenarios in `destinations.feature` for
+      mirror-allowed and mirror-denied. See
+      [`remote-sync.md`](docs/design/remote-sync.md) §2.6.
+- [x] **Refspec compatibility spike — GitHub accepts `refs/audit/*`.**
+      Manual spike on 2026-04-20 against `petervdpas/Braindamage`
+      with a fine-grained PAT (Contents R/W + Metadata R)
+      confirmed GitHub accepts `+refs/audit/*:refs/audit/*` both
+      in isolation and as part of the combined
+      `+refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*`
+      push. `git ls-remote` after the push showed both
+      `refs/heads/master` and `refs/audit/main` on the remote.
+      Gate-clears slices 2a and 2b — the audit chain travels with
+      the mirror without a fallback. Azure DevOps not yet spiked;
+      retest before claiming universal support. See
+      [`remote-sync.md`](docs/design/remote-sync.md) §5.
 - [x] **Basic auth narrowed to `/git/*` (defence in depth).** After
       adding Basic-auth support so git-over-HTTP works, the middleware
       initially accepted Basic on every bearer-gated route — more
@@ -811,6 +838,7 @@ The account is stored in `data/admins.enc` (sealed), so it survives restarts.
 | GET    | `/api/admin/repos/{name}/destinations/{id}`   | Metadata for one destination.                                               |
 | PATCH  | `/api/admin/repos/{name}/destinations/{id}`   | Update any of `url` / `credential_name` / `enabled`; omitted fields unchanged. |
 | DELETE | `/api/admin/repos/{name}/destinations/{id}`   | Remove a destination.                                                        |
+| POST   | `/api/admin/repos/{name}/destinations/{id}/sync` | Fire a one-shot mirror push for this destination. Synchronous. Returns the updated destination with `last_sync_status`, `last_sync_at`, and (on failure) `last_sync_error` populated. |
 
 The legacy unauthenticated `POST /api/auth/token` still exists for backward
 compatibility, but the admin UI uses `/api/admin/tokens` (session-gated) for

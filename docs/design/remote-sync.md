@@ -1,12 +1,17 @@
 # Remote sync — does GiGot need it, and if so, what shape?
 
-Status: **partially shipped.** The data-model and admin-API half of §3
-— per-repo destinations + credential linkage — is live (slice 1 of 3;
-see README roadmap). The §2.2 privacy tension has been resolved in
-§2.4: sealed-body is scoped to GiGot↔client; mirroring is a
-deliberate per-destination operator opt-in. With that decision in
-place, the remaining work is the push worker (§3.3–§3.5, slice 2)
-and the admin UI with its privacy-warning gate (§3.6–§3.7, slice 3).
+Status: **partially shipped.** Slice 1 (destinations data-model + admin
+API) and slice 2.5 (token abilities + `mirror` ability + subscriber-
+facing destinations API per §2.6) are live. The §2.2 privacy tension
+has been resolved in §2.4: sealed-body is scoped to GiGot↔client;
+mirroring is a deliberate per-destination operator opt-in. The
+refspec compatibility spike in §5 is complete — GitHub accepts
+`refs/audit/*` alongside `refs/heads/*` with a combined push, so
+the audit chain travels with the mirror without a fallback. Remaining
+work splits into slice 2a (manual sync endpoint invoking a shared
+`pushToDestination` helper), slice 2b (post-receive worker wrapping
+2a's helper in a queue), and slice 3 (admin UI with the §3.7
+privacy-warning gate).
 
 ---
 
@@ -347,5 +352,13 @@ Before committing to build this, we should be able to answer:
       when they leak?
 - [ ] What does the admin UI show when a mirror has been broken for a
       week? What does the user do about it?
+- [x] Does GitHub (and by extension Azure DevOps) accept a combined
+      `+refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*` push?
+      **Yes — confirmed against `petervdpas/Braindamage` on
+      2026-04-20 with a fine-grained PAT (Contents R/W + Metadata R).
+      GitHub accepted `refs/audit/*` as `[new reference]`; `git
+      ls-remote` afterwards showed both `refs/heads/master` and
+      `refs/audit/main` on the remote. The audit chain travels with
+      the mirror without a fallback.**
 
 If those don't have good answers, don't build it.

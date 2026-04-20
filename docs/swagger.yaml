@@ -1059,6 +1059,59 @@ paths:
       summary: Manage one destination by id (admin only)
       tags:
       - admin
+  /admin/repos/{name}/destinations/{id}/sync:
+    post:
+      description: |-
+        Invokes `git push +refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*`
+        against the destination's URL, using the vault credential
+        referenced by `credential_name`. Runs synchronously — the
+        response is the updated destination with `last_sync_at`,
+        `last_sync_status`, and (on failure) `last_sync_error`
+        populated. On success the vault credential's `last_used`
+        timestamp is also touched. Destinations with enabled=false
+        still accept this call (manual is explicit operator intent);
+        the flag gates only the automatic post-receive fan-out.
+        See docs/design/remote-sync.md §2.6 and §5.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Destination id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Repo, destination, or credential (deleted) not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Credential referenced by destination no longer exists in the
+            vault
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Trigger a manual mirror-sync push on one destination
+      tags:
+      - repos
   /admin/repos/{name}/formidable:
     post:
       description: |-
@@ -2200,6 +2253,59 @@ paths:
       security:
       - BearerAuth: []
       summary: Manage mirror-sync destinations on a repo (subscriber)
+      tags:
+      - repos
+  /repos/{name}/destinations/{id}/sync:
+    post:
+      description: |-
+        Invokes `git push +refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*`
+        against the destination's URL, using the vault credential
+        referenced by `credential_name`. Runs synchronously — the
+        response is the updated destination with `last_sync_at`,
+        `last_sync_status`, and (on failure) `last_sync_error`
+        populated. On success the vault credential's `last_used`
+        timestamp is also touched. Destinations with enabled=false
+        still accept this call (manual is explicit operator intent);
+        the flag gates only the automatic post-receive fan-out.
+        See docs/design/remote-sync.md §2.6 and §5.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Destination id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Repo, destination, or credential (deleted) not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Credential referenced by destination no longer exists in the
+            vault
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Trigger a manual mirror-sync push on one destination
       tags:
       - repos
   /repos/{name}/files/{path}:

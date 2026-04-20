@@ -45,6 +45,10 @@ type Server struct {
 	destinations    *destinations.Store
 	policy          policy.Evaluator
 	mux             *http.ServeMux
+
+	// pushDest fires one outbound mirror push. Injected so tests can
+	// stub the shell-out without running real git against a real remote.
+	pushDest pushDestinationFn
 }
 
 // New creates a new Server instance. A server keypair is loaded from
@@ -135,6 +139,7 @@ func New(cfg *config.Config) *Server {
 		destinations:    destinationStore,
 		policy:          policy.TokenRepoPolicy{},
 		mux:             http.NewServeMux(),
+		pushDest:        executeMirrorPush,
 	}
 	// Retro-install the refs/audit/* pre-receive guard on any repos
 	// created before slice 2 shipped. Newly-created repos get it in

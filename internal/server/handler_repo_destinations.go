@@ -8,30 +8,34 @@ import (
 	"github.com/petervdpas/GiGot/internal/policy"
 )
 
-// splitRepoDestinationsPath pulls the {repo} and optional {id} out of a
-// path of the form /api/repos/{repo}/destinations[/{id}]. Mirrors
+// splitRepoDestinationsPath pulls the {repo}, optional {id}, and
+// optional trailing action out of a path of the form
+// /api/repos/{repo}/destinations[/{id}[/{action}]]. Mirrors
 // splitDestinationsPath but for the subscriber-facing route — the
 // admin path has the /api/admin/ prefix, this one does not.
-func splitRepoDestinationsPath(p string) (repo, id string, ok bool) {
+func splitRepoDestinationsPath(p string) (repo, id, action string, ok bool) {
 	rest := strings.TrimPrefix(p, "/api/repos/")
 	if rest == p {
-		return "", "", false
+		return "", "", "", false
 	}
 	parts := strings.Split(rest, "/")
 	if len(parts) < 2 || parts[1] != "destinations" {
-		return "", "", false
+		return "", "", "", false
 	}
 	if parts[0] == "" {
-		return "", "", false
+		return "", "", "", false
 	}
 	repo = parts[0]
 	if len(parts) >= 3 {
 		id = parts[2]
 	}
-	if len(parts) > 3 {
-		return "", "", false
+	if len(parts) >= 4 {
+		action = parts[3]
 	}
-	return repo, id, true
+	if len(parts) > 4 {
+		return "", "", "", false
+	}
+	return repo, id, action, true
 }
 
 // handleRepoDestinations godoc
@@ -65,7 +69,7 @@ func splitRepoDestinationsPath(p string) (repo, id string, ok bool) {
 // @Router       /repos/{name}/destinations/{id} [patch]
 // @Router       /repos/{name}/destinations/{id} [delete]
 func (s *Server) handleRepoDestinations(w http.ResponseWriter, r *http.Request) {
-	repo, id, ok := splitRepoDestinationsPath(r.URL.Path)
+	repo, id, action, ok := splitRepoDestinationsPath(r.URL.Path)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid destinations path")
 		return
@@ -91,6 +95,14 @@ func (s *Server) handleRepoDestinations(w http.ResponseWriter, r *http.Request) 
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
+		return
+	}
+	if action != "" {
+		if action == "sync" && r.Method == http.MethodPost {
+			s.syncDestination(w, r, repo, id)
+			return
+		}
+		writeError(w, http.StatusNotFound, "unknown destination action")
 		return
 	}
 	switch r.Method {

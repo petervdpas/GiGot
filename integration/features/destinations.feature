@@ -117,6 +117,21 @@ Feature: Mirror-sync destinations (admin)
     When I request "/api/repos/addresses/destinations" with that token
     Then the response status should be 403
 
+  Scenario: Subscriber without mirror ability is 403 on the /sync route
+    Given the server is running with auth enabled
+    And a repository "addresses" exists
+    And a token is issued for user "alice" with repos "addresses"
+    When I POST "/api/repos/addresses/destinations/any-id/sync" with that token
+    Then the response status should be 403
+
+  Scenario: Unknown destination id on /sync returns 404 for an admin
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a repository "addresses" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/repos/addresses/destinations/does-not-exist/sync" with body '{}'
+    Then the response status should be 404
+
   Scenario: Destinations survive a server restart
     Given the server is running
     And an admin "alice" exists with password "hunter2"

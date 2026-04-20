@@ -756,6 +756,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/repos/{name}/destinations/{id}/sync": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Invokes ` + "`" + `git push +refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*` + "`" + `\nagainst the destination's URL, using the vault credential\nreferenced by ` + "`" + `credential_name` + "`" + `. Runs synchronously — the\nresponse is the updated destination with ` + "`" + `last_sync_at` + "`" + `,\n` + "`" + `last_sync_status` + "`" + `, and (on failure) ` + "`" + `last_sync_error` + "`" + `\npopulated. On success the vault credential's ` + "`" + `last_used` + "`" + `\ntimestamp is also touched. Destinations with enabled=false\nstill accept this call (manual is explicit operator intent);\nthe flag gates only the automatic post-receive fan-out.\nSee docs/design/remote-sync.md §2.6 and §5.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Trigger a manual mirror-sync push on one destination",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Repo, destination, or credential (deleted) not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Credential referenced by destination no longer exists in the vault",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/repos/{name}/formidable": {
             "post": {
                 "description": "Stamps .formidable/context.json on top of HEAD so the\nrepo picks up structured record-merge behaviour on subsequent\nwrites. Gated to server.formidable_first=true so generic-mode\noperators don't trip this accidentally. Idempotent: a repo\nthat already carries a valid marker returns stamped=false\nand writes no commit. On a successful stamp the server\nappends one ` + "`" + `repo_convert_formidable` + "`" + ` audit entry.",
@@ -2411,6 +2476,71 @@ const docTemplate = `{
                     },
                     "405": {
                         "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/repos/{name}/destinations/{id}/sync": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Invokes ` + "`" + `git push +refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*` + "`" + `\nagainst the destination's URL, using the vault credential\nreferenced by ` + "`" + `credential_name` + "`" + `. Runs synchronously — the\nresponse is the updated destination with ` + "`" + `last_sync_at` + "`" + `,\n` + "`" + `last_sync_status` + "`" + `, and (on failure) ` + "`" + `last_sync_error` + "`" + `\npopulated. On success the vault credential's ` + "`" + `last_used` + "`" + `\ntimestamp is also touched. Destinations with enabled=false\nstill accept this call (manual is explicit operator intent);\nthe flag gates only the automatic post-receive fan-out.\nSee docs/design/remote-sync.md §2.6 and §5.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Trigger a manual mirror-sync push on one destination",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Repo, destination, or credential (deleted) not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Credential referenced by destination no longer exists in the vault",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }

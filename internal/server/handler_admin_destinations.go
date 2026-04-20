@@ -24,30 +24,37 @@ func destinationView(d destinations.Destination) DestinationView {
 	}
 }
 
-// splitDestinationsPath pulls the {repo} and optional {id} out of a
-// path of the form /api/admin/repos/{repo}/destinations[/{id}]. Returns
-// empty strings for segments that aren't present.
-func splitDestinationsPath(p string) (repo, id string, ok bool) {
+// splitDestinationsPath pulls the {repo}, optional {id}, and optional
+// trailing action out of a path of the form
+// /api/admin/repos/{repo}/destinations[/{id}[/{action}]]. Returns empty
+// strings for segments that aren't present. Currently the only action
+// recognised is "sync"; unknown actions still return ok=true and the
+// dispatcher decides what to do with them (so a 404 surfaces the
+// typo rather than a misleading 400).
+func splitDestinationsPath(p string) (repo, id, action string, ok bool) {
 	rest := strings.TrimPrefix(p, "/api/admin/repos/")
 	if rest == p {
-		return "", "", false
+		return "", "", "", false
 	}
 	parts := strings.Split(rest, "/")
-	// parts: [repo, "destinations", id?]
+	// parts: [repo, "destinations", id?, action?]
 	if len(parts) < 2 || parts[1] != "destinations" {
-		return "", "", false
+		return "", "", "", false
 	}
 	if parts[0] == "" {
-		return "", "", false
+		return "", "", "", false
 	}
 	repo = parts[0]
 	if len(parts) >= 3 {
 		id = parts[2]
 	}
-	if len(parts) > 3 {
-		return "", "", false
+	if len(parts) >= 4 {
+		action = parts[3]
 	}
-	return repo, id, true
+	if len(parts) > 4 {
+		return "", "", "", false
+	}
+	return repo, id, action, true
 }
 
 // handleAdminRepoDestinations godoc
@@ -73,7 +80,7 @@ func (s *Server) handleAdminRepoDestinations(w http.ResponseWriter, r *http.Requ
 	if s.requireAdminSession(w, r) == nil {
 		return
 	}
-	repo, id, ok := splitDestinationsPath(r.URL.Path)
+	repo, id, action, ok := splitDestinationsPath(r.URL.Path)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid destinations path")
 		return
@@ -91,6 +98,14 @@ func (s *Server) handleAdminRepoDestinations(w http.ResponseWriter, r *http.Requ
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
+		return
+	}
+	if action != "" {
+		if action == "sync" && r.Method == http.MethodPost {
+			s.syncDestination(w, r, repo, id)
+			return
+		}
+		writeError(w, http.StatusNotFound, "unknown destination action")
 		return
 	}
 	switch r.Method {

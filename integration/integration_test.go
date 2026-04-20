@@ -835,6 +835,27 @@ func (tc *testContext) iRequestWithThatToken(path string) error {
 	return tc.requestWithToken(path, tc.currentToken)
 }
 
+func (tc *testContext) iPOSTWithThatToken(path string) error {
+	return tc.postWithToken(path, tc.currentToken)
+}
+
+func (tc *testContext) postWithToken(path, token string) error {
+	req, err := http.NewRequest(http.MethodPost, tc.ts.URL+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := tc.client.Do(req)
+	if err != nil {
+		return err
+	}
+	tc.resp = resp
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	tc.respBody = string(body)
+	return nil
+}
+
 func (tc *testContext) iRequestWithSavedToken(path, saveKey string) error {
 	token, ok := tc.savedValues[saveKey]
 	if !ok {
@@ -1315,6 +1336,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the JSON response "([^"]*)" should differ from saved "([^"]*)"$`, tc.theJSONResponseShouldDifferFromSaved)
 	ctx.Step(`^I request "([^"]*)" without a token$`, tc.iRequestWithoutAToken)
 	ctx.Step(`^I request "([^"]*)" with that token$`, tc.iRequestWithThatToken)
+	ctx.Step(`^I POST "([^"]*)" with that token$`, tc.iPOSTWithThatToken)
 	ctx.Step(`^I request "([^"]*)" with token "([^"]*)"$`, tc.iRequestWithToken)
 	ctx.Step(`^I request "([^"]*)" with saved token "([^"]*)"$`, tc.iRequestWithSavedToken)
 	ctx.Step(`^that token is revoked$`, tc.thatTokenIsRevoked)

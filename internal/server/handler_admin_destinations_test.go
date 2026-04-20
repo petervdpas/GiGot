@@ -288,8 +288,15 @@ func TestDestinations_BadPathShapes(t *testing.T) {
 		t.Fatalf("want 200 for /destinations/ trailing slash, got %d body=%s", rec.Code, rec.Body.String())
 	}
 
-	// Four segments past /destinations is not a thing we serve.
+	// {id}/{action} is valid shape now that /sync exists. An unknown
+	// action surfaces as 404 ("unknown destination action"), not 400.
 	rec = do(t, srv, http.MethodGet, "/api/admin/repos/addresses/destinations/a/b", nil, sess)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("want 404 for unknown action, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Five segments past /destinations is still not a thing we serve.
+	rec = do(t, srv, http.MethodGet, "/api/admin/repos/addresses/destinations/a/b/c", nil, sess)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("want 400 for too-deep path, got %d", rec.Code)
 	}
