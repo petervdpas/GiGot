@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"runtime/debug"
 	"time"
 
 	"github.com/petervdpas/GiGot/internal/credentials"
@@ -74,11 +75,26 @@ func (w *mirrorWorker) enqueue(repo string) {
 	}
 }
 
-// run is the worker goroutine. Exits when the queue is closed.
+// run is the worker goroutine. Exits when the queue is closed. Each
+// processRepo call is wrapped in a recover so a panic anywhere down
+// the stack (push helper bug, nil pointer in syncOnce, etc.) only
+// kills the current repo's fan-out rather than the worker itself —
+// without this a single latent bug would silently stop every future
+// auto-push with no visible signal until mirrors got noticeably
+// stale. The panic + stack get logged so it surfaces in ops tooling.
 func (w *mirrorWorker) run() {
 	for repo := range w.queue {
-		w.processRepo(repo)
+		w.processRepoSafe(repo)
 	}
+}
+
+func (w *mirrorWorker) processRepoSafe(repo string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("mirror: panic fanning out repo %q: %v\n%s", repo, r, debug.Stack())
+		}
+	}()
+	w.processRepo(repo)
 }
 
 // processRepo fires one push per enabled destination on repo. Each

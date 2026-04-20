@@ -148,7 +148,12 @@ func (s *Store) Add(repo string, d Destination) (*Destination, error) {
 		delete(s.items[repo], id)
 		return nil, err
 	}
-	return &stored, nil
+	// Return a copy so the caller's pointer doesn't alias the stored
+	// struct — subsequent Update calls from another goroutine would
+	// otherwise race on the caller's fields. Matches Get / Update which
+	// already return snapshots.
+	cp := stored
+	return &cp, nil
 }
 
 // Get returns one destination by repo + id.

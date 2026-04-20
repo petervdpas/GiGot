@@ -214,3 +214,32 @@ func TestPersistence_DifferentServerCannotOpen(t *testing.T) {
 		t.Fatal("expected Open to fail for a different server's keypair")
 	}
 }
+
+// TestPut_ReturnsCopyNotAlias pins the snapshot contract on Put: if a
+// caller mutates the returned struct, the store must not see it.
+// Lock-step with the destinations-store equivalent —  the mirror-sync
+// worker's Touch-on-success path races against any caller holding the
+// Put pointer unless this contract holds.
+func TestPut_ReturnsCopyNotAlias(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	got, err := s.Put(Credential{Name: "n", Kind: "pat", Secret: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Mutate the returned value. If Put leaked the stored pointer,
+	// this write would leak into the store.
+	got.Secret = "tampered-in-caller"
+	now := time.Now()
+	got.LastUsed = &now
+
+	fresh, err := s.Get("n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.Secret != "s" {
+		t.Errorf("caller mutation leaked into store: Secret = %q, want %q", fresh.Secret, "s")
+	}
+	if fresh.LastUsed != nil {
+		t.Error("caller mutation leaked into store: LastUsed unexpectedly set")
+	}
+}

@@ -224,6 +224,62 @@ func TestMirrorWorker_MissingCredentialSkipsAndContinues(t *testing.T) {
 	}
 }
 
+// TestMirrorWorker_PanicInPushDoesNotKillWorker is the
+// defensive-engineering fence: if pushDest (or anything it calls)
+// panics, the worker goroutine must NOT die. Without this, one
+// poisoned push silently stops every future auto-fan-out with no
+// visible signal until mirrors drift days stale. We stub pushDest to
+// panic on the first call and succeed on subsequent calls, fire two
+// enqueues, and assert the second call ran.
+func TestMirrorWorker_PanicInPushDoesNotKillWorker(t *testing.T) {
+	srv := mirrorWorkerTestServer(t, "repo-panic")
+	dest, _ := srv.destinations.Add("repo-panic", destinations.Destination{
+		URL: "https://x", CredentialName: "c", Enabled: true,
+	})
+
+	var mu sync.Mutex
+	calls := 0
+	srv.pushDest = func(_ context.Context, _, _, _ string) ([]byte, error) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		if n == 1 {
+			panic("simulated bug in push helper")
+		}
+		return []byte("ok"), nil
+	}
+
+	// First enqueue: worker panics processing it. processRepoSafe's
+	// recover catches it; the goroutine must keep running.
+	srv.mirrorWorker.enqueue("repo-panic")
+	if err := srv.mirrorWorker.settle(2 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second enqueue: if the worker died, this event sits in the
+	// queue forever and settle would still see it drained (channel
+	// len == 0) once the read happened... but the goroutine wouldn't
+	// call pushDest. So the load-bearing assertion is calls >= 2.
+	srv.mirrorWorker.enqueue("repo-panic")
+	if err := srv.mirrorWorker.settle(2 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls < 2 {
+		t.Fatalf("worker should survive panic and process next event; pushDest fired %d time(s)", calls)
+	}
+	// Second call recorded success, proving the worker really did
+	// run to completion rather than just pulling the event off the
+	// queue and dying silently.
+	got, _ := srv.destinations.Get("repo-panic", dest.ID)
+	if got.LastSyncStatus != syncStatusOK {
+		t.Errorf("after panic recovery, next fan-out should record ok; got %q", got.LastSyncStatus)
+	}
+}
+
 // TestMirrorWorker_EnqueueIsNonBlockingWhenQueueFull — if the queue is
 // saturated, further enqueues must drop+log rather than block the
 // receive-pack handler (which is on the critical path of a user's

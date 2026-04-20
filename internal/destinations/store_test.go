@@ -216,3 +216,37 @@ func TestPersistence_DifferentServerCannotOpen(t *testing.T) {
 		t.Fatal("expected Open to fail for a different server's keypair")
 	}
 }
+
+// TestAdd_ReturnsCopyNotAlias is the regression fence for the race the
+// post-receive worker (internal/server/mirror_worker) hit under `go
+// test -race`: Add used to return a pointer aliasing the stored
+// struct, so a caller reading any field concurrently with a later
+// Update would race. This test locks in "returned pointer is an
+// independent snapshot" end-to-end: mutating the returned struct must
+// not change the stored state.
+func TestAdd_ReturnsCopyNotAlias(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	got, err := s.Add("r", Destination{
+		URL: "u", CredentialName: "c", Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := got.ID
+
+	// Mutate the returned value. If Add leaked the stored pointer,
+	// this write would leak into the store.
+	got.URL = "tampered-in-caller"
+	got.Enabled = false
+
+	fresh, err := s.Get("r", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.URL != "u" {
+		t.Errorf("caller mutation leaked into store: URL = %q, want %q", fresh.URL, "u")
+	}
+	if !fresh.Enabled {
+		t.Error("caller mutation leaked into store: Enabled flipped to false")
+	}
+}

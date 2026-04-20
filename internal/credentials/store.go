@@ -128,7 +128,12 @@ func (s *Store) Put(c Credential) (*Credential, error) {
 		delete(s.items, c.Name)
 		return nil, err
 	}
-	return &stored, nil
+	// Return a copy so the caller's pointer doesn't alias the stored
+	// struct — a subsequent Touch from another goroutine (mirror-sync
+	// worker, future integrations) would otherwise race on the
+	// caller's fields. Matches Get / All which already return snapshots.
+	cp := stored
+	return &cp, nil
 }
 
 // Get returns the full credential including the Secret. Callers that
