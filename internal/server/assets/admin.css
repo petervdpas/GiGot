@@ -739,3 +739,73 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
 .ed-dlg-btn.ok.danger { background: #da3633; }
 .ed-dlg-btn.ok.danger:hover { background: #f04a47; }
 .ed-dlg-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* /admin/auth — hot-swap authentication runtime. Each card holds a
+   subset (local, OAuth, gateway); the Apply button kicks a single
+   PATCH. Styles are prefixed .auth- so the global `form { display:
+   flex }` rule doesn't apply (we don't wrap anything in a form; the
+   JS just reads each field by id). */
+.auth-lede {
+  max-width: 56rem;
+  margin: -0.5rem 0 1.25rem 0;
+  line-height: 1.5;
+}
+.auth-card h2 { margin-bottom: 0.75rem; }
+.auth-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+.auth-row-label {
+  flex: 0 0 auto;
+  min-width: 16rem;
+  color: var(--text);
+}
+.auth-hint { margin-top: 0.75rem; line-height: 1.45; }
+.auth-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(16rem, 1fr));
+  gap: 0.85rem 1.25rem;
+  margin-top: 0.85rem;
+}
+.auth-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.auth-grid input {
+  /* Override global input min-width: 220px — the grid column is the
+     source of truth for width on this page. */
+  min-width: 0;
+  width: 100%;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.oauth-block {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.85rem;
+  background: var(--field-bg);
+}
+.oauth-block:last-child { margin-bottom: 0; }
+.oauth-block h3 {
+  margin: 0 0 0.65rem 0;
+  font-size: 1rem;
+  color: var(--text-strong);
+}
+.auth-apply {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+#reload-msg.ok { color: #3fb950; }
+#reload-msg.err { color: #f85149; }

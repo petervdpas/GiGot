@@ -302,6 +302,106 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/auth": {
+            "get": {
+                "description": "GET returns the current allow_local + OAuth + gateway\nconfig snapshot. PATCH applies a new snapshot: the\nOAuth registry and gateway strategy are rebuilt,\natomically swapped into place on success, and the\nchange is persisted to the config file. Rejects with\n400 when a secret ref fails to resolve or a provider\ndiscovery URL is unreachable — old state stays live.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Read or reload auth runtime state (admin only)",
+                "parameters": [
+                    {
+                        "description": "New auth config (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.AuthReloadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Current state (GET + PATCH)",
+                        "schema": {
+                            "$ref": "#/definitions/server.AuthRuntimeView"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "GET returns the current allow_local + OAuth + gateway\nconfig snapshot. PATCH applies a new snapshot: the\nOAuth registry and gateway strategy are rebuilt,\natomically swapped into place on success, and the\nchange is persisted to the config file. Rejects with\n400 when a secret ref fails to resolve or a provider\ndiscovery URL is unreachable — old state stays live.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Read or reload auth runtime state (admin only)",
+                "parameters": [
+                    {
+                        "description": "New auth config (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.AuthReloadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Current state (GET + PATCH)",
+                        "schema": {
+                            "$ref": "#/definitions/server.AuthRuntimeView"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/credentials": {
             "get": {
                 "description": "GET lists credential metadata; POST creates a new credential.\nThe secret is write-only — it is never returned on any\nresponse. Session-cookie authenticated.",
@@ -3458,6 +3558,80 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "config.GatewayConfig": {
+            "type": "object",
+            "properties": {
+                "allow_register": {
+                    "description": "AllowRegister auto-creates a role=regular account on first\nsuccessful claim when no matching gateway account exists. When\nfalse, unknown users get ErrNoCredentials and fall through to\nthe 401 path.",
+                    "type": "boolean"
+                },
+                "display_name": {
+                    "description": "DisplayName is currently unused by any UI (the gateway is\ntransparent to the user), kept for symmetry with OAuth and for\nlog-line readability.",
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "max_skew_seconds": {
+                    "description": "MaxSkewSeconds bounds how far the timestamp can be from\ntime.Now() in either direction. Defaults to 300 (5 minutes).",
+                    "type": "integer"
+                },
+                "secret_ref": {
+                    "description": "SecretRef names a credential in the vault holding the shared\nHMAC secret. Required when Enabled=true.",
+                    "type": "string"
+                },
+                "sig_header": {
+                    "description": "SigHeader carries the hex-encoded HMAC-SHA256 signature over\n\"\u003cuser\u003e\\n\u003ctimestamp\u003e\".",
+                    "type": "string"
+                },
+                "timestamp_header": {
+                    "description": "TimestampHeader carries the Unix seconds timestamp. Rejects\nreplays older than MaxSkewSeconds.",
+                    "type": "string"
+                },
+                "user_header": {
+                    "description": "UserHeader carries the verified identifier (email, oid, sub,\nwhatever the proxy standardised on). Case-insensitive per HTTP.",
+                    "type": "string"
+                }
+            }
+        },
+        "config.OAuthConfig": {
+            "type": "object",
+            "properties": {
+                "entra": {
+                    "$ref": "#/definitions/config.OAuthProviderConfig"
+                },
+                "github": {
+                    "$ref": "#/definitions/config.OAuthProviderConfig"
+                },
+                "microsoft": {
+                    "$ref": "#/definitions/config.OAuthProviderConfig"
+                }
+            }
+        },
+        "config.OAuthProviderConfig": {
+            "type": "object",
+            "properties": {
+                "allow_register": {
+                    "type": "boolean"
+                },
+                "client_id": {
+                    "type": "string"
+                },
+                "client_secret_ref": {
+                    "type": "string"
+                },
+                "display_name": {
+                    "description": "DisplayName is the label shown on the login page's provider\nbutton (\"Sign in with \u003cname\u003e\"). Optional; the provider key is\nused if empty.",
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "tenant_id": {
+                    "type": "string"
+                }
+            }
+        },
         "formidable.FieldConflict": {
             "type": "object",
             "properties": {
@@ -3719,6 +3893,39 @@ const docTemplate = `{
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "server.AuthReloadRequest": {
+            "type": "object",
+            "properties": {
+                "allow_local": {
+                    "type": "boolean"
+                },
+                "gateway": {
+                    "$ref": "#/definitions/config.GatewayConfig"
+                },
+                "oauth": {
+                    "$ref": "#/definitions/config.OAuthConfig"
+                }
+            }
+        },
+        "server.AuthRuntimeView": {
+            "type": "object",
+            "properties": {
+                "allow_local": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "config_path": {
+                    "type": "string",
+                    "example": "/etc/gigot/gigot.json"
+                },
+                "gateway": {
+                    "$ref": "#/definitions/server.GatewayRuntimeView"
+                },
+                "oauth": {
+                    "$ref": "#/definitions/server.OAuthRuntimeView"
                 }
             }
         },
@@ -4013,6 +4220,42 @@ const docTemplate = `{
                 }
             }
         },
+        "server.GatewayRuntimeView": {
+            "type": "object",
+            "properties": {
+                "allow_register": {
+                    "description": "AllowRegister auto-creates a role=regular account on first\nsuccessful claim when no matching gateway account exists. When\nfalse, unknown users get ErrNoCredentials and fall through to\nthe 401 path.",
+                    "type": "boolean"
+                },
+                "display_name": {
+                    "description": "DisplayName is currently unused by any UI (the gateway is\ntransparent to the user), kept for symmetry with OAuth and for\nlog-line readability.",
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "max_skew_seconds": {
+                    "description": "MaxSkewSeconds bounds how far the timestamp can be from\ntime.Now() in either direction. Defaults to 300 (5 minutes).",
+                    "type": "integer"
+                },
+                "secret_ref": {
+                    "description": "SecretRef names a credential in the vault holding the shared\nHMAC secret. Required when Enabled=true.",
+                    "type": "string"
+                },
+                "sig_header": {
+                    "description": "SigHeader carries the hex-encoded HMAC-SHA256 signature over\n\"\u003cuser\u003e\\n\u003ctimestamp\u003e\".",
+                    "type": "string"
+                },
+                "timestamp_header": {
+                    "description": "TimestampHeader carries the Unix seconds timestamp. Rejects\nreplays older than MaxSkewSeconds.",
+                    "type": "string"
+                },
+                "user_header": {
+                    "description": "UserHeader carries the verified identifier (email, oid, sub,\nwhatever the proxy standardised on). Case-insensitive per HTTP.",
+                    "type": "string"
+                }
+            }
+        },
         "server.HealthResponse": {
             "type": "object",
             "properties": {
@@ -4053,6 +4296,20 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/server.OAuthProviderView"
                     }
+                }
+            }
+        },
+        "server.OAuthRuntimeView": {
+            "type": "object",
+            "properties": {
+                "entra": {
+                    "$ref": "#/definitions/config.OAuthProviderConfig"
+                },
+                "github": {
+                    "$ref": "#/definitions/config.OAuthProviderConfig"
+                },
+                "microsoft": {
+                    "$ref": "#/definitions/config.OAuthProviderConfig"
                 }
             }
         },

@@ -23,6 +23,13 @@ type Config struct {
 	// store are upserted with role=admin; after that the store is the
 	// source of truth. See docs/design/accounts.md §4.
 	Admins []AdminSeed `json:"admins"`
+
+	// Path is the file this config was loaded from, remembered so
+	// the /admin/auth hot-reload handler can persist in-place without
+	// the operator re-supplying the path. Runtime-only; never
+	// serialised (a Save(path) round-trip must not grow this field
+	// into the file).
+	Path string `json:"-"`
 }
 
 // AdminSeed is one entry in the bootstrap seed list. Role is implied
@@ -269,6 +276,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config %s: %w", path, err)
 	}
 	cfg.Admins = normalised
+	cfg.Path = path
 
 	return cfg, nil
 }

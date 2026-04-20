@@ -32,7 +32,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if !s.cfg.Auth.AllowLocal {
+	if !s.allowLocal() {
 		writeError(w, http.StatusNotFound, "local registration disabled")
 		return
 	}

@@ -19,4 +19,5 @@ var (
 	subscriptionsTmpl   = template.Must(template.ParseFS(templatesFS, "templates/subscriptions.html"))
 	credentialsPageTmpl = template.Must(template.ParseFS(templatesFS, "templates/credentials.html"))
 	accountsPageTmpl    = template.Must(template.ParseFS(templatesFS, "templates/accounts.html"))
+	authPageTmpl        = template.Must(template.ParseFS(templatesFS, "templates/auth.html"))
 )

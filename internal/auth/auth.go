@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // Errors returned by strategies.
@@ -57,8 +58,14 @@ type Strategy interface {
 }
 
 // Provider manages multiple strategies and acts as HTTP middleware.
+// The strategy list is guarded by strategiesMu so it can be mutated
+// at runtime (providers admin page) without racing the middleware
+// iteration. The enabled / public-prefix state is set once at boot
+// and read-only afterward, so it stays lock-free.
 type Provider struct {
-	strategies     []Strategy
+	strategiesMu sync.RWMutex
+	strategies   []Strategy
+
 	enabled        bool
 	publicExact    []string
 	publicPrefixes []string
@@ -84,7 +91,56 @@ func (p *Provider) SetEnabled(enabled bool) {
 
 // Register adds a strategy to the provider. Strategies are tried in order.
 func (p *Provider) Register(s Strategy) {
+	p.strategiesMu.Lock()
+	defer p.strategiesMu.Unlock()
 	p.strategies = append(p.strategies, s)
+}
+
+// Replace swaps the existing strategy with the same Name() for s.
+// Returns true when a replacement happened, false when no matching
+// strategy existed (caller can decide to Register instead). Used by
+// the /admin/auth reload path so e.g. a new gateway strategy atomically
+// takes the old one's slot without disturbing the iteration order
+// (which defines the try-in-sequence contract).
+func (p *Provider) Replace(s Strategy) bool {
+	p.strategiesMu.Lock()
+	defer p.strategiesMu.Unlock()
+	name := s.Name()
+	for i, existing := range p.strategies {
+		if existing.Name() == name {
+			p.strategies[i] = s
+			return true
+		}
+	}
+	return false
+}
+
+// Remove deletes the strategy with that Name() from the list, if any.
+// Returns true when something was removed. The reload path uses this
+// to drop a gateway strategy when the admin flips enabled=false.
+func (p *Provider) Remove(name string) bool {
+	p.strategiesMu.Lock()
+	defer p.strategiesMu.Unlock()
+	for i, existing := range p.strategies {
+		if existing.Name() == name {
+			p.strategies = append(p.strategies[:i], p.strategies[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+// snapshotStrategies returns a copy of the current strategy list so
+// the middleware can iterate without holding the lock while running
+// arbitrary user Authenticate() code (some strategies touch the
+// accounts store, which has its own lock — nested locks would invite
+// deadlocks on the reload path).
+func (p *Provider) snapshotStrategies() []Strategy {
+	p.strategiesMu.RLock()
+	defer p.strategiesMu.RUnlock()
+	out := make([]Strategy, len(p.strategies))
+	copy(out, p.strategies)
+	return out
 }
 
 // MarkPublic excludes an exact path from authentication.
@@ -149,7 +205,7 @@ func (p *Provider) isPublic(urlPath string) bool {
 // Authenticate tries each registered strategy in order.
 // Returns the first successful Identity, or an error if all fail.
 func (p *Provider) Authenticate(r *http.Request) (*Identity, error) {
-	for _, s := range p.strategies {
+	for _, s := range p.snapshotStrategies() {
 		id, err := s.Authenticate(r)
 		if err == nil {
 			return id, nil

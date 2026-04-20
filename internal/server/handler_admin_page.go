@@ -49,6 +49,13 @@ func (s *Server) handleAccountsPage(w http.ResponseWriter, r *http.Request) {
 	s.adminPageHandler(accountsPageTmpl, "/admin/accounts", "/admin/accounts/")(w, r)
 }
 
+// handleAuthPage serves the /admin/auth console, the UI for the
+// hot-reload endpoints. Same static-shell-plus-JS pattern as every
+// other admin section.
+func (s *Server) handleAuthPage(w http.ResponseWriter, r *http.Request) {
+	s.adminPageHandler(authPageTmpl, "/admin/auth", "/admin/auth/")(w, r)
+}
+
 // handleRegisterPage serves the self-service register card. When
 // auth.allow_local is false, the backing /api/register endpoint
 // 404s, so the page can't do anything useful — we render a small
@@ -59,7 +66,7 @@ func (s *Server) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if !s.cfg.Auth.AllowLocal {
+	if !s.allowLocal() {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`<!DOCTYPE html>

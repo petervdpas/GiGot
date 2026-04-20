@@ -51,6 +51,34 @@ func (r *Registry) Get(name string) Provider {
 	return r.providers[name]
 }
 
+// Replace atomically sets the provider under name. Passing a nil
+// provider is equivalent to Remove(name). Used by the /admin/auth
+// hot-reload path so a single Registry pointer is shared across
+// every in-flight callback — no torn-pointer windows when the
+// operator flips a provider on or off from the UI.
+func (r *Registry) Replace(name string, p Provider) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if p == nil {
+		delete(r.providers, name)
+		return
+	}
+	r.providers[name] = p
+}
+
+// Remove drops the provider under name. Returns true when something
+// was removed (caller can log, callers currently don't need the
+// bool).
+func (r *Registry) Remove(name string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.providers[name]; !ok {
+		return false
+	}
+	delete(r.providers, name)
+	return true
+}
+
 // Build constructs a Registry from the OAuth config block. Disabled
 // providers are silently skipped; enabled providers with bad config
 // or unreachable discovery endpoints return an error so the server

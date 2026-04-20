@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -46,6 +47,15 @@ type Server struct {
 	destinations    *destinations.Store
 	policy          policy.Evaluator
 	mux             *http.ServeMux
+
+	// authMu guards every field touched by the /admin/auth hot-reload
+	// path: cfg.Auth (AllowLocal + nested OAuth / Gateway blocks),
+	// oauthProviders (the Registry itself mutates in place via
+	// Replace/Remove; the pointer is stable, but its contents change
+	// here), and gatewayStrategy (pointer swap). Callers hold a read
+	// lock while inspecting these; ReloadAuth holds the write lock
+	// for the swap + persist.
+	authMu sync.RWMutex
 
 	// Phase-3 OAuth/OIDC. Nil when no provider is enabled —
 	// handleOAuthLogin 404s in that case, same as if the route
@@ -96,6 +106,8 @@ func New(cfg *config.Config) *Server {
 	ap.MarkPublic("/admin/credentials/")
 	ap.MarkPublic("/admin/accounts")
 	ap.MarkPublic("/admin/accounts/")
+	ap.MarkPublic("/admin/auth")
+	ap.MarkPublic("/admin/auth/")
 	ap.MarkPublicPrefix("/swagger/")
 	ap.MarkPublicPrefix("/assets/")
 	// Basic auth is only meaningful for /git/* — git-the-binary can't
@@ -247,6 +259,91 @@ func New(cfg *config.Config) *Server {
 // SetPolicy replaces the authorisation evaluator. Used by tests and future
 // per-deployment configuration.
 func (s *Server) SetPolicy(p policy.Evaluator) { s.policy = p }
+
+// allowLocal is the read-locked accessor for cfg.Auth.AllowLocal.
+// Handlers that gate on the local-password path use this so a
+// concurrent ReloadAuth can't tear a single bool read into a
+// partially-updated value.
+func (s *Server) allowLocal() bool {
+	s.authMu.RLock()
+	defer s.authMu.RUnlock()
+	return s.cfg.Auth.AllowLocal
+}
+
+// ReloadAuth swaps the auth-runtime state (allow_local, OAuth
+// registry contents, gateway strategy) to match a new AuthConfig.
+// Either the whole swap succeeds — new OAuth providers discover
+// cleanly, gateway secret resolves, verifier builds — or nothing
+// changes and the caller gets the build error. On success, the new
+// state is also persisted to the config file this server was loaded
+// from (if any), so a restart picks up the same shape.
+//
+// Callers: /api/admin/auth PATCH. Not intended for general use;
+// holding the write lock blocks every login + middleware hit for
+// its duration, which is bounded (config parse + discovery
+// round-trips) but non-zero.
+func (s *Server) ReloadAuth(newCfg config.AuthConfig) error {
+	resolver := func(name string) (string, error) {
+		cred, err := s.credentials.Get(name)
+		if err != nil {
+			return "", err
+		}
+		return cred.Secret, nil
+	}
+
+	// Build candidates outside the lock: discovery RPCs + secret
+	// lookups shouldn't block every in-flight auth check. If any
+	// build fails, nothing has changed yet — the existing strategies
+	// keep running and the caller sees the error.
+	newRegistry, err := oauth.Build(context.Background(), newCfg.OAuth, resolver)
+	if err != nil {
+		return fmt.Errorf("oauth: %w", err)
+	}
+	newGateway, err := buildGatewayStrategy(newCfg.Gateway, s.credentials, s.accounts)
+	if err != nil {
+		return fmt.Errorf("gateway: %w", err)
+	}
+
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+
+	// OAuth: swap the Registry pointer. In-flight handleOAuthLogin
+	// readers that already captured the old pointer finish against
+	// the old providers (safe — the old Registry is immutable after
+	// this pointer update drops its last reference).
+	s.oauthProviders = newRegistry
+
+	// Gateway strategy slot: register / replace / remove in the
+	// auth.Provider chain so the middleware sees the update on its
+	// next snapshot. Replace returns false when the slot was empty
+	// (first-ever enable of the gateway at runtime).
+	switch {
+	case newGateway != nil:
+		if !s.auth.Replace(newGateway) {
+			s.auth.Register(newGateway)
+		}
+	case s.gatewayStrategy != nil:
+		s.auth.Remove("gateway")
+	}
+	s.gatewayStrategy = newGateway
+
+	// AuthConfig must move last — the guarded reads in handlers see
+	// either the old strategies + old allow_local or the new pair,
+	// never a half-updated mix.
+	s.cfg.Auth = newCfg
+
+	// Persist so a restart inherits the change. Skipping when path
+	// is empty (tests, ad-hoc in-process servers) is intentional —
+	// ReloadAuth is still useful there for verifying swap semantics
+	// without requiring a real file on disk.
+	if s.cfg.Path != "" {
+		if err := s.cfg.Save(s.cfg.Path); err != nil {
+			log.Printf("server: ReloadAuth: persist to %s: %v", s.cfg.Path, err)
+			return fmt.Errorf("persist: %w", err)
+		}
+	}
+	return nil
+}
 
 // Accounts returns the account store (used by CLI tools like the demo
 // bootstrap and future `gigot admin set-password`).
@@ -419,6 +516,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/admin/credentials/", s.handleCredentialsPage)
 	s.mux.HandleFunc("/admin/accounts", s.handleAccountsPage)
 	s.mux.HandleFunc("/admin/accounts/", s.handleAccountsPage)
+	s.mux.HandleFunc("/admin/auth", s.handleAuthPage)
+	s.mux.HandleFunc("/admin/auth/", s.handleAuthPage)
 	s.mux.HandleFunc("/api/admin/session", s.handleAdminSession)
 	s.mux.HandleFunc("/api/admin/tokens", s.handleAdminTokens)
 	s.mux.HandleFunc("/api/admin/tokens/bind", s.handleAdminBindToken)
@@ -426,6 +525,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/admin/credentials/", s.handleAdminCredential)
 	s.mux.HandleFunc("/api/admin/accounts", s.handleAdminAccounts)
 	s.mux.HandleFunc("/api/admin/accounts/", s.handleAdminAccount)
+	s.mux.HandleFunc("/api/admin/auth", s.handleAdminAuth)
 	// Admin per-repo subroutes live under /api/admin/repos/{name}/...:
 	//   /destinations[/{id}] — mirror-sync targets
 	//   /formidable          — convert plain repo to a Formidable context

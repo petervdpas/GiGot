@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GiGot Admin — Authentication</title>
+<link rel="stylesheet" href="/assets/admin.css">
+<script>
+  try {
+    var t = localStorage.getItem('gigot.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) { /* default dark */ }
+</script>
+</head>
+<body>
+
+<div id="app">
+  <div class="shell">
+    <aside id="admin-sidebar"></aside>
+    <main class="main">
+      <div class="panel active">
+        <div class="page-header">
+          <h1>Authentication</h1>
+        </div>
+        <p class="muted auth-lede">
+          Hot-swappable strategies. Changes apply immediately and are
+          persisted to <code id="cfg-path">gigot.json</code>. Rebuilds
+          run under a lock — if a new <code>secret_ref</code> or
+          discovery URL fails, the old state stays live.
+        </p>
+
+        <div class="card auth-card">
+          <h2>Local password path</h2>
+          <div class="auth-row">
+            <span class="auth-row-label">Allow local login</span>
+            <span id="allow-local-host"></span>
+          </div>
+          <div class="muted auth-hint">
+            Turn off once OAuth or gateway is wired (Phase 5). Keep on
+            during the bootstrap of a fresh deploy so the primary admin
+            can reach the UI.
+          </div>
+        </div>
+
+        <div class="card auth-card">
+          <h2>OAuth providers</h2>
+          <div id="oauth-panels"></div>
+          <div class="muted auth-hint">
+            <code>client_secret_ref</code> names a credential in the
+            vault — edit the secret value in
+            <a href="/admin/credentials">Credentials</a>.
+          </div>
+        </div>
+
+        <div class="card auth-card">
+          <h2>Gateway (signed-header strategy)</h2>
+          <div class="auth-row">
+            <span class="auth-row-label">Enabled</span>
+            <span id="gw-enabled-host"></span>
+          </div>
+          <div class="auth-row">
+            <span class="auth-row-label">Auto-register unknown users as regular</span>
+            <span id="gw-register-host"></span>
+          </div>
+          <div class="auth-grid">
+            <label>User header
+              <input id="gw-user_header" placeholder="X-GiGot-Gateway-User" required>
+            </label>
+            <label>Signature header
+              <input id="gw-sig_header" placeholder="X-GiGot-Gateway-Sig" required>
+            </label>
+            <label>Timestamp header
+              <input id="gw-timestamp_header" placeholder="X-GiGot-Gateway-Ts" required>
+            </label>
+            <label>Secret ref (credential name)
+              <input id="gw-secret_ref" placeholder="gateway-hmac" required>
+            </label>
+            <label>Max skew (seconds)
+              <input id="gw-max_skew_seconds" type="number" min="1" value="300" required>
+            </label>
+            <label>Display name
+              <input id="gw-display_name" placeholder="Corporate SSO">
+            </label>
+          </div>
+        </div>
+
+        <div class="auth-apply">
+          <button id="apply-btn" type="button">Apply and reload</button>
+          <span id="reload-msg" class="muted"></span>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="/assets/ui.js"></script>
+<script src="/assets/dialogs.js"></script>
+<script src="/assets/admin_common.js"></script>
+<script src="/assets/auth.js"></script>
+</body>
+</html>

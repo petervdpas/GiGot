@@ -241,6 +241,7 @@
       { key: 'subscriptions', label: 'Subscription keys', href: '/admin/subscriptions' },
       { key: 'credentials', label: 'Credentials',      href: '/admin/credentials' },
       { key: 'accounts',    label: 'Accounts',         href: '/admin/accounts' },
+      { key: 'auth',        label: 'Authentication',   href: '/admin/auth' },
     ];
     aside.className = 'sidebar';
     aside.innerHTML =

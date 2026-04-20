@@ -1,5 +1,76 @@
 basePath: /api
 definitions:
+  config.GatewayConfig:
+    properties:
+      allow_register:
+        description: |-
+          AllowRegister auto-creates a role=regular account on first
+          successful claim when no matching gateway account exists. When
+          false, unknown users get ErrNoCredentials and fall through to
+          the 401 path.
+        type: boolean
+      display_name:
+        description: |-
+          DisplayName is currently unused by any UI (the gateway is
+          transparent to the user), kept for symmetry with OAuth and for
+          log-line readability.
+        type: string
+      enabled:
+        type: boolean
+      max_skew_seconds:
+        description: |-
+          MaxSkewSeconds bounds how far the timestamp can be from
+          time.Now() in either direction. Defaults to 300 (5 minutes).
+        type: integer
+      secret_ref:
+        description: |-
+          SecretRef names a credential in the vault holding the shared
+          HMAC secret. Required when Enabled=true.
+        type: string
+      sig_header:
+        description: |-
+          SigHeader carries the hex-encoded HMAC-SHA256 signature over
+          "<user>\n<timestamp>".
+        type: string
+      timestamp_header:
+        description: |-
+          TimestampHeader carries the Unix seconds timestamp. Rejects
+          replays older than MaxSkewSeconds.
+        type: string
+      user_header:
+        description: |-
+          UserHeader carries the verified identifier (email, oid, sub,
+          whatever the proxy standardised on). Case-insensitive per HTTP.
+        type: string
+    type: object
+  config.OAuthConfig:
+    properties:
+      entra:
+        $ref: '#/definitions/config.OAuthProviderConfig'
+      github:
+        $ref: '#/definitions/config.OAuthProviderConfig'
+      microsoft:
+        $ref: '#/definitions/config.OAuthProviderConfig'
+    type: object
+  config.OAuthProviderConfig:
+    properties:
+      allow_register:
+        type: boolean
+      client_id:
+        type: string
+      client_secret_ref:
+        type: string
+      display_name:
+        description: |-
+          DisplayName is the label shown on the login page's provider
+          button ("Sign in with <name>"). Optional; the provider key is
+          used if empty.
+        type: string
+      enabled:
+        type: boolean
+      tenant_id:
+        type: string
+    type: object
   formidable.FieldConflict:
     properties:
       key:
@@ -169,6 +240,28 @@ definitions:
         type: string
       username:
         type: string
+    type: object
+  server.AuthReloadRequest:
+    properties:
+      allow_local:
+        type: boolean
+      gateway:
+        $ref: '#/definitions/config.GatewayConfig'
+      oauth:
+        $ref: '#/definitions/config.OAuthConfig'
+    type: object
+  server.AuthRuntimeView:
+    properties:
+      allow_local:
+        example: true
+        type: boolean
+      config_path:
+        example: /etc/gigot/gigot.json
+        type: string
+      gateway:
+        $ref: '#/definitions/server.GatewayRuntimeView'
+      oauth:
+        $ref: '#/definitions/server.OAuthRuntimeView'
     type: object
   server.AuthorInfo:
     properties:
@@ -363,6 +456,49 @@ definitions:
         example: repository not found
         type: string
     type: object
+  server.GatewayRuntimeView:
+    properties:
+      allow_register:
+        description: |-
+          AllowRegister auto-creates a role=regular account on first
+          successful claim when no matching gateway account exists. When
+          false, unknown users get ErrNoCredentials and fall through to
+          the 401 path.
+        type: boolean
+      display_name:
+        description: |-
+          DisplayName is currently unused by any UI (the gateway is
+          transparent to the user), kept for symmetry with OAuth and for
+          log-line readability.
+        type: string
+      enabled:
+        type: boolean
+      max_skew_seconds:
+        description: |-
+          MaxSkewSeconds bounds how far the timestamp can be from
+          time.Now() in either direction. Defaults to 300 (5 minutes).
+        type: integer
+      secret_ref:
+        description: |-
+          SecretRef names a credential in the vault holding the shared
+          HMAC secret. Required when Enabled=true.
+        type: string
+      sig_header:
+        description: |-
+          SigHeader carries the hex-encoded HMAC-SHA256 signature over
+          "<user>\n<timestamp>".
+        type: string
+      timestamp_header:
+        description: |-
+          TimestampHeader carries the Unix seconds timestamp. Rejects
+          replays older than MaxSkewSeconds.
+        type: string
+      user_header:
+        description: |-
+          UserHeader carries the verified identifier (email, oid, sub,
+          whatever the proxy standardised on). Case-insensitive per HTTP.
+        type: string
+    type: object
   server.HealthResponse:
     properties:
       status:
@@ -390,6 +526,15 @@ definitions:
         items:
           $ref: '#/definitions/server.OAuthProviderView'
         type: array
+    type: object
+  server.OAuthRuntimeView:
+    properties:
+      entra:
+        $ref: '#/definitions/config.OAuthProviderConfig'
+      github:
+        $ref: '#/definitions/config.OAuthProviderConfig'
+      microsoft:
+        $ref: '#/definitions/config.OAuthProviderConfig'
     type: object
   server.RecordQueryResponse:
     properties:
@@ -831,6 +976,85 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       summary: Manage one account by (provider, identifier) (admin only)
+      tags:
+      - admin
+  /admin/auth:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the current allow_local + OAuth + gateway
+        config snapshot. PATCH applies a new snapshot: the
+        OAuth registry and gateway strategy are rebuilt,
+        atomically swapped into place on success, and the
+        change is persisted to the config file. Rejects with
+        400 when a secret ref fails to resolve or a provider
+        discovery URL is unreachable — old state stays live.
+      parameters:
+      - description: New auth config (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.AuthReloadRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Current state (GET + PATCH)
+          schema:
+            $ref: '#/definitions/server.AuthRuntimeView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Read or reload auth runtime state (admin only)
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the current allow_local + OAuth + gateway
+        config snapshot. PATCH applies a new snapshot: the
+        OAuth registry and gateway strategy are rebuilt,
+        atomically swapped into place on success, and the
+        change is persisted to the config file. Rejects with
+        400 when a secret ref fails to resolve or a provider
+        discovery URL is unreachable — old state stays live.
+      parameters:
+      - description: New auth config (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.AuthReloadRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Current state (GET + PATCH)
+          schema:
+            $ref: '#/definitions/server.AuthRuntimeView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Read or reload auth runtime state (admin only)
       tags:
       - admin
   /admin/credentials:
