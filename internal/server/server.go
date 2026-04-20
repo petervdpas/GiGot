@@ -53,6 +53,13 @@ type Server struct {
 	oauthProviders *oauth.Registry
 	oauthState     *oauth.StateStore
 
+	// Phase-4 signed-header gateway strategy. Nil when
+	// cfg.Auth.Gateway.Enabled=false; non-nil when a trusted fronting
+	// proxy is forwarding identity claims. Consulted by
+	// requireAdminSession so gateway admins reach the UI without a
+	// session cookie. See docs/design/accounts.md §9.
+	gatewayStrategy *gatewayStrategy
+
 	// pushDest fires one outbound mirror push. Injected so tests can
 	// stub the shell-out without running real git against a real remote.
 	pushDest pushDestinationFn
@@ -133,6 +140,7 @@ func New(cfg *config.Config) *Server {
 		log.Fatalf("server: seed admins: %v", err)
 	}
 	warnPasswordlessLocalAdmins(accountStore)
+	warnLockoutRisk(cfg, accountStore)
 
 	credentialStore, err := credentials.Open(filepath.Join(cfg.Crypto.DataDir, "credentials.enc"), enc)
 	if err != nil {
@@ -153,6 +161,21 @@ func New(cfg *config.Config) *Server {
 		log.Fatalf("server: attach session persister: %v", err)
 	}
 	ap.Register(session)
+
+	// Phase-4 gateway: resolve the HMAC secret from the vault, wire a
+	// Verifier, register the strategy after session so bearer + cookie
+	// still win when they're present. A misconfigured gateway block
+	// fails boot so an operator sees the problem before the first
+	// proxy-forwarded request arrives. See docs/design/accounts.md §9.
+	gwStrategy, err := buildGatewayStrategy(cfg.Auth.Gateway, credentialStore, accountStore)
+	if err != nil {
+		log.Fatalf("server: build gateway strategy: %v", err)
+	}
+	if gwStrategy != nil {
+		ap.Register(gwStrategy)
+		log.Printf("server: gateway strategy enabled (header=%q, allow_register=%v)",
+			cfg.Auth.Gateway.UserHeader, cfg.Auth.Gateway.AllowRegister)
+	}
 
 	// Phase-3: resolve each enabled OAuth provider against the
 	// credential vault for its client_secret_ref, run OIDC discovery
@@ -191,6 +214,7 @@ func New(cfg *config.Config) *Server {
 		pushDest:        executeMirrorPush,
 		oauthProviders:  oauthRegistry,
 		oauthState:      oauth.NewStateStore(10 * time.Minute),
+		gatewayStrategy: gwStrategy,
 	}
 	// Wire the mirror worker. listDests / getCred close over the stores;
 	// fireOne closes over the server so it can reuse the same syncOnce
@@ -247,6 +271,35 @@ func seedAdmins(store *accounts.Store, seeds []config.AdminSeed) error {
 		}
 	}
 	return nil
+}
+
+// warnLockoutRisk logs a loud notice when auth.allow_local=false is
+// set but no non-local path can actually admit an admin — a
+// combination that silently locks admins out at the next restart.
+// Surfacing it here is the Phase-5 safety rail: the documented
+// default flips to false, and the runtime must notice operators who
+// flip the flag without configuring OAuth/gateway first.
+func warnLockoutRisk(cfg *config.Config, store *accounts.Store) {
+	if cfg.Auth.AllowLocal {
+		return
+	}
+	nonLocalAdmins := 0
+	for _, a := range store.List() {
+		if a.Role == accounts.RoleAdmin && a.Provider != accounts.ProviderLocal {
+			nonLocalAdmins++
+		}
+	}
+	anyOAuth := cfg.Auth.OAuth.GitHub.Enabled ||
+		cfg.Auth.OAuth.Entra.Enabled ||
+		cfg.Auth.OAuth.Microsoft.Enabled
+	anyGateway := cfg.Auth.Gateway.Enabled
+	if !anyOAuth && !anyGateway {
+		log.Printf("server: WARNING: auth.allow_local=false but no gateway or OAuth provider is enabled — admin HTTP access is impossible. Re-enable allow_local, or configure auth.gateway / auth.oauth.*.")
+		return
+	}
+	if nonLocalAdmins == 0 {
+		log.Printf("server: WARNING: auth.allow_local=false and no non-local admin account exists — admins must register via the configured provider(s) before the next restart or they'll be locked out.")
+	}
 }
 
 // warnPasswordlessLocalAdmins logs a loud notice for any local-provider

@@ -1,7 +1,7 @@
 # Accounts (admin + regular)
 
-Status: Phases 1, 2, and 3 all shipped 2026-04-20. Phases 4–5 are
-still ahead. Supersedes the README roadmap item
+Status: Phases 1–5 all shipped 2026-04-20 (Phase 5 is a doc-only
+default-flip; see §10). Supersedes the README roadmap item
 "NaCl-challenge admin login" — which is now formally retired (see §1).
 This document is the source of truth for how humans identify
 themselves to GiGot. The implementation lives in
@@ -124,8 +124,16 @@ Two new config surfaces:
 - `false`: local path is disabled at the router — `/api/admin/login`
   returns 404. Only non-local providers (gateway, OAuth) can
   authenticate.
-- **Default `true`** while Phases 2–3 are unshipped — flipping to
-  `false` today would leave no way in.
+- **Runtime default `true`** — flipping the ship-level default to
+  `false` in a minor version would silently lock any deploy without
+  OAuth/gateway out of their own server; Phase 5's guidance is to set
+  `allow_local: false` explicitly in `gigot.json` once a non-local
+  path is wired up, and the runtime will warn at boot when the flag
+  is off but no non-local path can actually admit an admin.
+- **Recommended in deploys** (Phase 5): set `allow_local: false`
+  explicitly once OAuth or gateway is configured and at least one
+  non-local admin exists. Keep the break-glass flag (`--allow-local`)
+  for emergencies.
 - **CLI override**: `gigot serve --allow-local=true|false` beats the
   config value for the invocation. Useful for break-glass ("the OAuth
   IdP is down, let me in with the local password for ten minutes").
@@ -297,12 +305,81 @@ minor version silently locks users out.
 
 ---
 
-## 9. Gateway-trusted identity (Phase 4)
+## 9. Gateway-trusted identity (Phase 4, shipped 2026-04-20)
 
-New `auth.GatewayStrategy` reads a configured signed-header claim
-(e.g. `X-MS-CLIENT-PRINCIPAL-NAME` from APIM) → resolves to
-`(provider: "gateway", identifier: <claim>)`. Same account-store check
-as everywhere else.
+`internal/auth/gateway/` holds a small `Verifier` that validates
+three headers per request: a claimed identifier, a Unix timestamp,
+and a hex HMAC-SHA256 signature over `"<identifier>\n<timestamp>"`
+keyed on a shared secret. Server-side bridge
+(`internal/server/handler_gateway.go`) wraps the Verifier as an
+`auth.Strategy`, resolves the claim against the accounts store, and
+returns an `Identity` with `Provider: "gateway"`. Registered after
+the session strategy so a bearer token or session cookie still wins
+when present.
+
+### Admin path
+
+`requireAdminSession` accepts either the session cookie OR a valid
+gateway triple whose identifier resolves to a `role=admin` account.
+Role is re-checked per request so a demote takes effect immediately
+without waiting for any cookie to expire. Regular gateway accounts
+fall through to 401 on admin routes — same behaviour as a bearer
+token hitting an admin route.
+
+### Why HMAC + timestamp, not "trust the proxy IP"
+
+IP-allowlists collapse the moment the proxy is moved behind another
+load balancer or the operator skips a config knob. A shared HMAC
+secret is simpler to reason about, portable across hosting shapes
+(APIM, nginx, oauth2-proxy, Envoy, a plain nginx `auth_request`
+lane), and tamper-evident: a man-in-the-middle on the proxy→GiGot
+link can't flip the identifier without invalidating the signature.
+The timestamp + `max_skew_seconds` window (default 5 minutes) stops
+trivial replay; a caller who captures a valid header can only reuse
+it briefly, and GiGot can log the event. The proxy is still trusted
+end-to-end for authenticating the user — the HMAC only proves the
+forwarded claim wasn't rewritten in flight.
+
+### Config shape (Phase 4)
+
+```json
+{
+  "auth": {
+    "gateway": {
+      "enabled": true,
+      "user_header": "X-GiGot-Gateway-User",
+      "sig_header": "X-GiGot-Gateway-Sig",
+      "timestamp_header": "X-GiGot-Gateway-Ts",
+      "secret_ref": "gateway-hmac",
+      "max_skew_seconds": 300,
+      "allow_register": false
+    }
+  }
+}
+```
+
+`secret_ref` names a credential in the existing credential vault —
+same pattern as Phase-3 OAuth `client_secret_ref`. Header names are
+configurable so deploys with an existing proxy convention (e.g.
+`X-MS-CLIENT-PRINCIPAL-NAME`) can remap them instead of renaming
+proxy configuration, though the shared contract — identifier,
+timestamp, and signature-over-the-pair — is fixed. Any fronting
+proxy can be configured to emit these headers; a Go-written proxy
+can reuse `gateway.Sign` directly.
+
+`allow_register=false` is the recommended default: admins stay an
+explicit list. `allow_register=true` auto-creates a `role=regular`
+account on first successful claim for deploys that want any
+employee the gateway admits to be a known user.
+
+### Non-goals
+
+- **No group claim parsing.** The gateway forwards one identifier,
+  not a membership list. Admin status lives on the account in the
+  store, not on the claim.
+- **No per-request mutation of role.** A demoted user loses access
+  on the next request; a promoted user gains it on the next request;
+  neither requires the proxy to know about GiGot's accounts state.
 
 ---
 
@@ -313,8 +390,8 @@ as everywhere else.
 | 1     | **Shipped 2026-04-20** | `internal/accounts/` store (migrated from `admins.enc`), Role field, config `auth.allow_local` + CLI flag, `admins` seed, login handler role-gate, permissive auto-create on token issuance. |
 | 2     | **Shipped 2026-04-20** | `/api/register` + `/admin/register` page, admin accounts UI + API (list/create/patch/delete, last-admin protection), token issuance tightened to reject unknown usernames, legacy-token bind action. |
 | 3     | **Shipped 2026-04-20** | OAuth / OIDC for GitHub (OAuth2 + /user API), Entra (OIDC, tenant-scoped, `oid` claim), and consumer Microsoft (OIDC, `consumers` audience, `sub` claim) via `go-oidc` + `oauth2` — **no MSAL**. Per-provider `allow_register` flag auto-creates `role=regular` accounts on first successful callback. `client_secret_ref` resolves against the existing credential vault. Scoped `"provider:identifier"` token binding (§6) lands in the same phase so OAuth accounts can actually hold subscription keys; `/admin/accounts` gains a `subscription_count` column with click-through to `/admin/subscriptions?user=<scoped>`. NaCl-challenge roadmap item formally retired in README. |
-| 4     | Pending                | Gateway-trusted identity strategy (aligns with Roadmap #2).                                                                                                |
-| 5     | Pending                | Flip documented default `allow_local` → `false`; optionally remove the local password path entirely if no deploy depends on it.                            |
+| 4     | **Shipped 2026-04-20** | `internal/auth/gateway/` HMAC-SHA256 signed-header strategy with configurable header names and `max_skew_seconds` replay window, `secret_ref` → credential vault lookup, `allow_register` flag. Registered on `auth.Provider` after session so cookies still win; `requireAdminSession` honours a gateway claim when it resolves to a `role=admin` account. Boot-time lockout-risk warning flags `allow_local=false` + no non-local path or no non-local admin. Aligns with Roadmap #2. |
+| 5     | **Shipped 2026-04-20** | Documentation default flipped to `allow_local=false` for any deploy that has configured OAuth or gateway. Runtime `Defaults()` still ships `allow_local=true` — flipping that in a minor version would silently lock upgraders out; that mechanical flip is held for a separate release cycle with migration notes. |
 
 ---
 

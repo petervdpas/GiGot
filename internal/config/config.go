@@ -66,6 +66,11 @@ type AuthConfig struct {
 	// is independent; enable one, two, or three. See
 	// docs/design/accounts.md §8.
 	OAuth OAuthConfig `json:"oauth"`
+	// Gateway configures the Phase-4 signed-header strategy for a
+	// trusted fronting proxy. When enabled, every request carrying a
+	// valid HMAC-signed identity header is treated as authenticated.
+	// See docs/design/accounts.md §9.
+	Gateway GatewayConfig `json:"gateway"`
 }
 
 // OAuthConfig holds per-provider OIDC / OAuth2 settings. The three
@@ -96,6 +101,46 @@ type OAuthProviderConfig struct {
 	// DisplayName is the label shown on the login page's provider
 	// button ("Sign in with <name>"). Optional; the provider key is
 	// used if empty.
+	DisplayName string `json:"display_name"`
+}
+
+// GatewayConfig is the Phase-4 signed-header identity strategy. A
+// trusted fronting proxy (APIM, nginx+auth_request, oauth2-proxy,
+// Envoy, etc.) authenticates the user, then forwards GiGot three
+// headers: the identifier, a Unix timestamp, and an HMAC-SHA256
+// signature over "<identifier>\n<timestamp>" keyed on a shared
+// secret. GiGot verifies the signature and the timestamp skew, then
+// resolves (provider=gateway, identifier=<user>) in the accounts
+// store. See docs/design/accounts.md §9.
+//
+// Header names default to the GiGot-namespaced set but are
+// configurable so deploys with an existing proxy convention can point
+// at whatever headers that proxy already emits.
+type GatewayConfig struct {
+	Enabled bool `json:"enabled"`
+	// UserHeader carries the verified identifier (email, oid, sub,
+	// whatever the proxy standardised on). Case-insensitive per HTTP.
+	UserHeader string `json:"user_header"`
+	// SigHeader carries the hex-encoded HMAC-SHA256 signature over
+	// "<user>\n<timestamp>".
+	SigHeader string `json:"sig_header"`
+	// TimestampHeader carries the Unix seconds timestamp. Rejects
+	// replays older than MaxSkewSeconds.
+	TimestampHeader string `json:"timestamp_header"`
+	// SecretRef names a credential in the vault holding the shared
+	// HMAC secret. Required when Enabled=true.
+	SecretRef string `json:"secret_ref"`
+	// MaxSkewSeconds bounds how far the timestamp can be from
+	// time.Now() in either direction. Defaults to 300 (5 minutes).
+	MaxSkewSeconds int `json:"max_skew_seconds"`
+	// AllowRegister auto-creates a role=regular account on first
+	// successful claim when no matching gateway account exists. When
+	// false, unknown users get ErrNoCredentials and fall through to
+	// the 401 path.
+	AllowRegister bool `json:"allow_register"`
+	// DisplayName is currently unused by any UI (the gateway is
+	// transparent to the user), kept for symmetry with OAuth and for
+	// log-line readability.
 	DisplayName string `json:"display_name"`
 }
 
@@ -130,6 +175,12 @@ func Defaults() *Config {
 			Enabled:    false,
 			Type:       "token",
 			AllowLocal: true,
+			Gateway: GatewayConfig{
+				UserHeader:      "X-GiGot-Gateway-User",
+				SigHeader:       "X-GiGot-Gateway-Sig",
+				TimestampHeader: "X-GiGot-Gateway-Ts",
+				MaxSkewSeconds:  300,
+			},
 		},
 		Crypto: CryptoConfig{
 			PrivateKeyPath: "./data/server.key",

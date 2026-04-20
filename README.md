@@ -61,19 +61,33 @@ is schema-aware publishing (records → Azure DevOps wiki, Confluence,
 etc.) which explicitly belongs in Formidable's WikiWonder plugin, not
 here. The items below do not overlap with Track B.
 
-- [ ] **Accounts + roles — gateway + default-flip phases (design:
-      [`accounts.md`](docs/design/accounts.md) §9–§10).** Phases 1–3
-      shipped (see "Done and shipping" below). Phase 4 adds
-      gateway-trusted identity for APIM-fronted deploys — a signed
-      `X-MS-CLIENT-PRINCIPAL-NAME` (or equivalent) header that
-      resolves to `(provider: gateway, identifier: <claim>)`. Phase 5
-      flips the documented default of `auth.allow_local` to `false`
-      and optionally removes the local password path entirely.
-      Retires the former "NaCl-challenge admin login" item
-      (browser-held NaCl keys in `localStorage` lock admins out; see
-      `accounts.md` §1).
-
 Done and shipping:
+
+- [x] **Accounts + roles — Phase 4 gateway-trusted identity + Phase 5
+      default-flip (design: [`accounts.md`](docs/design/accounts.md)
+      §9–§10).** `internal/auth/gateway/` verifies an HMAC-SHA256
+      signature over `<identifier>\n<timestamp>` keyed on a shared
+      secret from the credential vault (`auth.gateway.secret_ref`).
+      Three headers carry the claim (user / sig / timestamp); names
+      are configurable so APIM-style deploys can point at their own
+      `X-MS-CLIENT-PRINCIPAL-NAME`-ish convention. A replay window
+      (`max_skew_seconds`, default 5 min) bounds a captured header's
+      useful lifetime. Server-side bridge registers as an
+      `auth.Strategy` after the session strategy so cookies still
+      win; `requireAdminSession` now honours a gateway principal
+      that resolves to a `role=admin` account, re-checking role per
+      request so demotes take effect immediately. Boot warns when
+      `allow_local=false` is combined with no non-local path or no
+      non-local admin — the Phase-5 safety rail. Phase 5 is doc-only:
+      the runtime `Defaults()` still ships `allow_local=true` (a silent
+      flip in a minor version would lock upgraders out of their own
+      server); operators flip it to `false` in `gigot.json` once
+      OAuth or gateway is wired. Tests: `gateway.Verifier` unit
+      suite (happy path, partial/missing headers, stale timestamp,
+      malformed sig, tampered user, case-insensitive claim), plus
+      server-level handler tests for admin access, regular-rejected,
+      unknown-user-blocked vs. auto-registered, missing-headers
+      fallthrough, and tampered-sig hard-reject.
 
 - [x] **Accounts + roles — Phase 3 OAuth / OIDC + scoped token
       binding (design: [`accounts.md`](docs/design/accounts.md) §6, §8).**

@@ -103,15 +103,32 @@ func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// requireAdminSession checks the session cookie and returns the Identity or
-// writes a 401 response.
+// requireAdminSession returns the admin principal behind a request, or
+// writes a 401. Two paths are accepted:
+//
+//  1. Session cookie — the local / OAuth login flows mint one against
+//     an account whose role is already admin. Unchanged from Phase 1-3.
+//  2. Phase-4 gateway-signed headers — the strategy verified the HMAC
+//     triple and resolved the claim to (provider=gateway, identifier);
+//     we re-check role=admin here so a demoted user loses access on
+//     their next request without waiting for any cookie to expire.
+//
+// Bearer tokens DO NOT reach this gate — they're for API clients, not
+// admin humans; handlers that need token-authed access don't call this.
 func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *auth.Identity {
-	id, err := s.sessionStrategy.Authenticate(r)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return nil
+	if id, err := s.sessionStrategy.Authenticate(r); err == nil {
+		return id
 	}
-	return id
+	if s.gatewayStrategy != nil {
+		if id, err := s.gatewayStrategy.Authenticate(r); err == nil && id != nil {
+			acc, gerr := s.accounts.Get(accounts.ProviderGateway, id.Username)
+			if gerr == nil && acc.Role == accounts.RoleAdmin {
+				return id
+			}
+		}
+	}
+	writeError(w, http.StatusUnauthorized, "unauthorized")
+	return nil
 }
 
 // handleAdminTokens godoc
