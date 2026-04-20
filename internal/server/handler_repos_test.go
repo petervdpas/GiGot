@@ -425,17 +425,19 @@ func TestCreateRepoStampingMatrix(t *testing.T) {
 	}
 }
 
-// TestCreateRepoCloneStampIsIdempotent confirms that cloning + stamping a
-// source that already carries a valid .formidable/context.json does NOT
-// write a second commit — the resulting HEAD equals the clone's HEAD. This
-// is the "idempotent on clones that already carry a marker" guarantee from
-// §2.7.
+// TestCreateRepoClonePreservesMarkerFillsShape confirms the clone-and-
+// ensure behaviour on a source that carries a valid marker but is
+// missing the templates/ and storage/ starter layout (the real-world
+// BrainDamage case). The existing marker must survive byte-for-byte
+// — `scaffolded_at` stays on the source's timestamp — while the
+// missing scaffold pieces get added in one extra commit so the repo
+// is actually usable as a Formidable context.
 //
-// Parametrised over both paths that reach the stamp code: server default
-// (formidable_first=true, flag omitted) and explicit per-request opt-in
-// (formidable_first=false, flag=true — the original Clone-as-Formidable
-// case). Both should behave identically against a pre-marked upstream.
-func TestCreateRepoCloneStampIsIdempotent(t *testing.T) {
+// Parametrised over both paths that reach the stamp code: server
+// default (formidable_first=true, flag omitted) and explicit per-
+// request opt-in (formidable_first=false, flag=true). Both should
+// behave identically against a pre-marked upstream.
+func TestCreateRepoClonePreservesMarkerFillsShape(t *testing.T) {
 	tru := true
 
 	cases := []struct {
@@ -450,11 +452,6 @@ func TestCreateRepoCloneStampIsIdempotent(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			source := seedCloneSourceWithMarker(t)
-			sourceHEAD, err := exec.Command("git", "-C", source, "rev-parse", "HEAD").Output()
-			if err != nil {
-				t.Fatalf("rev-parse source: %v", err)
-			}
-			wantHEAD := strings.TrimSpace(string(sourceHEAD))
 
 			srv := testServer(t)
 			srv.cfg.Server.FormidableFirst = c.serverDefault
@@ -471,20 +468,65 @@ func TestCreateRepoCloneStampIsIdempotent(t *testing.T) {
 			if rec.Code != http.StatusCreated {
 				t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 			}
-			head, err := srv.git.Head("idem")
+			// One shape-fill commit on top of the source's two.
+			if got := countCommits(t, srv.git.RepoPath("idem")); got != 3 {
+				t.Errorf("want 3 commits (source's 2 + 1 shape-fill), got %d", got)
+			}
+			// Marker byte-stable: scaffolded_at stays on the source's
+			// timestamp, proving we did not rewrite a valid marker.
+			marker, err := srv.git.File("idem", "", formidableMarkerPath)
 			if err != nil {
-				t.Fatalf("HEAD: %v", err)
+				t.Fatalf("marker missing: %v", err)
 			}
-			if head.Version != wantHEAD {
-				t.Errorf("HEAD should equal source HEAD (no stamp commit), got %s vs %s",
-					head.Version, wantHEAD)
+			raw, _ := base64.StdEncoding.DecodeString(marker.ContentB64)
+			if !strings.Contains(string(raw), `"scaffolded_at":"2024-01-01T00:00:00Z"`) {
+				t.Errorf("marker should keep source's scaffolded_at; got:\n%s", raw)
 			}
-			// Commit count must equal the source's — no extra commit snuck in.
-			if got := countCommits(t, srv.git.RepoPath("idem")); got != 2 {
-				// seedCloneSourceWithMarker: 1 readme commit + 1 marker commit = 2
-				t.Errorf("want 2 commits (source's), got %d", got)
+			// templates/ and storage/ starter pieces must now land.
+			for _, p := range []string{"templates/basic.yaml", "storage/.gitkeep"} {
+				if _, err := srv.git.File("idem", "", p); err != nil {
+					t.Errorf("%s should exist after clone+ensure: %v", p, err)
+				}
 			}
 		})
+	}
+}
+
+// TestCreateRepoCloneIsNoOpWhenSourceAlreadyComplete — the stricter
+// idempotence check: a source that already carries marker + templates/
+// + storage/ must produce no new commit when cloned. Proves the
+// ensureFormidableShape no-op path works end-to-end through the
+// clone handler, not just at the helper level.
+func TestCreateRepoCloneIsNoOpWhenSourceAlreadyComplete(t *testing.T) {
+	source := seedCloneSourceWithFullFormidable(t)
+	sourceHEAD, err := exec.Command("git", "-C", source, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("rev-parse source: %v", err)
+	}
+	wantHEAD := strings.TrimSpace(string(sourceHEAD))
+	wantCommits := countCommits(t, source)
+
+	srv := testServer(t)
+	srv.cfg.Server.FormidableFirst = true
+
+	body, _ := json.Marshal(map[string]any{"name": "idem-full", "source_url": source})
+	req := httptest.NewRequest(http.MethodPost, "/api/repos", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	head, err := srv.git.Head("idem-full")
+	if err != nil {
+		t.Fatalf("HEAD: %v", err)
+	}
+	if head.Version != wantHEAD {
+		t.Errorf("HEAD should equal source HEAD (no shape-fill commit), got %s vs %s",
+			head.Version, wantHEAD)
+	}
+	if got := countCommits(t, srv.git.RepoPath("idem-full")); got != wantCommits {
+		t.Errorf("commit count should match source (%d), got %d", wantCommits, got)
 	}
 }
 
@@ -504,6 +546,38 @@ func seedCloneSourceWithMarker(t *testing.T) string {
 	cmds := [][]string{
 		{"-C", dir, "add", ".formidable/context.json"},
 		{"-C", dir, "commit", "-m", "add marker"},
+	}
+	for _, args := range cmds {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+		}
+	}
+	return dir
+}
+
+// seedCloneSourceWithFullFormidable is seedCloneSourceWithMarker plus
+// the templates/basic.yaml and storage/.gitkeep starter files — the
+// full Formidable layout already present in the upstream. Used by the
+// clone-noop idempotence test: when a source already has everything,
+// ensureFormidableShape must add nothing.
+func seedCloneSourceWithFullFormidable(t *testing.T) string {
+	t.Helper()
+	dir := seedCloneSourceWithMarker(t)
+	if err := os.MkdirAll(filepath.Join(dir, "templates"), 0755); err != nil {
+		t.Fatalf("mkdir templates: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "storage"), 0755); err != nil {
+		t.Fatalf("mkdir storage: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "templates", "basic.yaml"), []byte("name: Basic\n"), 0644); err != nil {
+		t.Fatalf("write templates/basic.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "storage", ".gitkeep"), nil, 0644); err != nil {
+		t.Fatalf("write storage/.gitkeep: %v", err)
+	}
+	cmds := [][]string{
+		{"-C", dir, "add", "templates", "storage"},
+		{"-C", dir, "commit", "-m", "add formidable layout"},
 	}
 	for _, args := range cmds {
 		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {

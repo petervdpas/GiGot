@@ -198,6 +198,10 @@ definitions:
     type: object
   server.ConvertFormidableResponse:
     properties:
+      added:
+        items:
+          type: string
+        type: array
       repo:
         $ref: '#/definitions/server.RepoInfo'
       stamped:

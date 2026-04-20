@@ -276,3 +276,151 @@ func TestStampFormidableMarker_OverwritesBrokenMarker(t *testing.T) {
 		t.Errorf("marker after stamp should be valid; got:\n%s", raw)
 	}
 }
+
+// TestEnsureFormidableShape_AddsAllWhenOnlyReadme covers the headline
+// case the user hit on BrainDamage: a converted repo that had only a
+// README.md ended up with just the marker, no templates/ or storage/.
+// After the fix, one convert call must leave the tree with marker +
+// templates/basic.yaml + storage/.gitkeep alongside the untouched
+// README.
+func TestEnsureFormidableShape_AddsAllWhenOnlyReadme(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("shape-readme")
+	seedFile(t, srv, "shape-readme", "README.md", "pre-existing\n", "seed readme")
+
+	added, err := ensureFormidableShape(srv.git, "shape-readme",
+		time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	want := []string{formidableMarkerPath, "templates/basic.yaml", "storage/.gitkeep"}
+	if len(added) != len(want) {
+		t.Fatalf("added: want %v, got %v", want, added)
+	}
+	for _, w := range want {
+		if !contains(added, w) {
+			t.Errorf("expected %q in added list %v", w, added)
+		}
+	}
+	for _, p := range append(want, "README.md") {
+		if _, err := srv.git.File("shape-readme", "", p); err != nil {
+			t.Errorf("%s should exist at HEAD after ensure: %v", p, err)
+		}
+	}
+	// README must NOT have been overwritten — we own ours.
+	readme, _ := srv.git.File("shape-readme", "", "README.md")
+	raw, _ := base64.StdEncoding.DecodeString(readme.ContentB64)
+	if string(raw) != "pre-existing\n" {
+		t.Errorf("README.md should be untouched; got %q", raw)
+	}
+}
+
+// TestEnsureFormidableShape_SkipsExistingTemplates proves the
+// "don't trample user content" half of the contract: if the repo
+// already has something under templates/, we do NOT add the
+// starter basic.yaml on top of it.
+func TestEnsureFormidableShape_SkipsExistingTemplates(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("shape-keep-tpl")
+	seedFile(t, srv, "shape-keep-tpl", "README.md", "hi\n", "seed readme")
+	seedFile(t, srv, "shape-keep-tpl", "templates/myform.yaml", "name: Mine\n", "seed custom template")
+
+	added, err := ensureFormidableShape(srv.git, "shape-keep-tpl",
+		time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if contains(added, "templates/basic.yaml") {
+		t.Errorf("basic.yaml should NOT be added when templates/ already has content; got %v", added)
+	}
+	// Marker + storage starter should still land — they were missing.
+	for _, p := range []string{formidableMarkerPath, "storage/.gitkeep"} {
+		if !contains(added, p) {
+			t.Errorf("expected %q in added list %v", p, added)
+		}
+	}
+	if _, err := srv.git.File("shape-keep-tpl", "", "templates/myform.yaml"); err != nil {
+		t.Errorf("user's custom template should survive: %v", err)
+	}
+	if _, err := srv.git.File("shape-keep-tpl", "", "templates/basic.yaml"); err == nil {
+		t.Error("basic.yaml should not have been planted next to the user's template")
+	}
+}
+
+// TestEnsureFormidableShape_SkipsExistingStorage mirror of the above
+// for the storage/ half.
+func TestEnsureFormidableShape_SkipsExistingStorage(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("shape-keep-storage")
+	seedFile(t, srv, "shape-keep-storage", "README.md", "hi\n", "seed readme")
+	seedFile(t, srv, "shape-keep-storage", "storage/basic/row.meta.json", "{}\n", "seed record")
+
+	added, err := ensureFormidableShape(srv.git, "shape-keep-storage",
+		time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if contains(added, "storage/.gitkeep") {
+		t.Errorf(".gitkeep should NOT be added when storage/ already has content; got %v", added)
+	}
+	if _, err := srv.git.File("shape-keep-storage", "", "storage/basic/row.meta.json"); err != nil {
+		t.Errorf("user's record should survive: %v", err)
+	}
+}
+
+// TestEnsureFormidableShape_AlreadyCompleteIsNoop — a repo that has
+// marker + templates/ + storage/ already must not produce a new commit.
+// Critical so repeat convert invocations stay quiet.
+func TestEnsureFormidableShape_AlreadyCompleteIsNoop(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("shape-complete")
+	seedFile(t, srv, "shape-complete", "README.md", "hi\n", "seed readme")
+	seedFile(t, srv, "shape-complete", "templates/basic.yaml", "name: Basic\n", "seed tpl")
+	seedFile(t, srv, "shape-complete", "storage/.gitkeep", "", "seed storage")
+	seedFile(t, srv, "shape-complete", formidableMarkerPath,
+		`{"version":1,"scaffolded_by":"gigot","scaffolded_at":"2024-01-01T00:00:00Z"}`+"\n",
+		"seed marker")
+	before, _ := srv.git.Head("shape-complete")
+
+	added, err := ensureFormidableShape(srv.git, "shape-complete", time.Now())
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if len(added) != 0 {
+		t.Errorf("complete repo should add nothing; got %v", added)
+	}
+	after, _ := srv.git.Head("shape-complete")
+	if after.Version != before.Version {
+		t.Error("HEAD must not advance when repo is already complete")
+	}
+}
+
+// TestEnsureFormidableShape_OverwritesBrokenMarker keeps the same
+// broken-marker-is-replaced semantics stampFormidableMarker already
+// enforces — otherwise a corrupt JSON would silently keep a repo
+// in half-converted limbo.
+func TestEnsureFormidableShape_OverwritesBrokenMarker(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("shape-broken-marker")
+	seedFile(t, srv, "shape-broken-marker", formidableMarkerPath,
+		`garbage`, "seed broken marker")
+	seedFile(t, srv, "shape-broken-marker", "templates/basic.yaml", "ok\n", "seed tpl")
+	seedFile(t, srv, "shape-broken-marker", "storage/.gitkeep", "", "seed storage")
+
+	added, err := ensureFormidableShape(srv.git, "shape-broken-marker", time.Now())
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if !contains(added, formidableMarkerPath) {
+		t.Errorf("broken marker should be rewritten; added=%v", added)
+	}
+}
+
+func contains(xs []string, want string) bool {
+	for _, x := range xs {
+		if x == want {
+			return true
+		}
+	}
+	return false
+}

@@ -45,16 +45,19 @@ Feature: Config-driven marker provisioning (server.formidable_first)
     And the repository "clone-fix" file ".formidable/context.json" is valid JSON with field "scaffolded_by" equal to "gigot"
     And the repository "clone-fix" head commit is authored by "GiGot Scaffolder"
 
-  Scenario: Clone of a pre-marked upstream on a formidable-first server preserves the marker (idempotent)
+  Scenario: Clone of a pre-marked upstream preserves the marker and fills missing scaffold
     Given the server is running in formidable-first mode
     And a local git source "src-marked" exists with a formidable marker
     When I POST "/api/repos" with body '{"name":"clone-idem","source_url":"${src-marked}"}'
     Then the response status should be 201
-    And the repository "clone-idem" has 2 commits
+    # Source has README + marker = 2 commits. Clone adds one shape-fill
+    # commit for the missing templates/ and storage/ starter pieces.
+    And the repository "clone-idem" has 3 commits
     And the repository "clone-idem" contains file ".formidable/context.json"
-    # Proves idempotence at the wire layer: the marker is the source's,
-    # not a fresh one the server just wrote (which would have today's
-    # timestamp, not the fixed 2024-01-01 one the seeder commits).
+    And the repository "clone-idem" contains file "templates/basic.yaml"
+    And the repository "clone-idem" contains file "storage/.gitkeep"
+    # Proves the existing marker was NOT rewritten — its scaffolded_at
+    # is still the source's fixed 2024-01-01 timestamp, not today.
     And the repository "clone-idem" file ".formidable/context.json" is valid JSON with field "scaffolded_at" equal to "2024-01-01T00:00:00Z"
 
   Scenario: Explicit scaffold_formidable=false on clone overrides the server default (escape hatch)
@@ -94,6 +97,11 @@ Feature: Config-driven marker provisioning (server.formidable_first)
     And the JSON response "stamped" should be true
     And the repository "to-convert" contains file ".formidable/context.json"
     And the repository "to-convert" file ".formidable/context.json" is valid JSON with field "version" equal to "1"
+    # Convert must also fill in the templates/ and storage/ starter
+    # layout so the repo is actually usable as a Formidable context,
+    # not just stamped with a marker.
+    And the repository "to-convert" contains file "templates/basic.yaml"
+    And the repository "to-convert" contains file "storage/.gitkeep"
     And the top audit event in repo "to-convert" has type "repo_convert_formidable"
 
   Scenario: Converting an already-Formidable repo is idempotent

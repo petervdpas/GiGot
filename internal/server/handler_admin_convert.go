@@ -9,14 +9,24 @@ import (
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
 )
 
+// ConvertFormidableResponse's Added field lists the scaffold paths a
+// successful convert actually wrote (marker, templates/basic.yaml,
+// storage/.gitkeep — any subset of these). Empty on an idempotent
+// re-invocation where every piece was already in place.
+
 // ConvertFormidableResponse is the 200 body from
 // POST /api/admin/repos/{name}/formidable. Stamped distinguishes a
-// first-time conversion (true — one new commit on HEAD) from an
-// idempotent re-invocation on an already-marker-stamped repo
-// (false — no commit written). Repo carries the enriched RepoInfo so
-// the admin UI can refresh the card in place.
+// first-time or partial conversion (true — at least one scaffold
+// piece was written) from an idempotent re-invocation on a repo that
+// already carried a valid marker, a templates/ entry, and a storage/
+// entry (false — no commit written). Added lists the exact paths the
+// commit wrote (marker, templates/basic.yaml, storage/.gitkeep, or
+// any subset) so the admin UI can surface which pieces were missing.
+// Repo carries the enriched RepoInfo so the UI can refresh the card
+// in place.
 type ConvertFormidableResponse struct {
 	Stamped bool     `json:"stamped"`
+	Added   []string `json:"added,omitempty"`
 	Repo    RepoInfo `json:"repo"`
 }
 
@@ -103,7 +113,7 @@ func (s *Server) handleAdminConvertFormidable(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// stampFormidableMarker writes on top of HEAD, so a repo with no
+	// ensureFormidableShape writes on top of HEAD, so a repo with no
 	// commits has nothing to build on. 422 is the right signal — the
 	// request shape is fine, the repo state isn't.
 	if _, err := s.git.Head(name); err != nil {
@@ -116,14 +126,15 @@ func (s *Server) handleAdminConvertFormidable(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	stamped, err := stampFormidableMarker(s.git, name, time.Now())
+	added, err := ensureFormidableShape(s.git, name, time.Now())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	if stamped {
-		notes := "converted " + name + " to Formidable context"
+	if len(added) > 0 {
+		notes := "converted " + name + " to Formidable context: added " +
+			strings.Join(added, ", ")
 		s.appendAudit(name, gitmanager.AuditEvent{
 			Type:  AuditTypeRepoConvertFormidable,
 			Actor: auditActor(r),
@@ -132,7 +143,8 @@ func (s *Server) handleAdminConvertFormidable(w http.ResponseWriter, r *http.Req
 	}
 
 	writeJSON(w, http.StatusOK, ConvertFormidableResponse{
-		Stamped: stamped,
+		Stamped: len(added) > 0,
+		Added:   added,
 		Repo:    s.repoInfo(name),
 	})
 }

@@ -162,12 +162,18 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 	case !stamp:
 		// Nothing to do — repo stays as-is.
 	case isClone:
-		written, err := stampFormidableMarker(s.git, req.Name, time.Now())
+		// A cloned repo almost never carries the full Formidable layout,
+		// so stamping just the marker leaves `templates/` and `storage/`
+		// missing — the repo looks like Formidable but isn't usable.
+		// ensureFormidableShape adds only what's missing and leaves
+		// existing content alone (never overwrites README or any file
+		// already at a scaffold path).
+		added, err := ensureFormidableShape(s.git, req.Name, time.Now())
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "stamping marker: "+err.Error())
 			return
 		}
-		stampedOnClone = written
+		stampedOnClone = len(added) > 0
 	default:
 		files, err := formidableScaffoldFiles(time.Now())
 		if err != nil {

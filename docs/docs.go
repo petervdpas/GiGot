@@ -3337,6 +3337,12 @@ const docTemplate = `{
         "server.ConvertFormidableResponse": {
             "type": "object",
             "properties": {
+                "added": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "repo": {
                     "$ref": "#/definitions/server.RepoInfo"
                 },
