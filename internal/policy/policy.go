@@ -138,3 +138,54 @@ func decideTokenAccess(ctx context.Context, action Action, resource string) Deci
 		return Deny("unhandled action: " + string(action))
 	}
 }
+
+// TokenAbilityPolicy enforces that a token-authenticated caller holds a
+// named ability (see auth.KnownAbilities). It is orthogonal to
+// TokenRepoPolicy: handlers compose the two for endpoints that need both
+// a repo scope and an ability (e.g. the subscriber-facing destinations
+// API — see remote-sync.md §2.6).
+//
+// Admin sessions and auth-disabled (dev) callers bypass the ability
+// check — admins already have god-mode; dev mode is off by design.
+// Token callers are allowed iff their TokenEntry's Abilities slice
+// contains the configured name.
+//
+// The Action and resource arguments are accepted to satisfy the
+// Evaluator interface and are not consulted — the policy is purely an
+// ability gate. Callers pass the repo name via TokenRepoPolicy separately.
+type TokenAbilityPolicy struct {
+	ability string
+}
+
+// NewTokenAbilityPolicy constructs a policy that requires the named
+// ability on the caller's token. Panics if ability is empty — an empty
+// name would allow any token through, which is almost certainly a bug
+// at the call site rather than a legitimate configuration.
+func NewTokenAbilityPolicy(ability string) TokenAbilityPolicy {
+	if ability == "" {
+		panic("policy: TokenAbilityPolicy requires a non-empty ability name")
+	}
+	return TokenAbilityPolicy{ability: ability}
+}
+
+// Decide implements Evaluator.
+func (p TokenAbilityPolicy) Decide(ctx context.Context, id *auth.Identity, _ Action, _ string) Decision {
+	if id == nil {
+		return Deny("not authenticated")
+	}
+	switch id.Provider {
+	case ProviderSession, ProviderAuthDisabled:
+		return Allow()
+	case ProviderToken:
+		entry := auth.TokenEntryFromContext(ctx)
+		if entry == nil {
+			return Deny("token entry missing from context")
+		}
+		if !entry.HasAbility(p.ability) {
+			return Deny("token missing ability: " + p.ability)
+		}
+		return Allow()
+	default:
+		return Deny("unknown identity provider: " + id.Provider)
+	}
+}

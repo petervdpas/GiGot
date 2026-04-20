@@ -777,7 +777,7 @@ func (tc *testContext) thePolicyIsDenyAll() error {
 }
 
 func (tc *testContext) aTokenIsIssuedForUser(username string) error {
-	token, err := tc.tokenStrategy.Issue(username, nil)
+	token, err := tc.tokenStrategy.Issue(username, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -793,12 +793,19 @@ func (tc *testContext) aTokenIsIssuedForUserWithRepos(username, reposCSV string)
 			repos = append(repos, r)
 		}
 	}
-	token, err := tc.tokenStrategy.Issue(username, repos)
+	token, err := tc.tokenStrategy.Issue(username, repos, nil)
 	if err != nil {
 		return err
 	}
 	tc.currentToken = token
 	return nil
+}
+
+func (tc *testContext) thatTokenHasAbility(ability string) error {
+	if tc.currentToken == "" {
+		return fmt.Errorf("no current token to grant ability to")
+	}
+	return tc.tokenStrategy.UpdateAbilities(tc.currentToken, []string{ability})
 }
 
 func (tc *testContext) adminRescopesThatTokenTo(reposCSV string) error {
@@ -1302,6 +1309,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^a token is issued for user "([^"]*)"$`, tc.aTokenIsIssuedForUser)
 	ctx.Step(`^a token is issued for user "([^"]*)" with repos "([^"]*)"$`, tc.aTokenIsIssuedForUserWithRepos)
 	ctx.Step(`^the admin rescopes that token to "([^"]*)"$`, tc.adminRescopesThatTokenTo)
+	ctx.Step(`^that token has ability "([^"]*)"$`, tc.thatTokenHasAbility)
 	ctx.Step(`^the policy is deny-all$`, tc.thePolicyIsDenyAll)
 	ctx.Step(`^the server keypair is rotated$`, tc.theServerKeypairIsRotated)
 	ctx.Step(`^the JSON response "([^"]*)" should differ from saved "([^"]*)"$`, tc.theJSONResponseShouldDifferFromSaved)

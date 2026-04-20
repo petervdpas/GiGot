@@ -9,14 +9,55 @@ import (
 	"sync"
 )
 
-// TokenEntry is a stored API token with its associated identity and the set
-// of repositories the bearer is allowed to access. Repos is an allowlist: an
-// empty slice grants access to no repositories. Wildcards are not supported
-// — admins add repo names explicitly.
+// TokenEntry is a stored API token with its associated identity, the set
+// of repositories the bearer is allowed to access, and the set of named
+// abilities the bearer holds. Repos is an allowlist: an empty slice grants
+// access to no repositories. Abilities is an orthogonal capability
+// allowlist (e.g. "mirror" to manage the subscriber-facing destinations
+// API — see remote-sync.md §2.6). Wildcards are not supported in either
+// list.
 type TokenEntry struct {
-	Token    string   `json:"token"`
-	Username string   `json:"username"`
-	Repos    []string `json:"repos,omitempty"`
+	Token     string   `json:"token"`
+	Username  string   `json:"username"`
+	Repos     []string `json:"repos,omitempty"`
+	Abilities []string `json:"abilities,omitempty"`
+}
+
+// Ability names recognised by the server. Adding a new ability requires
+// adding it here so POST/PATCH /admin/tokens can validate incoming
+// payloads and reject typos.
+const (
+	AbilityMirror = "mirror"
+)
+
+// KnownAbilities returns the full set of recognised ability names. The
+// admin API validates incoming abilities against this set so unknown
+// names are rejected at the boundary rather than silently persisted.
+func KnownAbilities() []string {
+	return []string{AbilityMirror}
+}
+
+// IsKnownAbility reports whether name is a recognised ability.
+func IsKnownAbility(name string) bool {
+	for _, known := range KnownAbilities() {
+		if name == known {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAbility reports whether the entry carries the named ability.
+func (e *TokenEntry) HasAbility(name string) bool {
+	if e == nil {
+		return false
+	}
+	for _, a := range e.Abilities {
+		if a == name {
+			return true
+		}
+	}
+	return false
 }
 
 // TokenPersister persists the token set to durable storage. Set via
@@ -138,19 +179,20 @@ func (s *TokenStrategy) Authenticate(r *http.Request) (*Identity, error) {
 }
 
 // Issue creates and stores a new token for the given username, scoped to the
-// given set of repositories. Pass nil or an empty slice to issue a token with
-// no repo access (useful when the admin plans to attach repos later via an
-// Update call).
-func (s *TokenStrategy) Issue(username string, repos []string) (string, error) {
+// given set of repositories and abilities. Pass nil or an empty slice for
+// either to issue a token without that scope — admins can attach repos or
+// abilities later via UpdateRepos / UpdateAbilities.
+func (s *TokenStrategy) Issue(username string, repos []string, abilities []string) (string, error) {
 	token, err := generateToken(32)
 	if err != nil {
 		return "", fmt.Errorf("generating token: %w", err)
 	}
 
 	entry := &TokenEntry{
-		Token:    token,
-		Username: username,
-		Repos:    repos,
+		Token:     token,
+		Username:  username,
+		Repos:     repos,
+		Abilities: abilities,
 	}
 
 	s.mu.Lock()
@@ -224,6 +266,24 @@ func (s *TokenStrategy) UpdateRepos(token string, repos []string) error {
 	if err := s.persistLocked(); err != nil {
 		entry.Repos = previous
 		return fmt.Errorf("persist token repos: %w", err)
+	}
+	return nil
+}
+
+// UpdateAbilities replaces the ability allowlist on an existing token.
+// Returns ErrInvalidToken if the token doesn't exist.
+func (s *TokenStrategy) UpdateAbilities(token string, abilities []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, ok := s.tokens[token]
+	if !ok {
+		return ErrInvalidToken
+	}
+	previous := entry.Abilities
+	entry.Abilities = abilities
+	if err := s.persistLocked(); err != nil {
+		entry.Abilities = previous
+		return fmt.Errorf("persist token abilities: %w", err)
 	}
 	return nil
 }

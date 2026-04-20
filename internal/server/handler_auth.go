@@ -50,16 +50,23 @@ func (s *Server) issueToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := s.tokenStrategy.Issue(req.Username, repos)
+	abilities := normalizeAbilities(req.Abilities)
+	if err := validateAbilities(abilities); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	token, err := s.tokenStrategy.Issue(req.Username, repos, abilities)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, TokenResponse{
-		Token:    token,
-		Username: req.Username,
-		Repos:    repos,
+		Token:     token,
+		Username:  req.Username,
+		Repos:     repos,
+		Abilities: abilities,
 	})
 }
 

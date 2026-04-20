@@ -85,9 +85,9 @@ func (s *Server) handleAdminRepoDestinations(w http.ResponseWriter, r *http.Requ
 	if id == "" {
 		switch r.Method {
 		case http.MethodGet:
-			s.adminListDestinations(w, r, repo)
+			s.listDestinations(w, r, repo)
 		case http.MethodPost:
-			s.adminCreateDestination(w, r, repo)
+			s.createDestination(w, r, repo)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -95,17 +95,17 @@ func (s *Server) handleAdminRepoDestinations(w http.ResponseWriter, r *http.Requ
 	}
 	switch r.Method {
 	case http.MethodGet:
-		s.adminGetDestination(w, r, repo, id)
+		s.getDestination(w, r, repo, id)
 	case http.MethodPatch:
-		s.adminUpdateDestination(w, r, repo, id)
+		s.updateDestination(w, r, repo, id)
 	case http.MethodDelete:
-		s.adminDeleteDestination(w, r, repo, id)
+		s.deleteDestination(w, r, repo, id)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
-func (s *Server) adminListDestinations(w http.ResponseWriter, _ *http.Request, repo string) {
+func (s *Server) listDestinations(w http.ResponseWriter, _ *http.Request, repo string) {
 	items := s.destinations.All(repo)
 	views := make([]DestinationView, 0, len(items))
 	for _, d := range items {
@@ -117,7 +117,7 @@ func (s *Server) adminListDestinations(w http.ResponseWriter, _ *http.Request, r
 	})
 }
 
-func (s *Server) adminCreateDestination(w http.ResponseWriter, r *http.Request, repo string) {
+func (s *Server) createDestination(w http.ResponseWriter, r *http.Request, repo string) {
 	var req CreateDestinationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -175,7 +175,7 @@ func (s *Server) adminCreateDestination(w http.ResponseWriter, r *http.Request, 
 // @Router       /admin/repos/{name}/destinations/{id} [get]
 // @Router       /admin/repos/{name}/destinations/{id} [patch]
 // @Router       /admin/repos/{name}/destinations/{id} [delete]
-func (s *Server) adminGetDestination(w http.ResponseWriter, _ *http.Request, repo, id string) {
+func (s *Server) getDestination(w http.ResponseWriter, _ *http.Request, repo, id string) {
 	d, err := s.destinations.Get(repo, id)
 	if err != nil {
 		if errors.Is(err, destinations.ErrNotFound) {
@@ -188,7 +188,7 @@ func (s *Server) adminGetDestination(w http.ResponseWriter, _ *http.Request, rep
 	writeJSON(w, http.StatusOK, destinationView(*d))
 }
 
-func (s *Server) adminUpdateDestination(w http.ResponseWriter, r *http.Request, repo, id string) {
+func (s *Server) updateDestination(w http.ResponseWriter, r *http.Request, repo, id string) {
 	var req UpdateDestinationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -234,7 +234,7 @@ func (s *Server) adminUpdateDestination(w http.ResponseWriter, r *http.Request, 
 	writeJSON(w, http.StatusOK, destinationView(*stored))
 }
 
-func (s *Server) adminDeleteDestination(w http.ResponseWriter, _ *http.Request, repo, id string) {
+func (s *Server) deleteDestination(w http.ResponseWriter, _ *http.Request, repo, id string) {
 	if err := s.destinations.Remove(repo, id); err != nil {
 		if errors.Is(err, destinations.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "destination not found")

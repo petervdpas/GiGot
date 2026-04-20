@@ -120,6 +120,30 @@ form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 }
 .repo-chip.none { color: #8b949e; font-style: italic; }
 
+.ability-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  min-width: 260px;
+}
+.ability-chip { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: #c9d1d9; cursor: pointer; }
+.ability-chip input[type=checkbox] { min-width: 0; }
+.ability-chip.stale { color: #8b949e; font-style: italic; }
+.ability-hint { font-size: 0.75rem; }
+
+.ability-badge {
+  background: #1f3a2e;
+  border: 1px solid #2ea043;
+  color: #7ee787;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  text-transform: lowercase;
+}
+
 a { color: #58a6ff; text-decoration: none; }
 a:hover { text-decoration: underline; }
 

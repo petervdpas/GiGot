@@ -50,22 +50,27 @@ const api = {
     if (!r.ok) throw new Error('list failed');
     return r.json();
   },
-  async issueToken(username, repos) {
+  async issueToken(username, repos, abilities) {
     const r = await fetch('/api/admin/tokens', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify({ username, repos }),
+      body: JSON.stringify({ username, repos, abilities }),
     });
     if (!r.ok) throw new Error((await r.json()).error || 'issue failed');
     return r.json();
   },
-  async updateTokenRepos(token, repos) {
+  // updateToken patches the token's repos and/or abilities. Pass only
+  // the fields you want to change — absent fields are preserved
+  // server-side (UpdateTokenRequest.{Repos,Abilities} are *[]string so
+  // "omitted" differs from "set to empty").
+  async updateToken(token, patch) {
+    const body = Object.assign({ token }, patch);
     const r = await fetch('/api/admin/tokens', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify({ token, repos }),
+      body: JSON.stringify(body),
     });
     if (!r.ok) throw new Error((await r.json()).error || 'update failed');
   },
@@ -413,6 +418,7 @@ async function refreshRepos() {
     // list). refreshTokens() re-renders using tokensCache.
     renderTokensGrid();
     renderRepoPicker(document.getElementById('issue-repos'), []);
+    syncIssueAbilities();
   } catch (e) {
     console.error(e);
   }
@@ -451,6 +457,10 @@ function renderTokenCard(t) {
     ? t.repos.map(r => '<span class="repo-chip">' + escapeHtml(r) + '</span>').join('')
     : '<span class="repo-chip none">no repos</span>';
 
+  const abilities = (t.abilities && t.abilities.length)
+    ? t.abilities.map(a => '<span class="ability-badge">' + escapeHtml(a) + '</span>').join('')
+    : '';
+
   card.innerHTML =
     '<div class="ic-header">' +
       '<div class="ic-title">' + escapeHtml(t.username) + '</div>' +
@@ -458,6 +468,7 @@ function renderTokenCard(t) {
         ((t.repos && t.repos.length === 1) ? 'repo' : 'repos') + '</span></div>' +
     '</div>' +
     '<div class="ic-chips cell-repos">' + repos + '</div>' +
+    (abilities ? '<div class="ic-chips cell-abilities">' + abilities + '</div>' : '') +
     '<div class="token-field">' +
       '<code class="token-value">' + escapeHtml(t.token) + '</code>' +
       '<button type="button" class="copy-btn">Copy</button>' +
@@ -486,6 +497,14 @@ function enterEditMode(card, t) {
   renderRepoPicker(picker, t.repos || []);
   cellRepos.replaceChildren(picker);
 
+  // Inject an abilities editor sibling to the repo picker. Re-uses the
+  // same chip control the issue form uses; the checked state mirrors
+  // the token's current abilities so save sends the full desired set.
+  const abilityEditor = document.createElement('div');
+  abilityEditor.className = 'ability-picker';
+  renderAbilityPicker(abilityEditor, t.abilities || []);
+  cellRepos.after(abilityEditor);
+
   const save = document.createElement('button');
   save.className = 'small';
   save.textContent = 'Save';
@@ -498,9 +517,10 @@ function enterEditMode(card, t) {
 
   save.addEventListener('click', async () => {
     const repos = selectedReposFromPicker(picker);
+    const abilities = selectedAbilitiesFromPicker(abilityEditor);
     save.disabled = true;
     try {
-      await api.updateTokenRepos(t.token, repos);
+      await api.updateToken(t.token, { repos, abilities });
       refreshTokens();
     } catch (e) {
       save.disabled = false;
@@ -513,6 +533,92 @@ function enterEditMode(card, t) {
     const fresh = renderTokenCard(t);
     card.replaceWith(fresh);
   });
+}
+
+// KNOWN_ABILITIES mirrors internal/auth.KnownAbilities(). Each entry
+// has a `relevant` predicate: an ability is only offered in the UI
+// when its precondition holds, otherwise granting it would be inert
+// (e.g. `mirror` with no credentials in the vault means the holder
+// has nothing to reference when creating a destination). The
+// server-side allowlist still rejects anything not named here via
+// 400, so KNOWN_ABILITIES must stay in lockstep with Go's
+// internal/auth.KnownAbilities().
+const KNOWN_ABILITIES = [
+  {
+    name: 'mirror',
+    hint: 'self-manage remote destinations (remote-sync.md §2.6)',
+    relevant: () => credentialsCache.length > 0,
+    inertHint: 'add a credential first — a mirror destination needs one to reference',
+  },
+];
+
+// relevantAbilities is the subset of KNOWN_ABILITIES whose precondition
+// currently holds. Used by the issue form to hide the whole Abilities
+// section when nothing is grantable, and by the edit mode on an
+// existing token to decide which checkboxes to render.
+function relevantAbilities() {
+  return KNOWN_ABILITIES.filter(a => a.relevant());
+}
+
+// renderAbilityPicker paints checkboxes into an existing container
+// (emptying it first). `selected` is the set of ability names that
+// should start checked. Only abilities currently relevant are
+// rendered; abilities that are held but no longer relevant are still
+// rendered as a "stale" chip so the admin can see and revoke them —
+// hiding a held-but-inert ability would lie about the token's state.
+function renderAbilityPicker(container, selected) {
+  container.replaceChildren();
+  const set = new Set(selected);
+  const relevant = relevantAbilities();
+  const names = new Set(relevant.map(a => a.name));
+  // Relevant + checked
+  for (const a of relevant) {
+    container.append(makeAbilityChip(a, set.has(a.name), false));
+  }
+  // Held but no longer relevant — render as muted so the admin can
+  // revoke.
+  for (const name of set) {
+    if (!names.has(name)) {
+      container.append(makeAbilityChip(
+        { name, hint: 'granted but not currently actionable', inertHint: '' },
+        true, true,
+      ));
+    }
+  }
+}
+
+function makeAbilityChip(ability, checked, stale) {
+  const label = document.createElement('label');
+  label.className = 'ability-chip' + (stale ? ' stale' : '');
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.name = 'ability';
+  cb.value = ability.name;
+  cb.checked = checked;
+  const name = document.createElement('span');
+  name.textContent = ability.name;
+  const hint = document.createElement('span');
+  hint.className = 'muted ability-hint';
+  hint.textContent = ability.hint;
+  label.append(cb, name, hint);
+  return label;
+}
+
+function selectedAbilitiesFromPicker(container) {
+  return Array.from(container.querySelectorAll('input[name="ability"]:checked'))
+    .map(cb => cb.value);
+}
+
+// syncIssueAbilities updates the issue form's Abilities section: hides
+// the whole wrap when nothing is currently relevant (so admins don't
+// see a grant button for an inert ability), otherwise paints the
+// checkbox set with nothing pre-selected.
+function syncIssueAbilities() {
+  const wrap = document.getElementById('issue-abilities-wrap');
+  const picker = document.getElementById('issue-abilities');
+  const any = relevantAbilities().length > 0;
+  wrap.classList.toggle('hidden', !any);
+  if (any) renderAbilityPicker(picker, []);
 }
 
 // renderTokensGrid paints the keys panel from the module-level tokensCache.
@@ -628,8 +734,9 @@ document.getElementById('issue-form').addEventListener('submit', async e => {
   const msg = document.getElementById('issue-msg');
   msg.textContent = '';
   const repos = selectedReposFromPicker(document.getElementById('issue-repos'));
+  const abilities = selectedAbilitiesFromPicker(document.getElementById('issue-abilities'));
   try {
-    const t = await api.issueToken(f.username.value, repos);
+    const t = await api.issueToken(f.username.value, repos, abilities);
     msg.textContent = 'Issued: ' + t.token;
     f.reset();
     renderRepoPicker(document.getElementById('issue-repos'), []);

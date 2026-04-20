@@ -135,3 +135,80 @@ func TestTokenRepoPolicy_MissingTokenEntryDenies(t *testing.T) {
 		t.Fatal("missing token entry in context should deny")
 	}
 }
+
+func TestTokenAbilityPolicy_DeniesAnonymous(t *testing.T) {
+	p := NewTokenAbilityPolicy("mirror")
+	if p.Decide(context.Background(), nil, ActionReadRepo, "").Allowed {
+		t.Fatal("anonymous caller should be denied")
+	}
+}
+
+func TestTokenAbilityPolicy_AdminSessionBypasses(t *testing.T) {
+	p := NewTokenAbilityPolicy("mirror")
+	id := &auth.Identity{Username: "peter", Provider: ProviderSession}
+	// Admin holds no token at all — bypass should still allow.
+	if !p.Decide(context.Background(), id, ActionReadRepo, "").Allowed {
+		t.Fatal("admin session should bypass ability gate")
+	}
+}
+
+func TestTokenAbilityPolicy_AuthDisabledBypasses(t *testing.T) {
+	p := NewTokenAbilityPolicy("mirror")
+	id := &auth.Identity{Username: "dev", Provider: ProviderAuthDisabled}
+	if !p.Decide(context.Background(), id, ActionReadRepo, "").Allowed {
+		t.Fatal("auth-disabled (dev) mode should bypass ability gate")
+	}
+}
+
+func TestTokenAbilityPolicy_TokenWithAbilityAllowed(t *testing.T) {
+	p := NewTokenAbilityPolicy("mirror")
+	id := &auth.Identity{Username: "alice", Provider: ProviderToken}
+	ctx := withToken(&auth.TokenEntry{
+		Token: "t", Username: "alice", Abilities: []string{"mirror"},
+	})
+	if !p.Decide(ctx, id, ActionReadRepo, "").Allowed {
+		t.Fatal("token with mirror ability should be allowed")
+	}
+}
+
+func TestTokenAbilityPolicy_TokenWithoutAbilityDenied(t *testing.T) {
+	p := NewTokenAbilityPolicy("mirror")
+	id := &auth.Identity{Username: "alice", Provider: ProviderToken}
+	ctx := withToken(&auth.TokenEntry{
+		Token: "t", Username: "alice", Abilities: []string{"some-other"},
+	})
+	d := p.Decide(ctx, id, ActionReadRepo, "")
+	if d.Allowed {
+		t.Fatal("token without mirror ability should be denied")
+	}
+	if d.Reason == "" {
+		t.Fatal("deny decision should carry a reason")
+	}
+}
+
+func TestTokenAbilityPolicy_TokenWithNoAbilitiesDenied(t *testing.T) {
+	p := NewTokenAbilityPolicy("mirror")
+	id := &auth.Identity{Username: "alice", Provider: ProviderToken}
+	ctx := withToken(&auth.TokenEntry{Token: "t", Username: "alice"})
+	if p.Decide(ctx, id, ActionReadRepo, "").Allowed {
+		t.Fatal("token with no abilities at all should be denied")
+	}
+}
+
+func TestTokenAbilityPolicy_MissingTokenEntryDenies(t *testing.T) {
+	p := NewTokenAbilityPolicy("mirror")
+	id := &auth.Identity{Username: "alice", Provider: ProviderToken}
+	// No WithTokenEntry on the context — exercises the missing-entry branch.
+	if p.Decide(context.Background(), id, ActionReadRepo, "").Allowed {
+		t.Fatal("missing token entry should deny")
+	}
+}
+
+func TestTokenAbilityPolicy_EmptyAbilityNamePanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("constructing with empty ability name should panic")
+		}
+	}()
+	_ = NewTokenAbilityPolicy("")
+}

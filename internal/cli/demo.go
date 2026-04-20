@@ -159,7 +159,7 @@ func runAddDemoSetup(cfg *config.Config, stdout io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "  credential %-16s (kind: %s)\n", DemoCredentialName, DemoCredentialKind)
 
-	token, err := stores.tokens.Issue(demoTokenUsername, []string{DemoRepoName, DemoPlainRepoName})
+	token, err := stores.tokens.Issue(demoTokenUsername, []string{DemoRepoName, DemoPlainRepoName}, nil)
 	if err != nil {
 		return fmt.Errorf("issue token: %w", err)
 	}

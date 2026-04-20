@@ -35,3 +35,23 @@ func (s *Server) requireAllow(w http.ResponseWriter, r *http.Request, action pol
 	}
 	return true
 }
+
+// requireAbility is the ability-gate companion to requireAllow. Token
+// callers pass iff their TokenEntry carries the named ability; admin
+// sessions and auth-disabled (dev) callers bypass. Used on endpoints
+// that are off by default for subscribers and must be granted
+// explicitly (see remote-sync.md §2.6). Returns 403 on deny.
+func (s *Server) requireAbility(w http.ResponseWriter, r *http.Request, ability string) bool {
+	ctx := r.Context()
+	id := auth.IdentityFromContext(ctx)
+	if entry := s.tokenStrategy.EntryFromRequest(r); entry != nil {
+		ctx = auth.WithTokenEntry(ctx, entry)
+	}
+	p := policy.NewTokenAbilityPolicy(ability)
+	// Action + resource are ignored by TokenAbilityPolicy; pass placeholders.
+	if d := p.Decide(ctx, id, policy.ActionReadRepo, ""); !d.Allowed {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return false
+	}
+	return true
+}

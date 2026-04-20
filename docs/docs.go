@@ -849,7 +849,7 @@ const docTemplate = `{
         },
         "/admin/tokens": {
             "get": {
-                "description": "GET lists, POST issues, DELETE revokes. Requires a valid\nadmin session cookie (obtained via /admin/login).",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).",
                 "consumes": [
                     "application/json"
                 ],
@@ -870,11 +870,11 @@ const docTemplate = `{
                         }
                     },
                     {
-                        "description": "Update-repos body (PATCH)",
+                        "description": "Update body (PATCH) — repos and/or abilities",
                         "name": "body",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/server.UpdateTokenReposRequest"
+                            "$ref": "#/definitions/server.UpdateTokenRequest"
                         }
                     },
                     {
@@ -888,7 +888,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "DELETE / PATCH response",
+                        "description": "PATCH / DELETE response",
                         "schema": {
                             "$ref": "#/definitions/server.MessageResponse"
                         }
@@ -926,7 +926,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "GET lists, POST issues, DELETE revokes. Requires a valid\nadmin session cookie (obtained via /admin/login).",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).",
                 "consumes": [
                     "application/json"
                 ],
@@ -947,11 +947,11 @@ const docTemplate = `{
                         }
                     },
                     {
-                        "description": "Update-repos body (PATCH)",
+                        "description": "Update body (PATCH) — repos and/or abilities",
                         "name": "body",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/server.UpdateTokenReposRequest"
+                            "$ref": "#/definitions/server.UpdateTokenRequest"
                         }
                     },
                     {
@@ -965,7 +965,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "DELETE / PATCH response",
+                        "description": "PATCH / DELETE response",
                         "schema": {
                             "$ref": "#/definitions/server.MessageResponse"
                         }
@@ -1003,7 +1003,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "GET lists, POST issues, DELETE revokes. Requires a valid\nadmin session cookie (obtained via /admin/login).",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1024,11 +1024,11 @@ const docTemplate = `{
                         }
                     },
                     {
-                        "description": "Update-repos body (PATCH)",
+                        "description": "Update body (PATCH) — repos and/or abilities",
                         "name": "body",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/server.UpdateTokenReposRequest"
+                            "$ref": "#/definitions/server.UpdateTokenRequest"
                         }
                     },
                     {
@@ -1042,7 +1042,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "DELETE / PATCH response",
+                        "description": "PATCH / DELETE response",
                         "schema": {
                             "$ref": "#/definitions/server.MessageResponse"
                         }
@@ -1080,7 +1080,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "GET lists, POST issues, DELETE revokes. Requires a valid\nadmin session cookie (obtained via /admin/login).",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1101,11 +1101,11 @@ const docTemplate = `{
                         }
                     },
                     {
-                        "description": "Update-repos body (PATCH)",
+                        "description": "Update body (PATCH) — repos and/or abilities",
                         "name": "body",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/server.UpdateTokenReposRequest"
+                            "$ref": "#/definitions/server.UpdateTokenRequest"
                         }
                     },
                     {
@@ -1119,7 +1119,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "DELETE / PATCH response",
+                        "description": "PATCH / DELETE response",
                         "schema": {
                             "$ref": "#/definitions/server.MessageResponse"
                         }
@@ -1939,6 +1939,478 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/repos/{name}/destinations": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nBearer-authenticated, gated by both TokenRepoPolicy (repo in\nthe token's allowlist) and TokenAbilityPolicy(\"mirror\")\n(see remote-sync.md §2.6). A token without the mirror\nability receives 403 here; the admin-session route remains\navailable as an override.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Manage mirror-sync destinations on a repo (subscriber)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Create body (POST)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateDestinationRequest"
+                        }
+                    },
+                    {
+                        "description": "Patch body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateDestinationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET/PATCH response",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "201": {
+                        "description": "POST response",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "204": {
+                        "description": "DELETE response"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Missing mirror ability or repo out of scope",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nBearer-authenticated, gated by both TokenRepoPolicy (repo in\nthe token's allowlist) and TokenAbilityPolicy(\"mirror\")\n(see remote-sync.md §2.6). A token without the mirror\nability receives 403 here; the admin-session route remains\navailable as an override.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Manage mirror-sync destinations on a repo (subscriber)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Create body (POST)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateDestinationRequest"
+                        }
+                    },
+                    {
+                        "description": "Patch body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateDestinationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET/PATCH response",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "201": {
+                        "description": "POST response",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "204": {
+                        "description": "DELETE response"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Missing mirror ability or repo out of scope",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/repos/{name}/destinations/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nBearer-authenticated, gated by both TokenRepoPolicy (repo in\nthe token's allowlist) and TokenAbilityPolicy(\"mirror\")\n(see remote-sync.md §2.6). A token without the mirror\nability receives 403 here; the admin-session route remains\navailable as an override.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Manage mirror-sync destinations on a repo (subscriber)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination id",
+                        "name": "id",
+                        "in": "path"
+                    },
+                    {
+                        "description": "Create body (POST)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateDestinationRequest"
+                        }
+                    },
+                    {
+                        "description": "Patch body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateDestinationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET/PATCH response",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "201": {
+                        "description": "POST response",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "204": {
+                        "description": "DELETE response"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Missing mirror ability or repo out of scope",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nBearer-authenticated, gated by both TokenRepoPolicy (repo in\nthe token's allowlist) and TokenAbilityPolicy(\"mirror\")\n(see remote-sync.md §2.6). A token without the mirror\nability receives 403 here; the admin-session route remains\navailable as an override.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Manage mirror-sync destinations on a repo (subscriber)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination id",
+                        "name": "id",
+                        "in": "path"
+                    },
+                    {
+                        "description": "Create body (POST)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateDestinationRequest"
+                        }
+                    },
+                    {
+                        "description": "Patch body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateDestinationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET/PATCH response",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "201": {
+                        "description": "POST response",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "204": {
+                        "description": "DELETE response"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Missing mirror ability or repo out of scope",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nBearer-authenticated, gated by both TokenRepoPolicy (repo in\nthe token's allowlist) and TokenAbilityPolicy(\"mirror\")\n(see remote-sync.md §2.6). A token without the mirror\nability receives 403 here; the admin-session route remains\navailable as an override.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Manage mirror-sync destinations on a repo (subscriber)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination id",
+                        "name": "id",
+                        "in": "path"
+                    },
+                    {
+                        "description": "Create body (POST)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateDestinationRequest"
+                        }
+                    },
+                    {
+                        "description": "Patch body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateDestinationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET/PATCH response",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "201": {
+                        "description": "POST response",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "204": {
+                        "description": "DELETE response"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Missing mirror ability or repo out of scope",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -3051,6 +3523,12 @@ const docTemplate = `{
         "server.TokenListItem": {
             "type": "object",
             "properties": {
+                "abilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "repos": {
                     "type": "array",
                     "items": {
@@ -3082,6 +3560,15 @@ const docTemplate = `{
         "server.TokenRequest": {
             "type": "object",
             "properties": {
+                "abilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "mirror"
+                    ]
+                },
                 "repos": {
                     "type": "array",
                     "items": {
@@ -3101,6 +3588,12 @@ const docTemplate = `{
         "server.TokenResponse": {
             "type": "object",
             "properties": {
+                "abilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "repos": {
                     "type": "array",
                     "items": {
@@ -3148,9 +3641,15 @@ const docTemplate = `{
                 }
             }
         },
-        "server.UpdateTokenReposRequest": {
+        "server.UpdateTokenRequest": {
             "type": "object",
             "properties": {
+                "abilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "repos": {
                     "type": "array",
                     "items": {

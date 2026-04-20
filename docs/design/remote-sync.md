@@ -2,14 +2,11 @@
 
 Status: **partially shipped.** The data-model and admin-API half of §3
 — per-repo destinations + credential linkage — is live (slice 1 of 3;
-see README roadmap). The push worker (§3.3–§3.5) and the admin UI
-(§3.6) with its privacy-warning gate (§3.7) are still the *open
-question*: the tension in §2.2 between mirror-sync and GiGot's
-sealed-body promise has not been resolved, and slice 2 should not start
-until someone re-reads §2.2 and is willing to sign off on what it
-trades away. This document still decides whether the push worker
-belongs in GiGot at all; the storage substrate is built either way
-(credential-vault.md §5 needed it).
+see README roadmap). The §2.2 privacy tension has been resolved in
+§2.4: sealed-body is scoped to GiGot↔client; mirroring is a
+deliberate per-destination operator opt-in. With that decision in
+place, the remaining work is the push worker (§3.3–§3.5, slice 2)
+and the admin UI with its privacy-warning gate (§3.6–§3.7, slice 3).
 
 ---
 
@@ -83,6 +80,116 @@ real user names the specific scenario they need it for. The scenarios
 above are plausible but not currently grounded in a concrete demand.
 
 If the answer turns out to be yes — proceed to §3.
+
+### 2.4 Resolution
+
+§2.3's "don't build it yet" was the right default *before* a
+concrete demand existed. That default has since been superseded:
+slice 1 shipped to back a disaster-recovery and ecosystem-mirror
+story, and the §2.2 tension is now resolved explicitly rather than
+left implicit.
+
+**Sealed-body encryption is a GiGot↔client scope claim, not a
+GiGot↔everywhere claim.** A repo with zero mirror destinations
+stays inside that scope — the sealed-body pitch holds end-to-end.
+The moment an operator adds a destination, they are making an
+explicit opt-in decision to ship plaintext git objects to that
+destination. The consent mechanism is the §3.7 privacy-warning
+checkbox, required per destination at add time.
+
+This keeps the sealed-body pitch honest (it still means what it
+always did for repos that don't mirror) while giving operators a
+deliberate path to accept the tradeoff when they want disaster
+recovery or ecosystem integration. The decision is per-repo,
+per-destination, and recorded — not hidden in docs.
+
+Implication for slices 2 and 3: no new gating code is needed in
+the push worker. The consent gate lives in the admin UI
+add-destination form (slice 3, §3.7); the existence of a
+configured destination *is* the operator's consent. The worker
+just pushes what it's told to push.
+
+### 2.5 Two tracks, not one
+
+Remote-destination workflows live on **two deliberately separate
+tracks**. GiGot owns one; Formidable owns the other. Neither is
+intended to grow into the other.
+
+**Track A — byte-level git mirror (GiGot).** Pushes the raw git
+repo byte-for-byte to another git host. Use cases: disaster
+recovery, compliance archiving, ecosystem integration where the
+receiving system is itself a git host (GitHub, Azure DevOps git,
+self-hosted Gitea). The payload is whatever commits GiGot holds —
+yaml templates, `.meta.json` records, images, blobs — delivered
+unchanged. GiGot is deliberately **schema-blind** on this track.
+
+**Track B — schema-aware publishing (Formidable, via WikiWonder
+and similar plugins).** Renders Formidable records into a target
+system's native schema: Azure DevOps *wiki* markdown with
+`.order` files and attachment paths, Confluence pages, static-
+site input, etc. Requires knowing what a record *means*, which is
+the Formidable plugin's domain, not GiGot's. This track never
+enters GiGot's codebase. Credentials for its destinations live in
+Formidable's profile config, not in GiGot's credential vault.
+
+Boundary consequences:
+
+- The credential vault in `internal/credentials` exists to serve
+  Track A only. If a future feature needs schema-aware publishing
+  credentials, they belong in Formidable, not here.
+- Any temptation to "make GiGot's mirror smarter about
+  Formidable" collapses this boundary and should be refused.
+  The mirror ships bytes; the plugin ships meanings.
+- Users can run both tracks against the same Formidable content
+  without stepping on each other: Track A gives them a git-level
+  backup of the raw storage; Track B gives them a rendered wiki.
+
+### 2.6 Provisioning and enablement
+
+Track A is not turned on everywhere by default, and not everyone
+who holds a subscription token can configure it. Two roles
+interact:
+
+1. **Admin (service operator).** Grants the `mirror` ability to
+   specific subscription tokens via the admin API. Grants are
+   revocable. Admins can also configure destinations directly via
+   the existing admin-session-gated endpoint as an override
+   / onboarding path.
+2. **Subscriber (token holder).** A token that holds the `mirror`
+   ability can manage its own destinations via a subscription-
+   facing API — `/api/repos/{name}/destinations` with Bearer auth,
+   gated by both `TokenRepoPolicy` (repo in allowlist) and a new
+   `TokenAbilityPolicy` (`mirror` ability present). Tokens without
+   the ability get `403` on this surface; all other endpoints are
+   unchanged.
+
+The ability concept extends the existing `repos: [...]` scope on
+tokens with an orthogonal `abilities: [...]` scope. It is *not*
+a reintroduction of the roles system that was deliberately ripped
+out: abilities are explicit claims attached to individual
+credentials, not a lookup into a separate roles table. Closest
+analogue is OAuth scopes or GitHub fine-grained PAT permissions.
+For now there is exactly one ability name: `mirror`. Future
+abilities (e.g. `credentials:read-own`) would follow the same
+pattern without needing a role model.
+
+Data-model delta:
+
+- `TokenEntry` gains `abilities []string` (persisted in
+  `tokens.enc`, rewrapped by `-rotate-keys` alongside the other
+  fields — no migration needed since additive JSON is
+  forward-compatible).
+- `POST /api/admin/tokens` and `PATCH /api/admin/tokens` accept
+  an optional `abilities` array.
+- New `internal/policy.TokenAbilityPolicy` — a leaf policy
+  evaluator, same shape as `TokenRepoPolicy`.
+- Admin UI grows a checkbox column on the tokens table.
+
+Implication for slices 2 and 3: the admin-session destinations
+surface and the push worker do not change. The subscription-
+facing destinations API is a new, additive surface (call it
+*slice 2.5*) that can ship before or after the worker — the two
+are orthogonal.
 
 ---
 
@@ -233,8 +340,9 @@ Before committing to build this, we should be able to answer:
 
 - [ ] What concrete user need are we solving that isn't already covered
       by the fact that each client holds a full clone?
-- [ ] Are we okay telling users "the moment you enable this, your data
-      is readable at the destination"?
+- [x] Are we okay telling users "the moment you enable this, your data
+      is readable at the destination"? **Yes — see §2.4. Consent lives
+      in the §3.7 privacy-warning checkbox at destination-add time.**
 - [ ] Who operates the destinations, and who rotates their credentials
       when they leak?
 - [ ] What does the admin UI show when a mirror has been broken for a

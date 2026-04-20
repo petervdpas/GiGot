@@ -58,6 +58,35 @@ func TestSealedTokenStore_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestSealedTokenStore_RoundTripPreservesAbilities(t *testing.T) {
+	enc := newTestEncryptor(t)
+	path := filepath.Join(t.TempDir(), "tokens.enc")
+	s, _ := NewSealedTokenStore(path, enc)
+
+	in := []*TokenEntry{
+		{Token: "t1", Username: "alice", Repos: []string{"r1"}, Abilities: []string{"mirror"}},
+		{Token: "t2", Username: "bob"}, // no abilities
+	}
+	if err := s.SaveTokens(in); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := s.LoadTokens()
+	if err != nil {
+		t.Fatal(err)
+	}
+	byToken := map[string]*TokenEntry{}
+	for _, e := range out {
+		byToken[e.Token] = e
+	}
+	if got := byToken["t1"]; got == nil || len(got.Abilities) != 1 || got.Abilities[0] != "mirror" {
+		t.Fatalf("t1 abilities not preserved: %+v", got)
+	}
+	if got := byToken["t2"]; got == nil || len(got.Abilities) != 0 {
+		t.Fatalf("t2 should have no abilities, got %+v", got)
+	}
+}
+
 func TestSealedTokenStore_RejectsWrongKey(t *testing.T) {
 	enc := newTestEncryptor(t)
 	path := filepath.Join(t.TempDir(), "tokens.enc")
@@ -80,7 +109,7 @@ func TestTokenStrategy_PersistsAcrossRestart(t *testing.T) {
 	if err := s1.SetPersister(store1); err != nil {
 		t.Fatal(err)
 	}
-	token, err := s1.Issue("alice", nil)
+	token, err := s1.Issue("alice", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +135,7 @@ func TestTokenStrategy_RevokeSurvivesRestart(t *testing.T) {
 	store, _ := NewSealedTokenStore(path, enc)
 	s := NewTokenStrategy()
 	_ = s.SetPersister(store)
-	token, _ := s.Issue("alice", nil)
+	token, _ := s.Issue("alice", nil, nil)
 	if !s.Revoke(token) {
 		t.Fatal("revoke returned false")
 	}

@@ -180,7 +180,7 @@ func TestRemoveDemoSetup_UndoesEverything(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen stores to seed legacy token: %v", err)
 	}
-	staleLegacy, err := stores.tokens.Issue(legacyTokenUsername, nil)
+	staleLegacy, err := stores.tokens.Issue(legacyTokenUsername, nil, nil)
 	if err != nil {
 		t.Fatalf("seed legacy token: %v", err)
 	}

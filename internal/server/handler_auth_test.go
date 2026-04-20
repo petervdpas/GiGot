@@ -59,7 +59,7 @@ func TestRevokeToken(t *testing.T) {
 	srv := testServer(t)
 
 	// Issue a token first.
-	token, _ := srv.tokenStrategy.Issue("bob", nil)
+	token, _ := srv.tokenStrategy.Issue("bob", nil, nil)
 
 	payload := `{"token":"` + token + `"}`
 	req := httptest.NewRequest(http.MethodDelete, "/api/auth/token", bytes.NewBufferString(payload))

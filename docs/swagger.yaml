@@ -410,6 +410,10 @@ definitions:
     type: object
   server.TokenListItem:
     properties:
+      abilities:
+        items:
+          type: string
+        type: array
       repos:
         items:
           type: string
@@ -430,6 +434,12 @@ definitions:
     type: object
   server.TokenRequest:
     properties:
+      abilities:
+        example:
+        - mirror
+        items:
+          type: string
+        type: array
       repos:
         example:
         - my-templates
@@ -443,6 +453,10 @@ definitions:
     type: object
   server.TokenResponse:
     properties:
+      abilities:
+        items:
+          type: string
+        type: array
       repos:
         items:
           type: string
@@ -474,8 +488,12 @@ definitions:
       url:
         type: string
     type: object
-  server.UpdateTokenReposRequest:
+  server.UpdateTokenRequest:
     properties:
+      abilities:
+        items:
+          type: string
+        type: array
       repos:
         items:
           type: string
@@ -1116,19 +1134,19 @@ paths:
       consumes:
       - application/json
       description: |-
-        GET lists, POST issues, DELETE revokes. Requires a valid
-        admin session cookie (obtained via /admin/login).
+        GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.
+        Requires a valid admin session cookie (obtained via /admin/login).
       parameters:
       - description: Issue body (POST)
         in: body
         name: body
         schema:
           $ref: '#/definitions/server.TokenRequest'
-      - description: Update-repos body (PATCH)
+      - description: Update body (PATCH) — repos and/or abilities
         in: body
         name: body
         schema:
-          $ref: '#/definitions/server.UpdateTokenReposRequest'
+          $ref: '#/definitions/server.UpdateTokenRequest'
       - description: Revoke body (DELETE)
         in: body
         name: body
@@ -1138,7 +1156,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: DELETE / PATCH response
+          description: PATCH / DELETE response
           schema:
             $ref: '#/definitions/server.MessageResponse'
         "201":
@@ -1168,19 +1186,19 @@ paths:
       consumes:
       - application/json
       description: |-
-        GET lists, POST issues, DELETE revokes. Requires a valid
-        admin session cookie (obtained via /admin/login).
+        GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.
+        Requires a valid admin session cookie (obtained via /admin/login).
       parameters:
       - description: Issue body (POST)
         in: body
         name: body
         schema:
           $ref: '#/definitions/server.TokenRequest'
-      - description: Update-repos body (PATCH)
+      - description: Update body (PATCH) — repos and/or abilities
         in: body
         name: body
         schema:
-          $ref: '#/definitions/server.UpdateTokenReposRequest'
+          $ref: '#/definitions/server.UpdateTokenRequest'
       - description: Revoke body (DELETE)
         in: body
         name: body
@@ -1190,7 +1208,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: DELETE / PATCH response
+          description: PATCH / DELETE response
           schema:
             $ref: '#/definitions/server.MessageResponse'
         "201":
@@ -1220,19 +1238,19 @@ paths:
       consumes:
       - application/json
       description: |-
-        GET lists, POST issues, DELETE revokes. Requires a valid
-        admin session cookie (obtained via /admin/login).
+        GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.
+        Requires a valid admin session cookie (obtained via /admin/login).
       parameters:
       - description: Issue body (POST)
         in: body
         name: body
         schema:
           $ref: '#/definitions/server.TokenRequest'
-      - description: Update-repos body (PATCH)
+      - description: Update body (PATCH) — repos and/or abilities
         in: body
         name: body
         schema:
-          $ref: '#/definitions/server.UpdateTokenReposRequest'
+          $ref: '#/definitions/server.UpdateTokenRequest'
       - description: Revoke body (DELETE)
         in: body
         name: body
@@ -1242,7 +1260,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: DELETE / PATCH response
+          description: PATCH / DELETE response
           schema:
             $ref: '#/definitions/server.MessageResponse'
         "201":
@@ -1272,19 +1290,19 @@ paths:
       consumes:
       - application/json
       description: |-
-        GET lists, POST issues, DELETE revokes. Requires a valid
-        admin session cookie (obtained via /admin/login).
+        GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.
+        Requires a valid admin session cookie (obtained via /admin/login).
       parameters:
       - description: Issue body (POST)
         in: body
         name: body
         schema:
           $ref: '#/definitions/server.TokenRequest'
-      - description: Update-repos body (PATCH)
+      - description: Update body (PATCH) — repos and/or abilities
         in: body
         name: body
         schema:
-          $ref: '#/definitions/server.UpdateTokenReposRequest'
+          $ref: '#/definitions/server.UpdateTokenRequest'
       - description: Revoke body (DELETE)
         in: body
         name: body
@@ -1294,7 +1312,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: DELETE / PATCH response
+          description: PATCH / DELETE response
           schema:
             $ref: '#/definitions/server.MessageResponse'
         "201":
@@ -1850,6 +1868,340 @@ paths:
       summary: Multi-file atomic commit
       tags:
       - sync
+  /repos/{name}/destinations:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
+        Bearer-authenticated, gated by both TokenRepoPolicy (repo in
+        the token's allowlist) and TokenAbilityPolicy("mirror")
+        (see remote-sync.md §2.6). A token without the mirror
+        ability receives 403 here; the admin-session route remains
+        available as an override.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateDestinationRequest'
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET/PATCH response
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: Missing mirror ability or repo out of scope
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Manage mirror-sync destinations on a repo (subscriber)
+      tags:
+      - repos
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
+        Bearer-authenticated, gated by both TokenRepoPolicy (repo in
+        the token's allowlist) and TokenAbilityPolicy("mirror")
+        (see remote-sync.md §2.6). A token without the mirror
+        ability receives 403 here; the admin-session route remains
+        available as an override.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateDestinationRequest'
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET/PATCH response
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: Missing mirror ability or repo out of scope
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Manage mirror-sync destinations on a repo (subscriber)
+      tags:
+      - repos
+  /repos/{name}/destinations/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: |-
+        Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
+        Bearer-authenticated, gated by both TokenRepoPolicy (repo in
+        the token's allowlist) and TokenAbilityPolicy("mirror")
+        (see remote-sync.md §2.6). A token without the mirror
+        ability receives 403 here; the admin-session route remains
+        available as an override.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Destination id
+        in: path
+        name: id
+        type: string
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateDestinationRequest'
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET/PATCH response
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: Missing mirror ability or repo out of scope
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Manage mirror-sync destinations on a repo (subscriber)
+      tags:
+      - repos
+    get:
+      consumes:
+      - application/json
+      description: |-
+        Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
+        Bearer-authenticated, gated by both TokenRepoPolicy (repo in
+        the token's allowlist) and TokenAbilityPolicy("mirror")
+        (see remote-sync.md §2.6). A token without the mirror
+        ability receives 403 here; the admin-session route remains
+        available as an override.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Destination id
+        in: path
+        name: id
+        type: string
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateDestinationRequest'
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET/PATCH response
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: Missing mirror ability or repo out of scope
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Manage mirror-sync destinations on a repo (subscriber)
+      tags:
+      - repos
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
+        Bearer-authenticated, gated by both TokenRepoPolicy (repo in
+        the token's allowlist) and TokenAbilityPolicy("mirror")
+        (see remote-sync.md §2.6). A token without the mirror
+        ability receives 403 here; the admin-session route remains
+        available as an override.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Destination id
+        in: path
+        name: id
+        type: string
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateDestinationRequest'
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateDestinationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET/PATCH response
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: Missing mirror ability or repo out of scope
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Manage mirror-sync destinations on a repo (subscriber)
+      tags:
+      - repos
   /repos/{name}/files/{path}:
     get:
       description: |-

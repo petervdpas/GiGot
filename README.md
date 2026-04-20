@@ -53,18 +53,60 @@ the sealed bodies of GiGot requests and responses.
 Open work, in rough priority order. This list mirrors the in-project task
 tracker and is the source of truth for "what's next."
 
-- [ ] **Mirror-sync — push worker (slice 2).** The destinations data
-      model and admin API are shipped (see below); the remaining work
-      is the actual `git push` path: async queue on post-receive, retry/
-      backoff, per-destination `last_sync_*` status updates, and
-      `credentials.Touch` on success. Privacy tension from
-      [`docs/design/remote-sync.md`](docs/design/remote-sync.md) §2.2
-      (mirroring plaintext git objects defeats GiGot's sealed-body
-      promise for that repo) should be re-examined here before the
-      worker actually fires — that's the right decision gate.
-      **Must also** include `refs/audit/*` in the push refspec so the
-      audit chain travels to mirrors alongside `refs/heads/*` (see
-      [`docs/design/audit-trail.md`](docs/design/audit-trail.md)).
+Mirror-sync and related work organizes into two deliberate tracks
+(see [`remote-sync.md`](docs/design/remote-sync.md) §2.5): **Track A**
+is GiGot's byte-level git mirror — disaster recovery, compliance,
+git-to-git ecosystem — and is what the items below ship. **Track B**
+is schema-aware publishing (records → Azure DevOps wiki, Confluence,
+etc.) which explicitly belongs in Formidable's WikiWonder plugin, not
+here. The items below do not overlap with Track B.
+
+- [ ] **Token abilities — data model + admin surface.** `TokenEntry`
+      grows an `abilities []string` field (persisted in `tokens.enc`,
+      additive so no migration). `POST /api/admin/tokens` and
+      `PATCH /api/admin/tokens` accept an optional `abilities` array;
+      the admin tokens UI grows a checkbox column to set them. No
+      behavior change yet — this is the scaffolding for every future
+      token-scoped capability. Not a reintroduction of roles: abilities
+      are explicit claims attached to individual tokens, same shape as
+      the existing `repos: [...]` allowlist. Closest analogue is OAuth
+      scopes or GitHub fine-grained PAT permissions. See
+      [`remote-sync.md`](docs/design/remote-sync.md) §2.6.
+- [ ] **`mirror` ability + subscription-facing destinations API.**
+      First consumer of the ability model above. New leaf
+      `internal/policy.TokenAbilityPolicy`. New routes
+      `GET/POST/PATCH/DELETE /api/repos/{name}/destinations`
+      (Bearer-auth, gated by `TokenRepoPolicy` **and**
+      `TokenAbilityPolicy("mirror")`), delegating to the same
+      `internal/destinations` store as the admin path. Positive/negative
+      test pairs: token-with-`mirror` allowed, token-without-`mirror`
+      403, out-of-scope repo 403. Admins retain the existing
+      `/api/admin/repos/{name}/destinations` override path unchanged.
+      See [`remote-sync.md`](docs/design/remote-sync.md) §2.6.
+- [ ] **Refspec compatibility spike (manual, ~5 min).** Before the
+      push worker bakes in a refspec, manually `git push
+      +refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*` to one
+      throwaway GitHub repo and one Azure DevOps repo with a real PAT,
+      and confirm both accept `refs/audit/*`. If either rejects it,
+      the audit-chain-to-mirror contract in
+      [`audit-trail.md`](docs/design/audit-trail.md) needs a fallback
+      before slice 2 can ship. Not a code change — a go/no-go check.
+- [ ] **Mirror-sync — push worker (slice 2).** Track A delivery. The
+      destinations data model and admin API are shipped (see below);
+      the remaining work is the actual `git push` path: async queue on
+      post-receive, retry/backoff, per-destination `last_sync_*`
+      status updates, and `credentials.Touch` on success. The §2.2
+      privacy tension is resolved in
+      [`remote-sync.md`](docs/design/remote-sync.md) §2.4 (operator
+      opt-in via the §3.7 checkbox; sealed-body is a GiGot↔client
+      scope claim). **Must also** include `refs/audit/*` in the push
+      refspec so the audit chain travels to mirrors alongside
+      `refs/heads/*` (see
+      [`audit-trail.md`](docs/design/audit-trail.md)).
+- [ ] **Mirror-sync — admin UI (slice 3).** "Destinations" section on
+      the repo detail page with add/edit/delete rows and a prominent
+      privacy-warning checkbox per §3.7 of the remote-sync design.
+      Surfaces `last_sync_status` once slice 2 populates it.
 - [ ] **Mirror destination — move enabled toggle off the create/edit
       form.** Nobody adds a destination with `enabled = false`, so the
       checkbox in the form is noise. Default new destinations to
@@ -72,10 +114,6 @@ tracker and is the source of truth for "what's next."
       "enabled/disabled" badge on the display row clickable to toggle
       via PATCH. Pause/resume is a management gesture on an existing
       thing, not a new-thing form field.
-- [ ] **Mirror-sync — admin UI (slice 3).** "Destinations" section on
-      the repo detail page with add/edit/delete rows and a prominent
-      privacy-warning checkbox per §3.7 of the remote-sync design.
-      Surfaces `last_sync_status` once slice 2 populates it.
 - [ ] **Credential vault — Expires field in the admin UI.** Store and API
       already accept `expires`; the `/admin/credentials` form and table
       don't surface it yet. Design doc §3 calls for an input on the form,

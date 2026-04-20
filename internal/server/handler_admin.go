@@ -97,17 +97,17 @@ func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *au
 
 // handleAdminTokens godoc
 // @Summary      Manage subscription keys (admin only)
-// @Description  GET lists, POST issues, DELETE revokes. Requires a valid
-// @Description  admin session cookie (obtained via /admin/login).
+// @Description  GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.
+// @Description  Requires a valid admin session cookie (obtained via /admin/login).
 // @Tags         admin
 // @Accept       json
 // @Produce      json
-// @Param        body  body      TokenRequest             false  "Issue body (POST)"
-// @Param        body  body      UpdateTokenReposRequest  false  "Update-repos body (PATCH)"
-// @Param        body  body      RevokeTokenRequest       false  "Revoke body (DELETE)"
-// @Success      200   {object}  TokenListResponse  "GET / PATCH response"
-// @Success      201   {object}  TokenResponse      "POST response"
-// @Success      200   {object}  MessageResponse    "DELETE / PATCH response"
+// @Param        body  body      TokenRequest        false  "Issue body (POST)"
+// @Param        body  body      UpdateTokenRequest  false  "Update body (PATCH) — repos and/or abilities"
+// @Param        body  body      RevokeTokenRequest  false  "Revoke body (DELETE)"
+// @Success      200   {object}  TokenListResponse   "GET response"
+// @Success      201   {object}  TokenResponse       "POST response"
+// @Success      200   {object}  MessageResponse     "PATCH / DELETE response"
 // @Failure      400   {object}  ErrorResponse
 // @Failure      401   {object}  ErrorResponse
 // @Failure      404   {object}  ErrorResponse
@@ -127,7 +127,7 @@ func (s *Server) handleAdminTokens(w http.ResponseWriter, r *http.Request) {
 		// Reuse the existing issuance path.
 		s.issueToken(w, r)
 	case http.MethodPatch:
-		s.adminUpdateTokenRepos(w, r)
+		s.adminUpdateToken(w, r)
 	case http.MethodDelete:
 		s.revokeToken(w, r)
 	default:
@@ -135,8 +135,8 @@ func (s *Server) handleAdminTokens(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) adminUpdateTokenRepos(w http.ResponseWriter, r *http.Request) {
-	var req UpdateTokenReposRequest
+func (s *Server) adminUpdateToken(w http.ResponseWriter, r *http.Request) {
+	var req UpdateTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -145,16 +145,36 @@ func (s *Server) adminUpdateTokenRepos(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "token is required")
 		return
 	}
-	repos := normalizeRepos(req.Repos)
-	if err := s.validateRepos(repos); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if req.Repos == nil && req.Abilities == nil {
+		writeError(w, http.StatusBadRequest, "at least one of repos, abilities must be provided")
 		return
 	}
-	if err := s.tokenStrategy.UpdateRepos(req.Token, repos); err != nil {
-		writeError(w, http.StatusNotFound, err.Error())
-		return
+
+	if req.Repos != nil {
+		repos := normalizeRepos(*req.Repos)
+		if err := s.validateRepos(repos); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := s.tokenStrategy.UpdateRepos(req.Token, repos); err != nil {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
 	}
-	writeJSON(w, http.StatusOK, MessageResponse{Message: "repos updated"})
+
+	if req.Abilities != nil {
+		abilities := normalizeAbilities(*req.Abilities)
+		if err := validateAbilities(abilities); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := s.tokenStrategy.UpdateAbilities(req.Token, abilities); err != nil {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, MessageResponse{Message: "token updated"})
 }
 
 func (s *Server) adminListTokens(w http.ResponseWriter, _ *http.Request) {
@@ -162,9 +182,10 @@ func (s *Server) adminListTokens(w http.ResponseWriter, _ *http.Request) {
 	items := make([]TokenListItem, 0, len(entries))
 	for _, e := range entries {
 		items = append(items, TokenListItem{
-			Token:    e.Token,
-			Username: e.Username,
-			Repos:    e.Repos,
+			Token:     e.Token,
+			Username:  e.Username,
+			Repos:     e.Repos,
+			Abilities: e.Abilities,
 		})
 	}
 	writeJSON(w, http.StatusOK, TokenListResponse{
