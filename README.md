@@ -67,13 +67,6 @@ here. The items below do not overlap with Track B.
       enabled destinations. Failure semantics per §3.4: silent-and-
       log, client push still succeeds, admin UI shows the red
       `last_sync_status`.
-- [ ] **Mirror destination — move enabled toggle off the create/edit
-      form.** Nobody adds a destination with `enabled = false`, so the
-      checkbox in the form is noise. Default new destinations to
-      enabled, drop the checkbox from the add/edit form, and make the
-      "enabled/disabled" badge on the display row clickable to toggle
-      via PATCH. Pause/resume is a management gesture on an existing
-      thing, not a new-thing form field.
 - [ ] **Credential vault — Expires field in the admin UI.** Store and API
       already accept `expires`; the `/admin/credentials` form and table
       don't surface it yet. Design doc §3 calls for an input on the form,
@@ -91,6 +84,17 @@ here. The items below do not overlap with Track B.
 
 Done and shipping:
 
+- [x] **Mirror destination — enabled toggle moved off the create/edit
+      form.** The checkbox was noise (nobody adds a destination with
+      `enabled=false`); it's gone. New destinations default to enabled
+      server-side; edits omit the field entirely from the PATCH body
+      so they inherit the current value. The enabled/disabled badge on
+      the display row is now a click-to-toggle button — one click fires
+      `PATCH /destinations/{id}` with `{"enabled": !current}` and
+      refreshes the card in place. Pause/resume is a management gesture
+      on an existing destination, not a new-thing form field. Pure
+      admin.js + admin.css edit; the server API and tests were already
+      PATCH-shaped so nothing needed touching on the Go side.
 - [x] **Mirror-sync — admin UI (slice 3 of mirror-sync).** The
       existing mirror-destination section on each repo card grows
       three things: a last-sync status line ("never" /

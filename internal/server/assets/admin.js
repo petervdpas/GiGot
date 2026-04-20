@@ -304,14 +304,17 @@ function renderDestinationSection(container, repoName) {
   const credPill = dest.credential_name
     ? '<span class="cred-pill">' + escapeHtml(dest.credential_name) + '</span>'
     : '<span class="cred-pill missing">(no credential)</span>';
-  const enabledTag = dest.enabled
-    ? '<span class="badge formidable">enabled</span>'
-    : '<span class="badge empty">disabled</span>';
+  // Enabled/disabled is a click-to-toggle button on the display row —
+  // pause/resume is a management gesture on an existing destination, not
+  // a field on the create form.
+  const enabledBadge = dest.enabled
+    ? '<button type="button" class="badge formidable enabled-toggle" title="Click to disable automatic mirror-sync">enabled</button>'
+    : '<button type="button" class="badge empty enabled-toggle" title="Click to enable automatic mirror-sync">disabled</button>';
   container.innerHTML = header +
     '<div class="dest-row">' +
       '<div class="dest-url"><span class="stat-label">URL</span> <code>' + escapeHtml(dest.url) + '</code></div>' +
       '<div class="dest-meta">' +
-        '<span class="stat-label">Credential</span> ' + credPill + ' ' + enabledTag +
+        '<span class="stat-label">Credential</span> ' + credPill + ' ' + enabledBadge +
       '</div>' +
       renderDestSyncBlock(dest) +
       '<div class="dest-actions">' +
@@ -330,6 +333,17 @@ function renderDestinationSection(container, repoName) {
       await api.deleteDestination(repoName, dest.id);
       await refreshRepos();
     } catch (e) {
+      alert(e.message);
+    }
+  });
+  const toggleBtn = container.querySelector('.enabled-toggle');
+  toggleBtn.addEventListener('click', async () => {
+    toggleBtn.disabled = true;
+    try {
+      await api.updateDestination(repoName, dest.id, { enabled: !dest.enabled });
+      await refreshRepos();
+    } catch (e) {
+      toggleBtn.disabled = false;
       alert(e.message);
     }
   });
@@ -395,11 +409,15 @@ function renderDestinationEditor(container, repoName, existing) {
         }))
         .join('');
   const urlVal = existing ? escapeHtml(existing.url) : '';
-  const enabledChecked = !existing || existing.enabled ? 'checked' : '';
+  // No enabled checkbox on the form: new destinations default to
+  // enabled server-side, and pause/resume is driven by the
+  // click-to-toggle badge on the display row. Edits leave the current
+  // enabled value untouched (the PATCH body omits the field).
+  //
   // Privacy consent per remote-sync.md §3.7: required on every new
   // destination. On an existing destination the admin already consented
   // at creation time, so we don't re-prompt — edits of URL / credential
-  // / enabled flag keep the same consent.
+  // keep the same consent.
   const privacyBlock = isEdit ? '' :
     '<div class="dest-privacy">' +
       '<div class="dest-privacy-warn">' +
@@ -423,9 +441,6 @@ function renderDestinationEditor(container, repoName, existing) {
       '<label class="dest-field"><span class="stat-label">Credential</span>' +
         '<select name="credential_name" required>' + credOptions + '</select>' +
       '</label>' +
-      '<label class="dest-field inline">' +
-        '<input type="checkbox" name="enabled" ' + enabledChecked + '> Enable mirror-sync to this destination' +
-      '</label>' +
       privacyBlock +
       '<div class="dest-actions">' +
         '<button type="submit" class="small">' + (isEdit ? 'Save' : 'Add') + '</button>' +
@@ -444,7 +459,6 @@ function renderDestinationEditor(container, repoName, existing) {
     const body = {
       url: form.url.value.trim(),
       credential_name: form.credential_name.value,
-      enabled: form.enabled.checked,
     };
     try {
       if (isEdit) {
