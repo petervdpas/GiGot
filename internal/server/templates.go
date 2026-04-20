@@ -8,8 +8,13 @@ import (
 //go:embed templates/*.html
 var templatesFS embed.FS
 
+// One template per admin page. Login lives at /admin (adminPageTmpl);
+// authenticated pages each have their own: repositories, subscriptions,
+// credentials. No SPA panel switching — each section is a peer URL.
 var (
 	indexTmpl           = template.Must(template.ParseFS(templatesFS, "templates/index.html"))
 	adminPageTmpl       = template.Must(template.ParseFS(templatesFS, "templates/admin.html"))
+	repositoriesTmpl    = template.Must(template.ParseFS(templatesFS, "templates/repositories.html"))
+	subscriptionsTmpl   = template.Must(template.ParseFS(templatesFS, "templates/subscriptions.html"))
 	credentialsPageTmpl = template.Must(template.ParseFS(templatesFS, "templates/credentials.html"))
 )

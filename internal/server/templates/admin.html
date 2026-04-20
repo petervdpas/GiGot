@@ -2,12 +2,25 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>GiGot Admin</title>
+<title>GiGot Admin — Sign in</title>
 <link rel="stylesheet" href="/assets/admin.css">
+<script>
+  /* Apply stored theme before the body paints to avoid a flash on page
+     load. Mirrors the blocks on the other admin pages. */
+  try {
+    var t = localStorage.getItem('gigot.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) { /* private-mode / disabled storage → stay on default dark */ }
+</script>
 </head>
 <body>
 
-<div id="login" class="login-wrap card hidden">
+<div class="theme-fab">
+  <span>Light theme</span>
+  <span id="theme-toggle-host"></span>
+</div>
+
+<div class="login-wrap card">
   <img class="logo" src="/assets/gigot.png" alt="GiGot">
   <div class="brand-name">GiGot</div>
   <div class="brand-tag">Git-backed server for Formidable</div>
@@ -20,89 +33,20 @@
   </form>
 </div>
 
-<div id="app" class="hidden">
-  <div class="shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <img class="logo" src="/assets/gigot.png" alt="GiGot">
-        <div class="brand-text">
-          <h1>GiGot</h1>
-          <div class="muted">Admin console</div>
-        </div>
-      </div>
-      <nav>
-        <a data-panel="repos" class="active">Repositories</a>
-        <a data-panel="keys">Subscription keys</a>
-        <a href="/admin/credentials">Credentials</a>
-        <div class="spacer"></div>
-        <a href="/swagger/index.html" target="_blank" rel="noopener">API documentation</a>
-        <a id="logout">Sign out</a>
-      </nav>
-      <div class="me">
-        signed in as
-        <strong id="me-name"></strong>
-      </div>
-    </aside>
-
-    <main class="main">
-      <div id="panel-repos" class="panel active">
-        <div class="page-header">
-          <h1>Repositories <span class="muted">(<span id="repo-count">0</span>)</span></h1>
-        </div>
-        <div class="card">
-          <h2>Create repository</h2>
-          <form id="create-repo-form" class="row">
-            <input name="name" placeholder="New repo name" required>
-            <input name="source_url" placeholder="Clone from URL (optional)" class="create-repo-source">
-            <label class="muted create-repo-scaffold">
-              <input type="checkbox" name="scaffold">
-              Scaffold as Formidable context
-            </label>
-            <button type="submit">Create repo</button>
-          </form>
-          <div class="muted create-repo-hint">
-            Leave URL empty to create an empty bare repo. URL + scaffold clones and stamps the Formidable marker on top.
-            On a Formidable-first server (server.formidable_first) every create stamps by default.
-          </div>
-          <div id="repo-msg" class="muted"></div>
-        </div>
-        <div class="card">
-          <h2>Existing repositories</h2>
-          <div id="repo-grid" class="card-grid"></div>
-          <div id="repo-empty" class="muted hidden">No repositories yet — create one above.</div>
-        </div>
-      </div>
-
-      <div id="panel-keys" class="panel">
-        <div class="page-header">
-          <h1>Subscription keys <span class="muted">(<span id="count">0</span>)</span></h1>
-        </div>
-        <div class="card">
-          <h2>Issue subscription key</h2>
-          <form id="issue-form" class="row issue-form-row">
-            <input name="username" placeholder="Client username" required>
-            <div>
-              <div class="muted issue-repos-label">Repos this key can access:</div>
-              <div id="issue-repos" class="repo-picker"></div>
-            </div>
-            <div id="issue-abilities-wrap" class="hidden">
-              <div class="muted issue-repos-label">Abilities:</div>
-              <div id="issue-abilities" class="ability-picker"></div>
-            </div>
-            <button type="submit">Issue key</button>
-          </form>
-          <div id="issue-msg" class="success"></div>
-        </div>
-        <div class="card">
-          <h2>Active keys</h2>
-          <div id="token-grid" class="card-grid"></div>
-          <div id="token-empty" class="muted hidden">No active keys — issue one above.</div>
-        </div>
-      </div>
-    </main>
-  </div>
-</div>
-
-<script src="/assets/admin.js"></script>
+<script src="/assets/ui.js"></script>
+<script src="/assets/admin_common.js"></script>
+<script>
+  /* Render the corner theme toggle. Same pattern the landing page
+     uses — a small one-pager boot inside the template keeps login.js
+     focused on authentication. */
+  (function () {
+    var host = document.getElementById('theme-toggle-host');
+    if (host) {
+      host.innerHTML = GG.toggle_switch.html({ id: 'theme-toggle', ariaLabel: 'Toggle light theme' });
+      GG.theme.initToggle('theme-toggle');
+    }
+  })();
+</script>
+<script src="/assets/login.js"></script>
 </body>
 </html>

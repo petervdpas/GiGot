@@ -265,11 +265,16 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/crypto/pubkey", s.handleServerPubKey)
 	s.mux.HandleFunc("/api/clients/enroll", s.handleEnroll)
 
-	// Admin UI + session endpoints
+	// Admin UI + session endpoints. /admin is the login card; the three
+	// authenticated sections each live on their own peer URL.
 	s.mux.HandleFunc("/admin", s.handleAdminPage)
 	s.mux.HandleFunc("/admin/", s.handleAdminPage)
 	s.mux.HandleFunc("/admin/login", s.handleAdminLogin)
 	s.mux.HandleFunc("/admin/logout", s.handleAdminLogout)
+	s.mux.HandleFunc("/admin/repositories", s.adminPageHandler(repositoriesTmpl, "/admin/repositories", "/admin/repositories/"))
+	s.mux.HandleFunc("/admin/repositories/", s.adminPageHandler(repositoriesTmpl, "/admin/repositories", "/admin/repositories/"))
+	s.mux.HandleFunc("/admin/subscriptions", s.adminPageHandler(subscriptionsTmpl, "/admin/subscriptions", "/admin/subscriptions/"))
+	s.mux.HandleFunc("/admin/subscriptions/", s.adminPageHandler(subscriptionsTmpl, "/admin/subscriptions", "/admin/subscriptions/"))
 	s.mux.HandleFunc("/admin/credentials", s.handleCredentialsPage)
 	s.mux.HandleFunc("/admin/credentials/", s.handleCredentialsPage)
 	s.mux.HandleFunc("/api/admin/session", s.handleAdminSession)

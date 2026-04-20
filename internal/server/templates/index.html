@@ -4,8 +4,20 @@
 <meta charset="utf-8">
 <title>GiGot</title>
 <link rel="stylesheet" href="/assets/index.css">
+<script>
+  /* Apply stored theme before the body paints to avoid a dark-to-light
+     flash. Mirrors the early-theme blocks on /admin pages. */
+  try {
+    var t = localStorage.getItem('gigot.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) { /* private-mode / disabled storage → stay on default dark */ }
+</script>
 </head>
 <body>
+<div class="theme-fab">
+  <span>Light theme</span>
+  <span id="theme-toggle-host"></span>
+</div>
 <div class="stack">
   <div class="card">
     <img class="logo" src="/assets/gigot.png" alt="GiGot">
@@ -35,5 +47,17 @@
     </div>
   </div>
 </div>
+
+<script src="/assets/ui.js"></script>
+<script>
+  /* Render the toggle and bind theme state. Tiny one-pager boot — the
+     admin SPAs do the same thing inside their bundle. */
+  (function () {
+    var host = document.getElementById('theme-toggle-host');
+    if (!host) return;
+    host.innerHTML = GG.toggle_switch.html({ id: 'theme-toggle', ariaLabel: 'Toggle light theme' });
+    GG.theme.initToggle('theme-toggle');
+  })();
+</script>
 </body>
 </html>
