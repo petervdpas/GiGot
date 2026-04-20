@@ -57,11 +57,46 @@ type AuthConfig struct {
 	Type    string `json:"type"`
 	// AllowLocal toggles the username+password login path for
 	// local-provider accounts. When false, /api/admin/login returns
-	// 404 and only non-local providers (gateway, OAuth once shipped)
-	// can authenticate. CLI `--allow-local=true|false` on `gigot
-	// serve` overrides this value for the invocation. See
+	// 404 and only non-local providers (gateway, OAuth) can
+	// authenticate. CLI `--allow-local=true|false` on `gigot serve`
+	// overrides this value for the invocation. See
 	// docs/design/accounts.md §4.
 	AllowLocal bool `json:"allow_local"`
+	// OAuth configures the Phase-3 redirect-flow providers. Each entry
+	// is independent; enable one, two, or three. See
+	// docs/design/accounts.md §8.
+	OAuth OAuthConfig `json:"oauth,omitempty"`
+}
+
+// OAuthConfig holds per-provider OIDC / OAuth2 settings. The three
+// providers are intentionally separate (§2 of the design doc): entra
+// (tenant-scoped work/school), microsoft (consumer MSA), and github
+// (OAuth, no OIDC discovery). Leaving a block out or setting
+// Enabled=false keeps that provider dark.
+type OAuthConfig struct {
+	GitHub    OAuthProviderConfig `json:"github,omitempty"`
+	Entra     OAuthProviderConfig `json:"entra,omitempty"`
+	Microsoft OAuthProviderConfig `json:"microsoft,omitempty"`
+}
+
+// OAuthProviderConfig is one enabled redirect-flow provider.
+// ClientSecretRef names a credential in the existing vault (the OAuth
+// client secret is not stored in the config file; the vault already
+// seals secrets at rest).  TenantID is only read for the entra
+// provider; it's ignored elsewhere.  AllowRegister controls what
+// happens on first successful callback: true auto-creates a
+// role=regular account for the verified claim, false rejects with a
+// landing message ("ask an admin to register you").
+type OAuthProviderConfig struct {
+	Enabled          bool   `json:"enabled"`
+	ClientID         string `json:"client_id,omitempty"`
+	ClientSecretRef  string `json:"client_secret_ref,omitempty"`
+	TenantID         string `json:"tenant_id,omitempty"`
+	AllowRegister    bool   `json:"allow_register,omitempty"`
+	// DisplayName is the label shown on the login page's provider
+	// button ("Sign in with <name>"). Optional; the provider key is
+	// used if empty.
+	DisplayName string `json:"display_name,omitempty"`
 }
 
 // CryptoConfig controls server-side NaCl keypair storage and on-disk layout

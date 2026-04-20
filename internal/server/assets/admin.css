@@ -102,6 +102,11 @@ form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .login-wrap form { flex-direction: column; }
 .login-wrap form input,
 .login-wrap form button { width: 100%; }
+.login-wrap .login-footer {
+  margin: 1.25rem 0 1.5rem;
+  text-align: center;
+  font-size: 0.9rem;
+}
 
 .repo-picker {
   display: flex;

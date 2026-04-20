@@ -1,11 +1,12 @@
 # Accounts (admin + regular)
 
-Status: **proposal**, Phase 1 not yet started (2026-04-20). Supersedes
-the README roadmap item "NaCl-challenge admin login" — which is
-retired, see §1. This document is the source of truth for how humans
-identify themselves to GiGot. Implementation will live in
-`internal/accounts/` (single sealed store, evolved from the current
-`internal/admins/`) and a thin principal check at the login handler.
+Status: Phase 1 shipped 2026-04-20. Phase 2 shipped 2026-04-20.
+Phases 3–5 are still ahead. Supersedes the README roadmap item
+"NaCl-challenge admin login" — which is retired, see §1. This document
+is the source of truth for how humans identify themselves to GiGot.
+The implementation lives in `internal/accounts/` (single sealed store,
+migrated from the former `internal/admins/`) plus a thin principal
+check in the login handler.
 
 ---
 
@@ -172,36 +173,51 @@ bare-string shorthand resolves to `(provider: local, identifier:
 string)`; a full-form `{provider, identifier}` object is Phase 3 work
 (non-local accounts don't exist in practice yet).
 
-**Phase 1 is permissive.** If no account exists for the bare username,
-the handler **auto-creates** one with `role=regular` and logs the
-event. The point of the binding is that every token points at a real
-row, not to gate legacy flows behind a prior-registration step —
-integration tests, the Postman collection, and arbitrary clients all
-keep working without a manual "register this username first" ritual.
+**Phase 1 was permissive** (shipped, now retired): if no account
+existed for the bare username, the handler auto-created one with
+`role=regular` and logged the event. Kept integration tests and the
+Postman collection working during the transition without a manual
+"register this username first" ritual.
 
-**Phase 2 tightens this.** Once `/register` exists, the permissive
-auto-create goes away and the handler rejects unknown usernames with
-`400`. That's a separate deliberate step, not silent drift.
+**Phase 2 tightens this** (shipped 2026-04-20): the permissive
+auto-create is gone. Issuing a token for an unknown username returns
+`400` with a message pointing at `/register` or
+`POST /api/admin/accounts`. Deliberate step, not silent drift.
 
 **Back-compat for existing tokens.** Tokens issued before Phase 1 keep
-working. The admin UI will grow a "legacy — no account binding" flag
-and a bind-to-account action (Phase 2). No forced migration.
+working. `GET /api/admin/tokens` reports `has_account: false` on
+rows whose `username` has no matching account, and the admin UI shows
+a "legacy — no account" badge plus a **Bind to account** button. The
+bind action (`POST /api/admin/tokens/bind`) creates the missing
+role=regular account so no token is left dangling. No forced
+migration — admins bind on their own schedule.
 
 This is the load-bearing change: subscription tokens stop being
 disembodied bearers and start pointing at a real account.
 
 ---
 
-## 7. Registration (Phase 2)
+## 7. Registration (Phase 2, shipped 2026-04-20)
 
-`/register` endpoint + page. While `allow_local` is on, anyone can
-register a local account with `role=regular`. Admins can optionally
-promote regulars via `/api/admin/accounts/{id}/role`.
+`POST /api/register` + `/admin/register` page. While `allow_local` is
+on, anyone can register a local account with `role=regular` (409 on
+duplicate, 404 when `allow_local` is false). Admins can promote,
+demote, reset passwords, and delete accounts via the `accounts`
+console at `/admin/accounts`, backed by:
 
-Admin-only "invite" flow is out of scope for Phase 2 — a real deploy
-that wants invites-only can turn off `/register` at the router and use
-admin-driven account creation. Design that path when someone actually
-needs it.
+- `GET /api/admin/accounts` — list every known account.
+- `POST /api/admin/accounts` — admin-driven create (any provider, any
+  role, optional password on local accounts).
+- `PATCH /api/admin/accounts/{provider}/{identifier}` — update role,
+  display name, and/or local password.
+- `DELETE /api/admin/accounts/{provider}/{identifier}` — remove. The
+  server refuses to demote or delete the last `admin` so the console
+  can't lock itself out (409).
+
+Admin-only "invite" flow is out of scope — a deploy that wants
+invites-only can turn off `/api/register` at a reverse proxy and rely
+on admin-driven account creation. Design that path when someone
+actually needs it.
 
 ---
 
@@ -282,13 +298,13 @@ as everywhere else.
 
 ## 10. Phasing summary
 
-| Phase | What lands                                                                 |
-|-------|----------------------------------------------------------------------------|
-| 1     | `internal/accounts/` store (migrate from `admins.enc`), Role field, config `auth.allow_local` + CLI flag, `admins` seed, login handler role-gate, subscription issuance binds to account. |
-| 2     | `/register` + regular account creation, admin accounts-list UI, role-change, legacy-token "bind to account" action.                                     |
-| 3     | OAuth / OIDC (GitHub, Entra, consumer Microsoft) for both login and registration, via `go-oidc` + `oauth2` — **no MSAL**. NaCl-challenge roadmap item formally retired in README. |
-| 4     | Gateway-trusted identity strategy (aligns with Roadmap #2).                                                                                             |
-| 5     | Flip documented default `allow_local` → `false`; optionally remove the local password path entirely if no deploy depends on it.                        |
+| Phase | Status                 | What landed / lands                                                                                                                                       |
+|-------|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1     | **Shipped 2026-04-20** | `internal/accounts/` store (migrated from `admins.enc`), Role field, config `auth.allow_local` + CLI flag, `admins` seed, login handler role-gate, permissive auto-create on token issuance. |
+| 2     | **Shipped 2026-04-20** | `/api/register` + `/admin/register` page, admin accounts UI + API (list/create/patch/delete, last-admin protection), token issuance tightened to reject unknown usernames, legacy-token bind action. |
+| 3     | Pending                | OAuth / OIDC (GitHub, Entra, consumer Microsoft) for both login and registration, via `go-oidc` + `oauth2` — **no MSAL**. NaCl-challenge roadmap item formally retired in README. |
+| 4     | Pending                | Gateway-trusted identity strategy (aligns with Roadmap #2).                                                                                                |
+| 5     | Pending                | Flip documented default `allow_local` → `false`; optionally remove the local password path entirely if no deploy depends on it.                            |
 
 ---
 

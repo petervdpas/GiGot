@@ -2,7 +2,7 @@ package server
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
 	"net/http"
 
 	"github.com/petervdpas/GiGot/internal/accounts"
@@ -81,29 +81,19 @@ func (s *Server) issueToken(w http.ResponseWriter, r *http.Request) {
 // ensureAccountForToken enforces the subscription-to-account binding
 // for /api/auth/token and /api/admin/tokens. The "bare username"
 // shorthand resolves to (provider=local, identifier=username) — the
-// only form Phase 1 supports; see docs/design/accounts.md §6.
+// only form Phase 2 supports; see docs/design/accounts.md §6.
 //
-// Phase 1 is permissive: if no account exists, we auto-create one
-// with role=regular and log it, instead of rejecting outright. The
-// purpose of the binding is that every token has a real row to bind
-// to, not to gate legacy flows on prior registration — Phase 2's
-// registration flow will tighten this to "reject if missing" as a
-// deliberate later step. Integration tests, the Postman collection,
-// and the demo flow all continue to work against arbitrary usernames
-// without a prior-account step.
+// Phase 2 tightens the rule: no permissive auto-create. If no account
+// exists, we reject with a 400 that points the caller at the two
+// legitimate ways to create one (self-service /register, or admin
+// creation via POST /api/admin/accounts). This is the deliberate
+// follow-up to Phase 1's back-compat window — tokens are now always
+// bound to a row that somebody explicitly provisioned.
 func (s *Server) ensureAccountForToken(username string) error {
 	if s.accounts.Has(accounts.ProviderLocal, username) {
 		return nil
 	}
-	if _, err := s.accounts.Put(accounts.Account{
-		Provider:   accounts.ProviderLocal,
-		Identifier: username,
-		Role:       accounts.RoleRegular,
-	}); err != nil {
-		return err
-	}
-	log.Printf("server: auto-created regular account %q for token issuance", username)
-	return nil
+	return fmt.Errorf("no local account for %q — register via /register or create one via POST /api/admin/accounts before issuing a token", username)
 }
 
 func (s *Server) revokeToken(w http.ResponseWriter, r *http.Request) {

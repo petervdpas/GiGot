@@ -93,6 +93,7 @@ func (tc *testContext) startServerWithFormidableFirst(first bool) error {
 	tc.cfg = cfg
 	tc.git = gitmanager.NewManager(cfg.Storage.RepoRoot)
 	tc.srv = server.New(cfg)
+	tc.tokenStrategy = tc.srv.TokenStrategy()
 	tc.ts = httptest.NewServer(tc.srv.Handler())
 	return nil
 }
@@ -1103,6 +1104,22 @@ func (tc *testContext) anAdminExistsWithPassword(username, password string) erro
 	return store.SetPassword(username, password)
 }
 
+// aRegularAccountExists provisions the (local, regular) account the
+// subscription-to-account binding requires (§6 Phase 2). Used as a
+// prerequisite in every feature that issues a token against a specific
+// username — Phase 1's permissive auto-create is gone.
+func (tc *testContext) aRegularAccountExists(username string) error {
+	if tc.srv == nil {
+		return fmt.Errorf("server must be running")
+	}
+	_, err := tc.srv.Accounts().Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: username,
+		Role:       accounts.RoleRegular,
+	})
+	return err
+}
+
 func (tc *testContext) iLogInAsAdminWithPassword(username, password string) error {
 	body := fmt.Sprintf(`{"username":%q,"password":%q}`, username, password)
 	return tc.doRequest(http.MethodPost, "/admin/login", body)
@@ -1227,6 +1244,19 @@ func (tc *testContext) openingResponseGivesJSONKeyEquals(kpName, key, expected s
 	if str != expected {
 		return fmt.Errorf("expected %s=%q, got %q", key, expected, str)
 	}
+	return nil
+}
+
+// iSaveTheCurrentTokenAs makes tc.currentToken (set by "a token is
+// issued for user X" and similar helpers that bypass the HTTP layer)
+// addressable through the same ${name} substitution the JSON-response
+// saver uses. Lets a scenario chain a direct tokenStrategy.Issue into
+// an HTTP POST body without going through the admin API first.
+func (tc *testContext) iSaveTheCurrentTokenAs(saveKey string) error {
+	if tc.currentToken == "" {
+		return fmt.Errorf("no current token to save")
+	}
+	tc.savedValues[saveKey] = tc.currentToken
 	return nil
 }
 
@@ -1361,6 +1391,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the JSON response "([^"]*)" should be "([^"]*)"$`, tc.theJSONResponseStringShouldBe)
 	ctx.Step(`^the JSON response "([^"]*)" should not be empty$`, tc.theJSONResponseShouldNotBeEmpty)
 	ctx.Step(`^I save the JSON response "([^"]*)" as "([^"]*)"$`, tc.iSaveTheJSONResponseAs)
+	ctx.Step(`^I save the current token as "([^"]*)"$`, tc.iSaveTheCurrentTokenAs)
 	ctx.Step(`^the JSON response "([^"]*)" should equal saved "([^"]*)"$`, tc.theJSONResponseShouldEqualSaved)
 	ctx.Step(`^the server restarts$`, tc.theServerRestarts)
 	ctx.Step(`^the server restarts with auth (enabled|disabled)$`, tc.theServerRestartsWithAuth)
@@ -1371,6 +1402,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 
 	// Admin steps
 	ctx.Step(`^an admin "([^"]*)" exists with password "([^"]*)"$`, tc.anAdminExistsWithPassword)
+	ctx.Step(`^a regular account "([^"]*)" exists$`, tc.aRegularAccountExists)
 	ctx.Step(`^I log in as admin "([^"]*)" with password "([^"]*)"$`, tc.iLogInAsAdminWithPassword)
 	ctx.Step(`^the response sets a session cookie$`, tc.theCurrentResponseSetsSessionCookie)
 

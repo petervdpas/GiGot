@@ -42,3 +42,26 @@ func (s *Server) adminPageHandler(tmpl *template.Template, paths ...string) http
 func (s *Server) handleCredentialsPage(w http.ResponseWriter, r *http.Request) {
 	s.adminPageHandler(credentialsPageTmpl, "/admin/credentials", "/admin/credentials/")(w, r)
 }
+
+// handleAccountsPage serves the admin accounts console. Same shape as
+// the other admin pages — static HTML shell, session-guarded in JS.
+func (s *Server) handleAccountsPage(w http.ResponseWriter, r *http.Request) {
+	s.adminPageHandler(accountsPageTmpl, "/admin/accounts", "/admin/accounts/")(w, r)
+}
+
+// handleRegisterPage serves the self-service register card. Hidden
+// (404) when auth.allow_local is false — same gating as the
+// /api/register POST endpoint, so an operator who disables local
+// login doesn't leave the register page visible.
+func (s *Server) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/admin/register" {
+		http.NotFound(w, r)
+		return
+	}
+	if !s.cfg.Auth.AllowLocal {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = registerTmpl.Execute(w, nil)
+}

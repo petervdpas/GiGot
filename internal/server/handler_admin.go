@@ -204,12 +204,73 @@ func (s *Server) adminListTokens(w http.ResponseWriter, _ *http.Request) {
 			Username:  e.Username,
 			Repos:     e.Repos,
 			Abilities: e.Abilities,
+			// HasAccount flags the tokens whose username pre-dates the
+			// accounts model (§6 back-compat). The subscriptions UI uses
+			// this to show a "Bind" action on legacy rows.
+			HasAccount: s.accounts.Has(accounts.ProviderLocal, e.Username),
 		})
 	}
 	writeJSON(w, http.StatusOK, TokenListResponse{
 		Tokens: items,
 		Count:  len(items),
 	})
+}
+
+// handleAdminBindToken godoc
+// @Summary      Bind a legacy token to an account (admin only)
+// @Description  Creates a local role=regular account for the token's
+// @Description  username if one does not yet exist. Idempotent:
+// @Description  returns 200 either way, and does nothing if the token
+// @Description  already resolves to an account. See accounts.md §6.
+// @Tags         admin
+// @Accept       json
+// @Produce      json
+// @Param        body  body      BindTokenRequest  true  "Bind body"
+// @Success      200   {object}  AccountView
+// @Failure      400   {object}  ErrorResponse
+// @Failure      401   {object}  ErrorResponse
+// @Failure      404   {object}  ErrorResponse
+// @Failure      405   {object}  ErrorResponse
+// @Router       /admin/tokens/bind [post]
+func (s *Server) handleAdminBindToken(w http.ResponseWriter, r *http.Request) {
+	if s.requireAdminSession(w, r) == nil {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req BindTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Token == "" {
+		writeError(w, http.StatusBadRequest, "token is required")
+		return
+	}
+	entry := s.tokenStrategy.Get(req.Token)
+	if entry == nil {
+		writeError(w, http.StatusNotFound, "token not found")
+		return
+	}
+	if acc, err := s.accounts.Get(accounts.ProviderLocal, entry.Username); err == nil {
+		// Already bound — return the existing account so the UI can
+		// refresh without branching.
+		writeJSON(w, http.StatusOK, accountView(*acc))
+		return
+	}
+	stored, err := s.accounts.Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: entry.Username,
+		Role:       accounts.RoleRegular,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	log.Printf("server: bound legacy token (user=%q) to new regular account", entry.Username)
+	writeJSON(w, http.StatusOK, accountView(*stored))
 }
 
 // handleAdminSession godoc

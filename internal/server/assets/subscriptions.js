@@ -120,10 +120,17 @@
       ? t.abilities.map(a => '<span class="ability-badge">' + escapeHtml(a) + '</span>').join('')
       : '';
 
+    // Legacy badge: the token predates the accounts model and has no
+    // account row to bind to. The Bind action on the card creates a
+    // role=regular account for this username so the token is no longer
+    // dangling. See accounts.md §6.
+    const legacyBadge = t.has_account ? '' :
+      '<span class="badge" title="This key was issued before the accounts model shipped. Click Bind to create a regular account for it.">legacy — no account</span>';
+
     card.innerHTML =
       '<div class="ic-header">' +
         '<div class="ic-title">' + escapeHtml(t.username) + '</div>' +
-        '<div class="ic-chips"><span class="badge formidable">' + (t.repos ? t.repos.length : 0) + ' ' +
+        '<div class="ic-chips">' + legacyBadge + '<span class="badge formidable">' + (t.repos ? t.repos.length : 0) + ' ' +
           ((t.repos && t.repos.length === 1) ? 'repo' : 'repos') + '</span></div>' +
       '</div>' +
       '<div class="ic-chips cell-repos">' + repos + '</div>' +
@@ -133,6 +140,7 @@
         '<button type="button" class="copy-btn">Copy</button>' +
       '</div>' +
       '<div class="ic-actions cell-actions">' +
+        (t.has_account ? '' : '<button class="small bind-btn">Bind to account</button>') +
         '<button class="small secondary edit-btn">Edit access</button>' +
         '<button class="small danger revoke-btn">Revoke</button>' +
       '</div>';
@@ -144,6 +152,15 @@
       refreshTokens();
     });
     card.querySelector('.edit-btn').addEventListener('click', () => enterEditMode(card, t));
+    const bind = card.querySelector('.bind-btn');
+    if (bind) {
+      bind.addEventListener('click', async () => {
+        try {
+          await api.bindToken(t.token);
+          refreshTokens();
+        } catch (e) { alert(e.message); }
+      });
+    }
     return card;
   }
 

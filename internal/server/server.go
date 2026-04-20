@@ -69,13 +69,17 @@ func New(cfg *config.Config) *Server {
 	ap.MarkPublic("/")
 	ap.MarkPublic("/api/crypto/pubkey")
 	ap.MarkPublic("/api/clients/enroll")
-	ap.MarkPublic("/api/admin/session") // returns 401 internally for the page to decide
+	ap.MarkPublic("/api/register")         // self-service registration (accounts.md §7)
+	ap.MarkPublic("/api/admin/session")    // returns 401 internally for the page to decide
 	ap.MarkPublic("/admin")
 	ap.MarkPublic("/admin/")
 	ap.MarkPublic("/admin/login")
 	ap.MarkPublic("/admin/logout")
+	ap.MarkPublic("/admin/register")       // self-service registration page
 	ap.MarkPublic("/admin/credentials")
 	ap.MarkPublic("/admin/credentials/")
+	ap.MarkPublic("/admin/accounts")
+	ap.MarkPublic("/admin/accounts/")
 	ap.MarkPublicPrefix("/swagger/")
 	ap.MarkPublicPrefix("/assets/")
 	// Basic auth is only meaningful for /git/* — git-the-binary can't
@@ -307,6 +311,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/repos", s.handleRepos)
 	s.mux.HandleFunc("/api/repos/", s.handleRepoRouter)
 	s.mux.HandleFunc("/api/auth/token", s.handleToken)
+	s.mux.HandleFunc("/api/register", s.handleRegister)
 	s.mux.HandleFunc("/api/crypto/pubkey", s.handleServerPubKey)
 	s.mux.HandleFunc("/api/clients/enroll", s.handleEnroll)
 
@@ -316,16 +321,22 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/admin/", s.handleAdminPage)
 	s.mux.HandleFunc("/admin/login", s.handleAdminLogin)
 	s.mux.HandleFunc("/admin/logout", s.handleAdminLogout)
+	s.mux.HandleFunc("/admin/register", s.handleRegisterPage)
 	s.mux.HandleFunc("/admin/repositories", s.adminPageHandler(repositoriesTmpl, "/admin/repositories", "/admin/repositories/"))
 	s.mux.HandleFunc("/admin/repositories/", s.adminPageHandler(repositoriesTmpl, "/admin/repositories", "/admin/repositories/"))
 	s.mux.HandleFunc("/admin/subscriptions", s.adminPageHandler(subscriptionsTmpl, "/admin/subscriptions", "/admin/subscriptions/"))
 	s.mux.HandleFunc("/admin/subscriptions/", s.adminPageHandler(subscriptionsTmpl, "/admin/subscriptions", "/admin/subscriptions/"))
 	s.mux.HandleFunc("/admin/credentials", s.handleCredentialsPage)
 	s.mux.HandleFunc("/admin/credentials/", s.handleCredentialsPage)
+	s.mux.HandleFunc("/admin/accounts", s.handleAccountsPage)
+	s.mux.HandleFunc("/admin/accounts/", s.handleAccountsPage)
 	s.mux.HandleFunc("/api/admin/session", s.handleAdminSession)
 	s.mux.HandleFunc("/api/admin/tokens", s.handleAdminTokens)
+	s.mux.HandleFunc("/api/admin/tokens/bind", s.handleAdminBindToken)
 	s.mux.HandleFunc("/api/admin/credentials", s.handleAdminCredentials)
 	s.mux.HandleFunc("/api/admin/credentials/", s.handleAdminCredential)
+	s.mux.HandleFunc("/api/admin/accounts", s.handleAdminAccounts)
+	s.mux.HandleFunc("/api/admin/accounts/", s.handleAdminAccount)
 	// Admin per-repo subroutes live under /api/admin/repos/{name}/...:
 	//   /destinations[/{id}] — mirror-sync targets
 	//   /formidable          — convert plain repo to a Formidable context

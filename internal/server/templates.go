@@ -14,7 +14,9 @@ var templatesFS embed.FS
 var (
 	indexTmpl           = template.Must(template.ParseFS(templatesFS, "templates/index.html"))
 	adminPageTmpl       = template.Must(template.ParseFS(templatesFS, "templates/admin.html"))
+	registerTmpl        = template.Must(template.ParseFS(templatesFS, "templates/register.html"))
 	repositoriesTmpl    = template.Must(template.ParseFS(templatesFS, "templates/repositories.html"))
 	subscriptionsTmpl   = template.Must(template.ParseFS(templatesFS, "templates/subscriptions.html"))
 	credentialsPageTmpl = template.Must(template.ParseFS(templatesFS, "templates/credentials.html"))
+	accountsPageTmpl    = template.Must(template.ParseFS(templatesFS, "templates/accounts.html"))
 )

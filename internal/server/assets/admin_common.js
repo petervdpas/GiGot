@@ -159,6 +159,47 @@
       });
       if (!r.ok) throw new Error('delete failed');
     },
+    async listAccounts() {
+      const r = await fetch('/api/admin/accounts', { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('list accounts failed');
+      return r.json();
+    },
+    async createAccount(body) {
+      const r = await fetch('/api/admin/accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'create failed');
+      return r.json();
+    },
+    async patchAccount(provider, identifier, body) {
+      const r = await fetch('/api/admin/accounts/' + encodeURIComponent(provider) + '/' + encodeURIComponent(identifier), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'patch failed');
+      return r.json();
+    },
+    async deleteAccount(provider, identifier) {
+      const r = await fetch('/api/admin/accounts/' + encodeURIComponent(provider) + '/' + encodeURIComponent(identifier), {
+        method: 'DELETE', credentials: 'same-origin',
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'delete failed');
+    },
+    async bindToken(token) {
+      const r = await fetch('/api/admin/tokens/bind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ token }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'bind failed');
+      return r.json();
+    },
   };
 
   // ---------------------------------------------------------- helpers
@@ -183,6 +224,7 @@
       { key: 'repositories', label: 'Repositories',     href: '/admin/repositories' },
       { key: 'subscriptions', label: 'Subscription keys', href: '/admin/subscriptions' },
       { key: 'credentials', label: 'Credentials',      href: '/admin/credentials' },
+      { key: 'accounts',    label: 'Accounts',         href: '/admin/accounts' },
     ];
     aside.className = 'sidebar';
     aside.innerHTML =

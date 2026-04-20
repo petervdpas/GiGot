@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GiGot — Register</title>
+<link rel="stylesheet" href="/assets/admin.css">
+<script>
+  try {
+    var t = localStorage.getItem('gigot.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) { /* default dark */ }
+</script>
+</head>
+<body>
+
+<div class="theme-fab">
+  <span>Light theme</span>
+  <span id="theme-toggle-host"></span>
+</div>
+
+<div class="login-wrap card">
+  <img class="logo" src="/assets/gigot.png" alt="GiGot">
+  <div class="brand-name">GiGot</div>
+  <div class="brand-tag">Register a regular account</div>
+  <h2>Create account</h2>
+  <form id="register-form">
+    <input name="username" placeholder="Username" autofocus required autocomplete="username">
+    <input name="display_name" placeholder="Display name (optional)" autocomplete="name">
+    <input name="password" type="password" placeholder="Password" required autocomplete="new-password">
+    <button type="submit">Create account</button>
+    <div id="register-error" class="error"></div>
+    <div id="register-ok" class="success"></div>
+  </form>
+  <p class="muted login-footer">
+    Already have an account? <a href="/admin">Sign in</a>.
+  </p>
+</div>
+
+<script src="/assets/ui.js"></script>
+<script>
+  (function () {
+    var host = document.getElementById('theme-toggle-host');
+    if (host) {
+      host.innerHTML = GG.toggle_switch.html({ id: 'theme-toggle', ariaLabel: 'Toggle light theme' });
+      GG.theme.initToggle('theme-toggle');
+    }
+  })();
+</script>
+<script src="/assets/register.js"></script>
+</body>
+</html>

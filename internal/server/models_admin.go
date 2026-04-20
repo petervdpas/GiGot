@@ -16,11 +16,16 @@ type AdminLoginResponse struct {
 }
 
 // TokenListItem describes one issued token in an admin listing.
+// HasAccount reports whether the stored Username resolves to a
+// (provider=local) account in the store. False for tokens issued before
+// the accounts model shipped — the subscriptions UI surfaces a
+// "Bind to account" action on those rows. See accounts.md §6.
 type TokenListItem struct {
-	Token     string   `json:"token"`
-	Username  string   `json:"username"`
-	Repos     []string `json:"repos"`
-	Abilities []string `json:"abilities,omitempty"`
+	Token      string   `json:"token"`
+	Username   string   `json:"username"`
+	Repos      []string `json:"repos"`
+	Abilities  []string `json:"abilities,omitempty"`
+	HasAccount bool     `json:"has_account"`
 }
 
 // TokenListResponse is the body of GET /api/admin/tokens.

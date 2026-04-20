@@ -12,6 +12,11 @@ import (
 
 func TestIssueToken(t *testing.T) {
 	srv := testServer(t)
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider: accounts.ProviderLocal, Identifier: "alice", Role: accounts.RoleRegular,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	payload := `{"username":"alice"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
@@ -57,22 +62,23 @@ func TestIssueTokenInvalidBody(t *testing.T) {
 	}
 }
 
-func TestIssueToken_AutoCreatesRegularAccount(t *testing.T) {
+// TestIssueToken_RejectsUnknownAccount locks down the Phase 2 rule:
+// an admin issuing a token for a username with no matching account is
+// rejected outright. Phase 1's permissive auto-create is gone — callers
+// must provision the account via /register or
+// POST /api/admin/accounts first.
+func TestIssueToken_RejectsUnknownAccount(t *testing.T) {
 	srv := testServer(t)
 	payload := `{"username":"newcomer"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
 	}
-	acc, err := srv.accounts.Get(accounts.ProviderLocal, "newcomer")
-	if err != nil {
-		t.Fatalf("account not auto-created: %v", err)
-	}
-	if acc.Role != accounts.RoleRegular {
-		t.Errorf("auto-created account role=%q, want regular", acc.Role)
+	if _, err := srv.accounts.Get(accounts.ProviderLocal, "newcomer"); err == nil {
+		t.Fatal("rejected issuance should not have created an account")
 	}
 }
 

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GiGot Admin — Accounts</title>
+<link rel="stylesheet" href="/assets/admin.css">
+<script>
+  try {
+    var t = localStorage.getItem('gigot.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) { /* default dark */ }
+</script>
+</head>
+<body>
+
+<div id="app">
+  <div class="shell">
+    <aside id="admin-sidebar"></aside>
+    <main class="main">
+      <div class="panel active">
+        <div class="page-header">
+          <h1>Accounts <span class="muted">(<span id="acct-count">0</span>)</span></h1>
+        </div>
+        <div class="card">
+          <h2>Create account</h2>
+          <form id="acct-form" class="row">
+            <input name="identifier" placeholder="Identifier (username, github login, oid…)" required>
+            <input name="display_name" placeholder="Display name (optional)">
+            <select name="provider" required>
+              <option value="local">local</option>
+              <option value="github">github</option>
+              <option value="entra">entra</option>
+              <option value="microsoft">microsoft</option>
+              <option value="gateway">gateway</option>
+            </select>
+            <select name="role" required>
+              <option value="regular">regular</option>
+              <option value="admin">admin</option>
+            </select>
+            <input name="password" type="password" placeholder="Password (local only, optional)" autocomplete="new-password">
+            <button type="submit">Create</button>
+          </form>
+          <div class="muted create-repo-hint">
+            Regular accounts are the binding target for subscription keys.
+            Local accounts with no password are dormant until one is set.
+          </div>
+          <div id="acct-msg" class="muted"></div>
+        </div>
+        <div class="card">
+          <h2>Existing accounts</h2>
+          <table>
+            <thead><tr><th>Provider</th><th>Identifier</th><th>Display name</th><th>Role</th><th>Password</th><th>Created</th><th></th></tr></thead>
+            <tbody id="acct-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="/assets/ui.js"></script>
+<script src="/assets/admin_common.js"></script>
+<script src="/assets/accounts.js"></script>
+</body>
+</html>

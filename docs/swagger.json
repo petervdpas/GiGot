@@ -1,19 +1,291 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "HTTP Basic with the subscription token as the password. The username is ignored — tokens are self-identifying. This is the form `git clone http://user:\u003ctoken\u003e@host/git/repo` produces, so git-over-HTTP works out of the box.",
-        "title": "GiGot API",
-        "contact": {
-            "name": "Peter van de Pas"
-        },
-        "license": {
-            "name": "MIT"
-        },
-        "version": "0.1.0"
+        "contact": {}
     },
-    "host": "localhost:3417",
-    "basePath": "/api",
     "paths": {
+        "/admin/accounts": {
+            "get": {
+                "description": "GET lists every known account (admins and regulars);\nPOST creates one. Session-cookie authenticated. See\ndocs/design/accounts.md for the data model.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage accounts (admin only)",
+                "parameters": [
+                    {
+                        "description": "Create body (POST)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET response",
+                        "schema": {
+                            "$ref": "#/definitions/server.AccountListResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "POST response",
+                        "schema": {
+                            "$ref": "#/definitions/server.AccountView"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Account already exists",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "GET lists every known account (admins and regulars);\nPOST creates one. Session-cookie authenticated. See\ndocs/design/accounts.md for the data model.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage accounts (admin only)",
+                "parameters": [
+                    {
+                        "description": "Create body (POST)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET response",
+                        "schema": {
+                            "$ref": "#/definitions/server.AccountListResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "POST response",
+                        "schema": {
+                            "$ref": "#/definitions/server.AccountView"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Account already exists",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/accounts/{provider}/{identifier}": {
+            "delete": {
+                "description": "PATCH updates role, display_name, and/or password\n(local only). DELETE removes the account; the server\nrefuses to remove the last admin so the console can't\nlock itself out. Session-cookie authenticated.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage one account by (provider, identifier) (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account provider",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "identifier",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Patch body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.AccountView"
+                        }
+                    },
+                    "204": {
+                        "description": "DELETE response"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Would remove the last admin",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "PATCH updates role, display_name, and/or password\n(local only). DELETE removes the account; the server\nrefuses to remove the last admin so the console can't\nlock itself out. Session-cookie authenticated.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage one account by (provider, identifier) (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account provider",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "identifier",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Patch body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.UpdateAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.AccountView"
+                        }
+                    },
+                    "204": {
+                        "description": "DELETE response"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Would remove the last admin",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/credentials": {
             "get": {
                 "description": "GET lists credential metadata; POST creates a new credential.\nThe secret is write-only — it is never returned on any\nresponse. Session-cookie authenticated.",
@@ -1222,6 +1494,64 @@
                 }
             }
         },
+        "/admin/tokens/bind": {
+            "post": {
+                "description": "Creates a local role=regular account for the token's\nusername if one does not yet exist. Idempotent:\nreturns 200 either way, and does nothing if the token\nalready resolves to an account. See accounts.md §6.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Bind a legacy token to an account (admin only)",
+                "parameters": [
+                    {
+                        "description": "Bind body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.BindTokenRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.AccountView"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/token": {
             "post": {
                 "security": [
@@ -1586,6 +1916,64 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/register": {
+            "post": {
+                "description": "Creates a new local-provider account with role=regular\nand sets the bcrypt password. Returns 404 when\nauth.allow_local is false (local path disabled), 409\nwhen the username is already taken. Public: no session\nrequired. See docs/design/accounts.md §7.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Self-service registration for a local regular account",
+                "parameters": [
+                    {
+                        "description": "Registration body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.RegisterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/server.AccountView"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
                         }
                     }
                 }
@@ -3233,6 +3621,43 @@
                 }
             }
         },
+        "server.AccountListResponse": {
+            "type": "object",
+            "properties": {
+                "accounts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.AccountView"
+                    }
+                },
+                "count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "server.AccountView": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "display_name": {
+                    "type": "string"
+                },
+                "has_password": {
+                    "type": "boolean"
+                },
+                "identifier": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                }
+            }
+        },
         "server.AdminLoginRequest": {
             "type": "object",
             "properties": {
@@ -3268,6 +3693,14 @@
                 "name": {
                     "type": "string",
                     "example": "Alice"
+                }
+            }
+        },
+        "server.BindTokenRequest": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string"
                 }
             }
         },
@@ -3354,6 +3787,26 @@
                 },
                 "stamped": {
                     "type": "boolean"
+                }
+            }
+        },
+        "server.CreateAccountRequest": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "identifier": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
                 }
             }
         },
@@ -3554,6 +4007,20 @@
                 }
             }
         },
+        "server.RegisterRequest": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "server.RepoInfo": {
             "type": "object",
             "properties": {
@@ -3671,6 +4138,9 @@
                         "type": "string"
                     }
                 },
+                "has_account": {
+                    "type": "boolean"
+                },
                 "repos": {
                     "type": "array",
                     "items": {
@@ -3749,6 +4219,20 @@
                 "username": {
                     "type": "string",
                     "example": "alice"
+                }
+            }
+        },
+        "server.UpdateAccountRequest": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
                 }
             }
         },
@@ -3844,17 +4328,6 @@
                     "example": "abc123..."
                 }
             }
-        }
-    },
-    "securityDefinitions": {
-        "BasicAuth": {
-            "type": "basic"
-        },
-        "BearerAuth": {
-            "description": "Enter your bearer token as: Bearer \u003ctoken\u003e",
-            "type": "apiKey",
-            "name": "Authorization",
-            "in": "header"
         }
     }
 }

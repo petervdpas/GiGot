@@ -61,22 +61,41 @@ is schema-aware publishing (records → Azure DevOps wiki, Confluence,
 etc.) which explicitly belongs in Formidable's WikiWonder plugin, not
 here. The items below do not overlap with Track B.
 
-- [ ] **Accounts + roles (design: [`accounts.md`](docs/design/accounts.md)).**
-      One `Account` noun for every human (admin or regular), keyed by
-      `(provider, identifier)` with a closed `role ∈ {admin, regular}`
-      set. Phase 1 (in progress) evolves the sealed `admins.enc` into
-      `accounts.enc`, adds `auth.allow_local` + `--allow-local` CLI
-      flag, gates `/admin/login` on role, binds subscription tokens to
-      accounts, and seeds from `cfg.Admins`. Phase 2 adds `/register`
-      for self-service regulars. Phase 3 adds OAuth / OIDC for GitHub,
-      Entra ID, and consumer Microsoft (via `go-oidc` + `oauth2` — no
-      MSAL). Phase 4 adds gateway-trusted identity for APIM-fronted
-      deploys. Retires the former "NaCl-challenge admin login" item
-      (browser-held NaCl keys in `localStorage` lock admins out; see
-      `accounts.md` §1).
+- [ ] **Accounts + roles — OAuth / OIDC phase (design:
+      [`accounts.md`](docs/design/accounts.md) §8).** Phases 1 & 2
+      shipped (see "Done and shipping" below). Phase 3 adds OAuth /
+      OIDC for GitHub, Entra ID, and consumer Microsoft via
+      `go-oidc` + `oauth2` — explicitly **not** MSAL (§8 spells out
+      why). Phase 4 adds gateway-trusted identity for APIM-fronted
+      deploys. Phase 5 flips the documented default of
+      `auth.allow_local` to `false`. Retires the former
+      "NaCl-challenge admin login" item (browser-held NaCl keys in
+      `localStorage` lock admins out; see `accounts.md` §1).
 
 Done and shipping:
 
+- [x] **Accounts + roles — Phases 1 & 2 (design:
+      [`accounts.md`](docs/design/accounts.md)).** One `Account` noun
+      for every human, keyed by `(provider, identifier)` with closed
+      `role ∈ {admin, regular}`. The sealed `admins.enc` auto-migrates
+      into `accounts.enc` on first boot, `auth.allow_local` +
+      `--allow-local` gate the local-password path, and `/admin/login`
+      role-gates on `admin`. Subscription-token issuance binds to
+      accounts — `POST /api/admin/tokens` now rejects unknown
+      usernames with 400 (Phase 2; Phase 1 had a permissive
+      auto-create, now retired). `POST /api/register` +
+      `/admin/register` let anyone self-register a `regular` local
+      account while `allow_local` is on. A new
+      `/admin/accounts` console and full CRUD at
+      `/api/admin/accounts[/{provider}/{identifier}]` let admins
+      create, promote/demote, reset local passwords, and delete
+      accounts — with server-side protection against removing the
+      last admin (409). Tokens that predate the accounts model carry
+      `has_account: false` in the list response and a **Bind to
+      account** button on the subscriptions card fans out to
+      `POST /api/admin/tokens/bind`, which creates the missing
+      `regular` account so no token is left dangling. Phase 3 (OAuth
+      / OIDC) is queued above.
 - [x] **Credential vault — Expires field in the admin UI.** Closes the
       last UI gap on the vault (design doc §3). The
       `/admin/credentials` add form gained an optional

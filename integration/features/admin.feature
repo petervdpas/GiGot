@@ -25,6 +25,7 @@ Feature: Admin subscription-key management
   Scenario: Admin can list, issue, and revoke tokens
     Given the server is running
     And an admin "alice" exists with password "hunter2"
+    And a regular account "client-1" exists
     When I log in as admin "alice" with password "hunter2"
     And I GET "/api/admin/tokens"
     Then the JSON response "count" should be 0
@@ -38,14 +39,24 @@ Feature: Admin subscription-key management
   Scenario: Issuing a token bound to a non-existent repo is rejected
     Given the server is running
     And an admin "alice" exists with password "hunter2"
+    And a regular account "client-1" exists
     When I log in as admin "alice" with password "hunter2"
     And I POST "/api/admin/tokens" with body '{"username":"client-1","repos":["ghost-repo"]}'
     Then the response status should be 400
     And the response body should contain "ghost-repo"
 
+  Scenario: Issuing a token for an unknown account is rejected
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/tokens" with body '{"username":"not-registered"}'
+    Then the response status should be 400
+    And the response body should contain "no local account"
+
   Scenario: Issuing a token bound to an existing repo succeeds and echoes the allowlist
     Given the server is running
     And an admin "alice" exists with password "hunter2"
+    And a regular account "client-1" exists
     And a repository "addresses" exists
     When I log in as admin "alice" with password "hunter2"
     And I POST "/api/admin/tokens" with body '{"username":"client-1","repos":["addresses"]}'
@@ -55,6 +66,7 @@ Feature: Admin subscription-key management
   Scenario: PATCH rescopes an existing token
     Given the server is running
     And an admin "alice" exists with password "hunter2"
+    And a regular account "client-1" exists
     And a repository "addresses" exists
     And a repository "projects" exists
     When I log in as admin "alice" with password "hunter2"
@@ -77,6 +89,7 @@ Feature: Admin subscription-key management
   Scenario: Admin routes reject a bearer-only request (no session cookie)
     Given the server is running
     And an admin "alice" exists with password "hunter2"
+    And a regular account "client-1" exists
     And a repository "addresses" exists
     When I log in as admin "alice" with password "hunter2"
     And I POST "/api/admin/tokens" with body '{"username":"client-1","repos":["addresses"]}'
@@ -122,4 +135,4 @@ Feature: Admin subscription-key management
     When I GET "/admin"
     Then the response status should be 200
     And the response content type should contain "text/html"
-    And the response body should contain "Admin login"
+    And the response body should contain "Sign in"

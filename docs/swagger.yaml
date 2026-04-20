@@ -1,4 +1,3 @@
-basePath: /api
 definitions:
   formidable.FieldConflict:
     properties:
@@ -128,6 +127,30 @@ definitions:
       version:
         type: string
     type: object
+  server.AccountListResponse:
+    properties:
+      accounts:
+        items:
+          $ref: '#/definitions/server.AccountView'
+        type: array
+      count:
+        type: integer
+    type: object
+  server.AccountView:
+    properties:
+      created_at:
+        type: string
+      display_name:
+        type: string
+      has_password:
+        type: boolean
+      identifier:
+        type: string
+      provider:
+        type: string
+      role:
+        type: string
+    type: object
   server.AdminLoginRequest:
     properties:
       password:
@@ -151,6 +174,11 @@ definitions:
         type: string
       name:
         example: Alice
+        type: string
+    type: object
+  server.BindTokenRequest:
+    properties:
+      token:
         type: string
     type: object
   server.ChangeRequest:
@@ -210,6 +238,19 @@ definitions:
         $ref: '#/definitions/server.RepoInfo'
       stamped:
         type: boolean
+    type: object
+  server.CreateAccountRequest:
+    properties:
+      display_name:
+        type: string
+      identifier:
+        type: string
+      password:
+        type: string
+      provider:
+        type: string
+      role:
+        type: string
     type: object
   server.CreateCredentialRequest:
     properties:
@@ -341,6 +382,15 @@ definitions:
       version:
         type: string
     type: object
+  server.RegisterRequest:
+    properties:
+      display_name:
+        type: string
+      password:
+        type: string
+      username:
+        type: string
+    type: object
   server.RepoInfo:
     properties:
       commits:
@@ -422,6 +472,8 @@ definitions:
         items:
           type: string
         type: array
+      has_account:
+        type: boolean
       repos:
         items:
           type: string
@@ -474,6 +526,15 @@ definitions:
         type: string
       username:
         example: alice
+        type: string
+    type: object
+  server.UpdateAccountRequest:
+    properties:
+      display_name:
+        type: string
+      password:
+        type: string
+      role:
         type: string
     type: object
   server.UpdateCredentialRequest:
@@ -538,18 +599,209 @@ definitions:
         example: abc123...
         type: string
     type: object
-host: localhost:3417
 info:
-  contact:
-    name: Peter van de Pas
-  description: HTTP Basic with the subscription token as the password. The username
-    is ignored — tokens are self-identifying. This is the form `git clone http://user:<token>@host/git/repo`
-    produces, so git-over-HTTP works out of the box.
-  license:
-    name: MIT
-  title: GiGot API
-  version: 0.1.0
+  contact: {}
 paths:
+  /admin/accounts:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        GET lists every known account (admins and regulars);
+        POST creates one. Session-cookie authenticated. See
+        docs/design/accounts.md for the data model.
+      parameters:
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET response
+          schema:
+            $ref: '#/definitions/server.AccountListResponse'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.AccountView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Account already exists
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage accounts (admin only)
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      description: |-
+        GET lists every known account (admins and regulars);
+        POST creates one. Session-cookie authenticated. See
+        docs/design/accounts.md for the data model.
+      parameters:
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET response
+          schema:
+            $ref: '#/definitions/server.AccountListResponse'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.AccountView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Account already exists
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage accounts (admin only)
+      tags:
+      - admin
+  /admin/accounts/{provider}/{identifier}:
+    delete:
+      consumes:
+      - application/json
+      description: |-
+        PATCH updates role, display_name, and/or password
+        (local only). DELETE removes the account; the server
+        refuses to remove the last admin so the console can't
+        lock itself out. Session-cookie authenticated.
+      parameters:
+      - description: Account provider
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Account identifier
+        in: path
+        name: identifier
+        required: true
+        type: string
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.AccountView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Would remove the last admin
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage one account by (provider, identifier) (admin only)
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        PATCH updates role, display_name, and/or password
+        (local only). DELETE removes the account; the server
+        refuses to remove the last admin so the console can't
+        lock itself out. Session-cookie authenticated.
+      parameters:
+      - description: Account provider
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Account identifier
+        in: path
+        name: identifier
+        required: true
+        type: string
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.UpdateAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.AccountView'
+        "204":
+          description: DELETE response
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Would remove the last admin
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage one account by (provider, identifier) (admin only)
+      tags:
+      - admin
   /admin/credentials:
     get:
       consumes:
@@ -1406,6 +1658,48 @@ paths:
       summary: Manage subscription keys (admin only)
       tags:
       - admin
+  /admin/tokens/bind:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Creates a local role=regular account for the token's
+        username if one does not yet exist. Idempotent:
+        returns 200 either way, and does nothing if the token
+        already resolves to an account. See accounts.md §6.
+      parameters:
+      - description: Bind body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.BindTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.AccountView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Bind a legacy token to an account (admin only)
+      tags:
+      - admin
   /auth/token:
     delete:
       consumes:
@@ -1643,6 +1937,49 @@ paths:
       summary: Health check
       tags:
       - system
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Creates a new local-provider account with role=regular
+        and sets the bcrypt password. Returns 404 when
+        auth.allow_local is false (local path disabled), 409
+        when the username is already taken. Public: no session
+        required. See docs/design/accounts.md §7.
+      parameters:
+      - description: Registration body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/server.AccountView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Self-service registration for a local regular account
+      tags:
+      - auth
   /repos:
     get:
       consumes:
@@ -2662,12 +2999,4 @@ paths:
       summary: Repository tree listing
       tags:
       - sync
-securityDefinitions:
-  BasicAuth:
-    type: basic
-  BearerAuth:
-    description: 'Enter your bearer token as: Bearer <token>'
-    in: header
-    name: Authorization
-    type: apiKey
 swagger: "2.0"
