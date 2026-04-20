@@ -26,17 +26,8 @@
           <form id="acct-form" class="row">
             <input name="identifier" placeholder="Identifier (username, github login, oid…)" required>
             <input name="display_name" placeholder="Display name (optional)">
-            <select name="provider" required>
-              <option value="local">local</option>
-              <option value="github">github</option>
-              <option value="entra">entra</option>
-              <option value="microsoft">microsoft</option>
-              <option value="gateway">gateway</option>
-            </select>
-            <select name="role" required>
-              <option value="regular">regular</option>
-              <option value="admin">admin</option>
-            </select>
+            <span id="provider-host"></span>
+            <span id="role-host"></span>
             <input name="password" type="password" placeholder="Password (local only, optional)" autocomplete="new-password">
             <button type="submit">Create</button>
           </form>

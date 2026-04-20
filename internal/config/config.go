@@ -65,7 +65,7 @@ type AuthConfig struct {
 	// OAuth configures the Phase-3 redirect-flow providers. Each entry
 	// is independent; enable one, two, or three. See
 	// docs/design/accounts.md §8.
-	OAuth OAuthConfig `json:"oauth,omitempty"`
+	OAuth OAuthConfig `json:"oauth"`
 }
 
 // OAuthConfig holds per-provider OIDC / OAuth2 settings. The three
@@ -74,29 +74,29 @@ type AuthConfig struct {
 // (OAuth, no OIDC discovery). Leaving a block out or setting
 // Enabled=false keeps that provider dark.
 type OAuthConfig struct {
-	GitHub    OAuthProviderConfig `json:"github,omitempty"`
-	Entra     OAuthProviderConfig `json:"entra,omitempty"`
-	Microsoft OAuthProviderConfig `json:"microsoft,omitempty"`
+	GitHub    OAuthProviderConfig `json:"github"`
+	Entra     OAuthProviderConfig `json:"entra"`
+	Microsoft OAuthProviderConfig `json:"microsoft"`
 }
 
 // OAuthProviderConfig is one enabled redirect-flow provider.
 // ClientSecretRef names a credential in the existing vault (the OAuth
 // client secret is not stored in the config file; the vault already
-// seals secrets at rest).  TenantID is only read for the entra
-// provider; it's ignored elsewhere.  AllowRegister controls what
+// seals secrets at rest). TenantID is only read for the entra
+// provider; it's ignored elsewhere. AllowRegister controls what
 // happens on first successful callback: true auto-creates a
 // role=regular account for the verified claim, false rejects with a
 // landing message ("ask an admin to register you").
 type OAuthProviderConfig struct {
-	Enabled          bool   `json:"enabled"`
-	ClientID         string `json:"client_id,omitempty"`
-	ClientSecretRef  string `json:"client_secret_ref,omitempty"`
-	TenantID         string `json:"tenant_id,omitempty"`
-	AllowRegister    bool   `json:"allow_register,omitempty"`
+	Enabled         bool   `json:"enabled"`
+	ClientID        string `json:"client_id"`
+	ClientSecretRef string `json:"client_secret_ref"`
+	TenantID        string `json:"tenant_id"`
+	AllowRegister   bool   `json:"allow_register"`
 	// DisplayName is the label shown on the login page's provider
 	// button ("Sign in with <name>"). Optional; the provider key is
 	// used if empty.
-	DisplayName string `json:"display_name,omitempty"`
+	DisplayName string `json:"display_name"`
 }
 
 // CryptoConfig controls server-side NaCl keypair storage and on-disk layout

@@ -61,19 +61,53 @@ is schema-aware publishing (records → Azure DevOps wiki, Confluence,
 etc.) which explicitly belongs in Formidable's WikiWonder plugin, not
 here. The items below do not overlap with Track B.
 
-- [ ] **Accounts + roles — OAuth / OIDC phase (design:
-      [`accounts.md`](docs/design/accounts.md) §8).** Phases 1 & 2
-      shipped (see "Done and shipping" below). Phase 3 adds OAuth /
-      OIDC for GitHub, Entra ID, and consumer Microsoft via
-      `go-oidc` + `oauth2` — explicitly **not** MSAL (§8 spells out
-      why). Phase 4 adds gateway-trusted identity for APIM-fronted
-      deploys. Phase 5 flips the documented default of
-      `auth.allow_local` to `false`. Retires the former
-      "NaCl-challenge admin login" item (browser-held NaCl keys in
-      `localStorage` lock admins out; see `accounts.md` §1).
+- [ ] **Accounts + roles — gateway + default-flip phases (design:
+      [`accounts.md`](docs/design/accounts.md) §9–§10).** Phases 1–3
+      shipped (see "Done and shipping" below). Phase 4 adds
+      gateway-trusted identity for APIM-fronted deploys — a signed
+      `X-MS-CLIENT-PRINCIPAL-NAME` (or equivalent) header that
+      resolves to `(provider: gateway, identifier: <claim>)`. Phase 5
+      flips the documented default of `auth.allow_local` to `false`
+      and optionally removes the local password path entirely.
+      Retires the former "NaCl-challenge admin login" item
+      (browser-held NaCl keys in `localStorage` lock admins out; see
+      `accounts.md` §1).
 
 Done and shipping:
 
+- [x] **Accounts + roles — Phase 3 OAuth / OIDC (design:
+      [`accounts.md`](docs/design/accounts.md) §8).** Redirect-flow
+      login for three IdPs, all behind `go-oidc` + `golang.org/x/oauth2`
+      with **no MSAL**. GitHub uses the OAuth2 flow plus a follow-up
+      call to `api.github.com/user` (identifier = lowercased `login`).
+      Entra uses OIDC against
+      `https://login.microsoftonline.com/<tenant>/v2.0` (identifier =
+      `oid`). Consumer Microsoft uses OIDC against the `consumers`
+      audience (identifier = `sub`). Entra and Microsoft are kept as
+      separate providers because the trust boundary (any MSA vs.
+      a specific tenant) and the identifier shape differ — see
+      `accounts.md` §2. Config block `auth.oauth.{github,entra,microsoft}`
+      with `client_id`, `client_secret_ref` (resolved from the
+      existing credential vault — no secrets in the config file),
+      `tenant_id` (entra only), `allow_register` (auto-create
+      `role=regular` on first callback; `false` rejects with a
+      landing page pointing at an admin). Two endpoints per provider:
+      `/admin/login/<name>` (GET; mints state + nonce + PKCE S256
+      challenge, redirects to the IdP) and
+      `/admin/login/<name>/callback` (GET; consumes the one-shot
+      state, runs the token exchange, verifies the ID token and
+      nonce, resolves the account, mints the same session cookie the
+      local path uses). State store is in-memory with a 10-minute
+      TTL and sweeping on write — bounded implicitly. Login page
+      grows a "Sign in with <provider>" button per enabled provider
+      via the public `/api/admin/providers` endpoint. Tests: state
+      store TTL + one-shot, PKCE S256 format, OIDC round-trip
+      against an in-process mock IdP (discovery, JWKS, RS256 ID
+      token), GitHub two-hop (token + /user) against httptest stubs,
+      nonce mismatch rejection, missing-claim rejection, and
+      handler-level auto-register + session-cookie contract plus
+      replay rejection. Retires the former "NaCl-challenge admin
+      login" roadmap item.
 - [x] **Accounts + roles — Phases 1 & 2 (design:
       [`accounts.md`](docs/design/accounts.md)).** One `Account` noun
       for every human, keyed by `(provider, identifier)` with closed

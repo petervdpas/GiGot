@@ -17,6 +17,7 @@ import (
 
 	"github.com/petervdpas/GiGot/internal/accounts"
 	"github.com/petervdpas/GiGot/internal/auth"
+	"github.com/petervdpas/GiGot/internal/auth/oauth"
 	"github.com/petervdpas/GiGot/internal/clients"
 	"github.com/petervdpas/GiGot/internal/config"
 	"github.com/petervdpas/GiGot/internal/credentials"
@@ -45,6 +46,12 @@ type Server struct {
 	destinations    *destinations.Store
 	policy          policy.Evaluator
 	mux             *http.ServeMux
+
+	// Phase-3 OAuth/OIDC. Nil when no provider is enabled —
+	// handleOAuthLogin 404s in that case, same as if the route
+	// weren't registered at all.
+	oauthProviders *oauth.Registry
+	oauthState     *oauth.StateStore
 
 	// pushDest fires one outbound mirror push. Injected so tests can
 	// stub the shell-out without running real git against a real remote.
@@ -76,6 +83,8 @@ func New(cfg *config.Config) *Server {
 	ap.MarkPublic("/admin/login")
 	ap.MarkPublic("/admin/logout")
 	ap.MarkPublic("/admin/register")       // self-service registration page
+	ap.MarkPublicPrefix("/admin/login/")   // OAuth redirect + callback (Phase 3)
+	ap.MarkPublic("/api/admin/providers")  // enabled OAuth providers, public to the login page
 	ap.MarkPublic("/admin/credentials")
 	ap.MarkPublic("/admin/credentials/")
 	ap.MarkPublic("/admin/accounts")
@@ -145,6 +154,27 @@ func New(cfg *config.Config) *Server {
 	}
 	ap.Register(session)
 
+	// Phase-3: resolve each enabled OAuth provider against the
+	// credential vault for its client_secret_ref, run OIDC discovery
+	// where relevant, and hand the handler a read-only registry. A
+	// broken provider (unresolvable secret, unreachable discovery URL,
+	// empty client_id) fails boot so the operator sees the problem
+	// before the first user clicks the button.
+	oauthRegistry, err := oauth.Build(
+		context.Background(),
+		cfg.Auth.OAuth,
+		func(name string) (string, error) {
+			cred, err := credentialStore.Get(name)
+			if err != nil {
+				return "", err
+			}
+			return cred.Secret, nil
+		},
+	)
+	if err != nil {
+		log.Fatalf("server: build oauth providers: %v", err)
+	}
+
 	s := &Server{
 		cfg:             cfg,
 		git:             gitmanager.NewManager(cfg.Storage.RepoRoot),
@@ -159,6 +189,8 @@ func New(cfg *config.Config) *Server {
 		policy:          policy.TokenRepoPolicy{},
 		mux:             http.NewServeMux(),
 		pushDest:        executeMirrorPush,
+		oauthProviders:  oauthRegistry,
+		oauthState:      oauth.NewStateStore(10 * time.Minute),
 	}
 	// Wire the mirror worker. listDests / getCred close over the stores;
 	// fireOne closes over the server so it can reuse the same syncOnce
@@ -322,6 +354,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/admin/login", s.handleAdminLogin)
 	s.mux.HandleFunc("/admin/logout", s.handleAdminLogout)
 	s.mux.HandleFunc("/admin/register", s.handleRegisterPage)
+	// /admin/login/<provider>[/callback] — Phase-3 OAuth flow. Single
+	// handler dispatches on the provider-name segment.
+	s.mux.HandleFunc("/admin/login/", s.handleOAuthLogin)
+	s.mux.HandleFunc("/api/admin/providers", s.handleOAuthProviders)
 	s.mux.HandleFunc("/admin/repositories", s.adminPageHandler(repositoriesTmpl, "/admin/repositories", "/admin/repositories/"))
 	s.mux.HandleFunc("/admin/repositories/", s.adminPageHandler(repositoriesTmpl, "/admin/repositories", "/admin/repositories/"))
 	s.mux.HandleFunc("/admin/subscriptions", s.adminPageHandler(subscriptionsTmpl, "/admin/subscriptions", "/admin/subscriptions/"))

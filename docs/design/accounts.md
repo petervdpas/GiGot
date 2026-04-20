@@ -1,12 +1,13 @@
 # Accounts (admin + regular)
 
-Status: Phase 1 shipped 2026-04-20. Phase 2 shipped 2026-04-20.
-Phases 3–5 are still ahead. Supersedes the README roadmap item
-"NaCl-challenge admin login" — which is retired, see §1. This document
-is the source of truth for how humans identify themselves to GiGot.
-The implementation lives in `internal/accounts/` (single sealed store,
-migrated from the former `internal/admins/`) plus a thin principal
-check in the login handler.
+Status: Phases 1, 2, and 3 all shipped 2026-04-20. Phases 4–5 are
+still ahead. Supersedes the README roadmap item
+"NaCl-challenge admin login" — which is now formally retired (see §1).
+This document is the source of truth for how humans identify
+themselves to GiGot. The implementation lives in
+`internal/accounts/` (sealed store, migrated from the former
+`internal/admins/`), `internal/auth/oauth/` (Phase-3 redirect-flow
+providers), plus thin principal checks in the login handlers.
 
 ---
 
@@ -221,7 +222,7 @@ actually needs it.
 
 ---
 
-## 8. OAuth / OIDC (Phase 3)
+## 8. OAuth / OIDC (Phase 3, shipped 2026-04-20)
 
 Add redirect-flow login endpoints — one per enabled provider — driven
 by the standard OAuth 2.0 authorization-code flow. Each enabled
@@ -302,7 +303,7 @@ as everywhere else.
 |-------|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 1     | **Shipped 2026-04-20** | `internal/accounts/` store (migrated from `admins.enc`), Role field, config `auth.allow_local` + CLI flag, `admins` seed, login handler role-gate, permissive auto-create on token issuance. |
 | 2     | **Shipped 2026-04-20** | `/api/register` + `/admin/register` page, admin accounts UI + API (list/create/patch/delete, last-admin protection), token issuance tightened to reject unknown usernames, legacy-token bind action. |
-| 3     | Pending                | OAuth / OIDC (GitHub, Entra, consumer Microsoft) for both login and registration, via `go-oidc` + `oauth2` — **no MSAL**. NaCl-challenge roadmap item formally retired in README. |
+| 3     | **Shipped 2026-04-20** | OAuth / OIDC for GitHub (OAuth2 + /user API), Entra (OIDC, tenant-scoped, `oid` claim), and consumer Microsoft (OIDC, `consumers` audience, `sub` claim) via `go-oidc` + `oauth2` — **no MSAL**. Per-provider `allow_register` flag auto-creates `role=regular` accounts on first successful callback. `client_secret_ref` resolves against the existing credential vault. NaCl-challenge roadmap item formally retired in README. |
 | 4     | Pending                | Gateway-trusted identity strategy (aligns with Roadmap #2).                                                                                                |
 | 5     | Pending                | Flip documented default `allow_local` → `false`; optionally remove the local password path entirely if no deploy depends on it.                            |
 

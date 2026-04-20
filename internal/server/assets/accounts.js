@@ -91,6 +91,38 @@
     if (!who) return;
     initSidebar('accounts', who.username);
 
+    // Render the Provider + Role dropdowns with the shared .gsel chrome
+    // so they match the Kind dropdown on the credentials page. The
+    // hidden <input name=...> the component creates means the form's
+    // submit handler keeps reading f.provider.value / f.role.value.
+    const providerHost = document.getElementById('provider-host');
+    if (providerHost) {
+      providerHost.innerHTML = GG.select.html({
+        name: 'provider',
+        value: 'local',
+        options: [
+          { value: 'local',     label: 'local' },
+          { value: 'github',    label: 'github' },
+          { value: 'entra',     label: 'entra' },
+          { value: 'microsoft', label: 'microsoft' },
+          { value: 'gateway',   label: 'gateway' },
+        ],
+      });
+      GG.select.initAll(providerHost);
+    }
+    const roleHost = document.getElementById('role-host');
+    if (roleHost) {
+      roleHost.innerHTML = GG.select.html({
+        name: 'role',
+        value: 'regular',
+        options: [
+          { value: 'regular', label: 'regular' },
+          { value: 'admin',   label: 'admin' },
+        ],
+      });
+      GG.select.initAll(roleHost);
+    }
+
     document.getElementById('acct-form').addEventListener('submit', async e => {
       e.preventDefault();
       const f = e.target;

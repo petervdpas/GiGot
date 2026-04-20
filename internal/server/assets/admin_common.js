@@ -17,6 +17,14 @@
       const r = await fetch('/api/admin/session', { credentials: 'same-origin' });
       return r.ok ? r.json() : null;
     },
+    async listOAuthProviders() {
+      // Public endpoint — the login page calls this before any session
+      // exists, and /api/admin/providers is MarkPublic'd for exactly
+      // that reason. Returns { providers: [...] } — possibly empty.
+      const r = await fetch('/api/admin/providers', { credentials: 'same-origin' });
+      if (!r.ok) return { providers: [] };
+      return r.json();
+    },
     async login(username, password) {
       const r = await fetch('/admin/login', {
         method: 'POST',

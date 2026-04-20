@@ -672,6 +672,26 @@
                 }
             }
         },
+        "/admin/providers": {
+            "get": {
+                "description": "Returns the providers the login page should render\nbuttons for. Public — the login card needs this\nbefore any session exists. One entry per enabled\nprovider, in a stable order.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "List enabled OAuth providers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OAuthProvidersResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/repos/{name}/destinations": {
             "get": {
                 "description": "GET lists destinations; POST adds a new one. Each\ndestination points at a named credential in the vault —\nsee docs/design/credential-vault.md §5 and\ndocs/design/remote-sync.md §3.1. Session-cookie authenticated.",
@@ -3989,6 +4009,31 @@
                 "message": {
                     "type": "string",
                     "example": "repository created"
+                }
+            }
+        },
+        "server.OAuthProviderView": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "login_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.OAuthProvidersResponse": {
+            "type": "object",
+            "properties": {
+                "providers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.OAuthProviderView"
+                    }
                 }
             }
         },

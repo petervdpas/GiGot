@@ -372,6 +372,22 @@ definitions:
         example: repository created
         type: string
     type: object
+  server.OAuthProviderView:
+    properties:
+      display_name:
+        type: string
+      login_url:
+        type: string
+      name:
+        type: string
+    type: object
+  server.OAuthProvidersResponse:
+    properties:
+      providers:
+        items:
+          $ref: '#/definitions/server.OAuthProviderView'
+        type: array
+    type: object
   server.RecordQueryResponse:
     properties:
       records:
@@ -1073,6 +1089,23 @@ paths:
       summary: Admin logout
       tags:
       - admin
+  /admin/providers:
+    get:
+      description: |-
+        Returns the providers the login page should render
+        buttons for. Public — the login card needs this
+        before any session exists. One entry per enabled
+        provider, in a stable order.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.OAuthProvidersResponse'
+      summary: List enabled OAuth providers
+      tags:
+      - auth
   /admin/repos/{name}/destinations:
     get:
       consumes:
