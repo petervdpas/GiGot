@@ -1120,6 +1120,22 @@ func (tc *testContext) aRegularAccountExists(username string) error {
 	return err
 }
 
+// aScopedRegularAccountExists is the non-local counterpart —
+// provisions a (provider, regular) row so scenarios can exercise the
+// scoped "provider:identifier" token-username shape introduced with
+// OAuth. See accounts.md §6.
+func (tc *testContext) aScopedRegularAccountExists(provider, identifier string) error {
+	if tc.srv == nil {
+		return fmt.Errorf("server must be running")
+	}
+	_, err := tc.srv.Accounts().Put(accounts.Account{
+		Provider:   provider,
+		Identifier: identifier,
+		Role:       accounts.RoleRegular,
+	})
+	return err
+}
+
 func (tc *testContext) iLogInAsAdminWithPassword(username, password string) error {
 	body := fmt.Sprintf(`{"username":%q,"password":%q}`, username, password)
 	return tc.doRequest(http.MethodPost, "/admin/login", body)
@@ -1403,6 +1419,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	// Admin steps
 	ctx.Step(`^an admin "([^"]*)" exists with password "([^"]*)"$`, tc.anAdminExistsWithPassword)
 	ctx.Step(`^a regular account "([^"]*)" exists$`, tc.aRegularAccountExists)
+	ctx.Step(`^a regular account "([^"]*)" exists on provider "([^"]*)"$`, func(identifier, provider string) error {
+		return tc.aScopedRegularAccountExists(provider, identifier)
+	})
 	ctx.Step(`^I log in as admin "([^"]*)" with password "([^"]*)"$`, tc.iLogInAsAdminWithPassword)
 	ctx.Step(`^the response sets a session cookie$`, tc.theCurrentResponseSetsSessionCookie)
 

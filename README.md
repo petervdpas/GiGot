@@ -75,9 +75,9 @@ here. The items below do not overlap with Track B.
 
 Done and shipping:
 
-- [x] **Accounts + roles — Phase 3 OAuth / OIDC (design:
-      [`accounts.md`](docs/design/accounts.md) §8).** Redirect-flow
-      login for three IdPs, all behind `go-oidc` + `golang.org/x/oauth2`
+- [x] **Accounts + roles — Phase 3 OAuth / OIDC + scoped token
+      binding (design: [`accounts.md`](docs/design/accounts.md) §6, §8).**
+      Redirect-flow login for three IdPs, all behind `go-oidc` + `golang.org/x/oauth2`
       with **no MSAL**. GitHub uses the OAuth2 flow plus a follow-up
       call to `api.github.com/user` (identifier = lowercased `login`).
       Entra uses OIDC against
@@ -106,8 +106,19 @@ Done and shipping:
       token), GitHub two-hop (token + /user) against httptest stubs,
       nonce mismatch rejection, missing-claim rejection, and
       handler-level auto-register + session-cookie contract plus
-      replay rejection. Retires the former "NaCl-challenge admin
-      login" roadmap item.
+      replay rejection. **Scoped token binding** (§6 follow-up):
+      `POST /api/admin/tokens` and `POST /api/auth/token` now accept
+      `"provider:identifier"` (e.g. `"github:petervdpas"`) as well as
+      the bare back-compat shorthand, so OAuth accounts can actually
+      hold subscription keys. `/admin/accounts` gains a
+      "Subscriptions" column with a clickable count that jumps to
+      `/admin/subscriptions?user=<scoped>`, which filters the grid
+      and pre-selects the account in the issue form — which is now
+      an account picker (`GG.select`) instead of a free-text box.
+      Tests: `parseTokenUsername` table-driven (11 cases), two
+      scoped-issuance scenarios (admin + api layer) + a scoped
+      bind-rejection guard + a subscription-count cucumber.
+      Retires the former "NaCl-challenge admin login" roadmap item.
 - [x] **Accounts + roles — Phases 1 & 2 (design:
       [`accounts.md`](docs/design/accounts.md)).** One `Account` noun
       for every human, keyed by `(provider, identifier)` with closed

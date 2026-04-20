@@ -67,3 +67,32 @@ Feature: Accounts (admins + regulars)
     Then the response status should be 200
     And the JSON response "identifier" should be "orphan-legacy"
     And the JSON response "role" should be "regular"
+
+  Scenario: Admin can issue a subscription key bound to an OAuth account
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a regular account "petervdpas" exists on provider "github"
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/tokens" with body '{"username":"github:petervdpas"}'
+    Then the response status should be 201
+    And the JSON response "username" should be "github:petervdpas"
+
+  Scenario: Issuing a scoped token for an unknown provider account is rejected
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a regular account "petervdpas" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/tokens" with body '{"username":"github:petervdpas"}'
+    Then the response status should be 400
+    And the response body should contain "no github account"
+
+  Scenario: subscription_count on accounts list reflects issued keys
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a regular account "bob" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/tokens" with body '{"username":"bob"}'
+    Then the response status should be 201
+    When I GET "/api/admin/accounts"
+    Then the response status should be 200
+    And the response body should contain "\"subscription_count\":1"

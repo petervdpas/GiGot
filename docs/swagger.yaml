@@ -526,7 +526,10 @@ definitions:
           type: string
         type: array
       username:
-        example: alice
+        description: |-
+          Username is "provider:identifier" (preferred) or "identifier"
+          (shorthand for local:identifier). See type docs.
+        example: github:petervdpas
         type: string
     type: object
   server.TokenResponse:

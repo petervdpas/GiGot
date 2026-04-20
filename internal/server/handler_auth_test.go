@@ -67,6 +67,50 @@ func TestIssueTokenInvalidBody(t *testing.T) {
 // the account exists under that provider. Bare "peter" still means
 // (local, peter) for back-compat. Cross-provider collisions are
 // isolated — local:alice and github:alice don't shadow each other.
+// TestParseTokenUsername covers the pure parser the handler feeds.
+// Pinning the contract at the function level means future callers
+// (e.g. HasAccount in list handlers, subscription counters) can
+// trust the same rules — and a future scoped-syntax change ("local/"
+// vs "local:" etc.) fails here first.
+func TestParseTokenUsername(t *testing.T) {
+	cases := []struct {
+		in       string
+		wantProv string
+		wantID   string
+		wantErr  bool
+	}{
+		{"alice", "local", "alice", false},
+		{"Alice", "local", "alice", false},                      // lowercased
+		{" bob ", "local", "bob", false},                         // trimmed
+		{"github:petervdpas", "github", "petervdpas", false},
+		{"GITHUB:Peter-VDPas", "github", "peter-vdpas", false},   // normalized
+		{"entra:11111111-2222-3333-4444-555555555555", "entra", "11111111-2222-3333-4444-555555555555", false},
+		{"microsoft:abc-sub", "microsoft", "abc-sub", false},
+		{"local:alice", "local", "alice", false},
+		// Unknown prefix — colon is part of the identifier, falls back to local.
+		{"weird:thing", "local", "weird:thing", false},
+		// Empty → error.
+		{"", "", "", true},
+		{"   ", "", "", true},
+		// Scoped but identifier blank → error.
+		{"github:", "", "", true},
+	}
+	for _, c := range cases {
+		t.Run(c.in, func(t *testing.T) {
+			p, id, err := parseTokenUsername(c.in)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("err=%v, wantErr=%v", err, c.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if p != c.wantProv || id != c.wantID {
+				t.Fatalf("got (%q,%q), want (%q,%q)", p, id, c.wantProv, c.wantID)
+			}
+		})
+	}
+}
+
 func TestIssueToken_ScopedProvider(t *testing.T) {
 	srv := testServer(t)
 	if _, err := srv.accounts.Put(accounts.Account{

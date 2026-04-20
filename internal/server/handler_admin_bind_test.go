@@ -59,6 +59,31 @@ func TestBindToken_IdempotentWhenAlreadyBound(t *testing.T) {
 	}
 }
 
+// TestBindToken_RejectsNonLocalScopedToken guards the handler's
+// invariant that the Bind action only synthesises *local* accounts.
+// OAuth/gateway accounts land in the store via their own callback,
+// so a scoped token whose Username points at github/entra/microsoft
+// can't meaningfully be "bound" after the fact — if no account
+// exists, the admin should re-register via the OAuth flow, not
+// invent a placeholder row. A 400 with a specific message beats
+// silently creating a dangling non-local row.
+func TestBindToken_RejectsNonLocalScopedToken(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	// Scoped github username, no matching github account.
+	tok, err := srv.tokenStrategy.Issue("github:ghost", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := do(t, srv, http.MethodPost, "/api/admin/tokens/bind",
+		map[string]any{"token": tok}, sess)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 for non-local bind, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if srv.accounts.Has(accounts.ProviderGitHub, "ghost") {
+		t.Fatal("bind must NOT synthesise a non-local account row")
+	}
+}
+
 func TestBindToken_404OnUnknownToken(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	rec := do(t, srv, http.MethodPost, "/api/admin/tokens/bind",

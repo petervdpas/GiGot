@@ -4251,8 +4251,9 @@ const docTemplate = `{
                     ]
                 },
                 "username": {
+                    "description": "Username is \"provider:identifier\" (preferred) or \"identifier\"\n(shorthand for local:identifier). See type docs.",
                     "type": "string",
-                    "example": "alice"
+                    "example": "github:petervdpas"
                 }
             }
         },

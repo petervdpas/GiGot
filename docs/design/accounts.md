@@ -167,12 +167,21 @@ and 4. We don't tell attackers which gate they failed.
 
 ## 6. Subscription tokens bind to accounts
 
-Today: `POST /api/admin/tokens` takes a free-text `username` that
-doesn't have to correspond to anyone real. New invariant: every
-newly-issued token has a matching `Account` row in the store. The
-bare-string shorthand resolves to `(provider: local, identifier:
-string)`; a full-form `{provider, identifier}` object is Phase 3 work
-(non-local accounts don't exist in practice yet).
+Today: `POST /api/admin/tokens` requires a `username` that binds to
+an existing `Account`. Two shapes are accepted:
+
+- **Scoped** `"provider:identifier"` (e.g. `"github:petervdpas"`,
+  `"entra:<oid>"`, `"local:alice"`). Preferred form; matches the
+  `(provider, identifier)` key in the accounts store exactly.
+- **Bare** `"identifier"` — shorthand for `"local:identifier"`, kept
+  for back-compat with callers written before the accounts model
+  (integration tests, Postman collection, CLI demos). Any known
+  provider prefix is always interpreted as scoped, so `"github:x"`
+  never falls back to local even if the GitHub account is missing —
+  it 400s, correctly.
+
+Shipped 2026-04-20. Supersedes the earlier design note saying the
+scoped form was future work.
 
 **Phase 1 was permissive** (shipped, now retired): if no account
 existed for the bare username, the handler auto-created one with
@@ -303,7 +312,7 @@ as everywhere else.
 |-------|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 1     | **Shipped 2026-04-20** | `internal/accounts/` store (migrated from `admins.enc`), Role field, config `auth.allow_local` + CLI flag, `admins` seed, login handler role-gate, permissive auto-create on token issuance. |
 | 2     | **Shipped 2026-04-20** | `/api/register` + `/admin/register` page, admin accounts UI + API (list/create/patch/delete, last-admin protection), token issuance tightened to reject unknown usernames, legacy-token bind action. |
-| 3     | **Shipped 2026-04-20** | OAuth / OIDC for GitHub (OAuth2 + /user API), Entra (OIDC, tenant-scoped, `oid` claim), and consumer Microsoft (OIDC, `consumers` audience, `sub` claim) via `go-oidc` + `oauth2` — **no MSAL**. Per-provider `allow_register` flag auto-creates `role=regular` accounts on first successful callback. `client_secret_ref` resolves against the existing credential vault. NaCl-challenge roadmap item formally retired in README. |
+| 3     | **Shipped 2026-04-20** | OAuth / OIDC for GitHub (OAuth2 + /user API), Entra (OIDC, tenant-scoped, `oid` claim), and consumer Microsoft (OIDC, `consumers` audience, `sub` claim) via `go-oidc` + `oauth2` — **no MSAL**. Per-provider `allow_register` flag auto-creates `role=regular` accounts on first successful callback. `client_secret_ref` resolves against the existing credential vault. Scoped `"provider:identifier"` token binding (§6) lands in the same phase so OAuth accounts can actually hold subscription keys; `/admin/accounts` gains a `subscription_count` column with click-through to `/admin/subscriptions?user=<scoped>`. NaCl-challenge roadmap item formally retired in README. |
 | 4     | Pending                | Gateway-trusted identity strategy (aligns with Roadmap #2).                                                                                                |
 | 5     | Pending                | Flip documented default `allow_local` → `false`; optionally remove the local password path entirely if no deploy depends on it.                            |
 
