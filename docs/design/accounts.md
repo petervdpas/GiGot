@@ -166,19 +166,29 @@ and 4. We don't tell attackers which gate they failed.
 ## 6. Subscription tokens bind to accounts
 
 Today: `POST /api/admin/tokens` takes a free-text `username` that
-doesn't have to correspond to anyone real. New rule: the `username` on
-a newly-issued token **must** match an existing `Account`'s
-`(provider, identifier)`. Accepted shorthand: a bare string means
-`(provider: local, identifier: string)`; full form is an object
-`{provider, identifier}`.
+doesn't have to correspond to anyone real. New invariant: every
+newly-issued token has a matching `Account` row in the store. The
+bare-string shorthand resolves to `(provider: local, identifier:
+string)`; a full-form `{provider, identifier}` object is Phase 3 work
+(non-local accounts don't exist in practice yet).
 
-- Rejection at issuance if no matching account exists.
-- **Back-compat**: tokens issued before Phase 1 keep working. They're
-  flagged in the admin UI as "legacy — no account binding" with an
-  action to bind to an existing account. No forced migration in Phase 1.
+**Phase 1 is permissive.** If no account exists for the bare username,
+the handler **auto-creates** one with `role=regular` and logs the
+event. The point of the binding is that every token points at a real
+row, not to gate legacy flows behind a prior-registration step —
+integration tests, the Postman collection, and arbitrary clients all
+keep working without a manual "register this username first" ritual.
+
+**Phase 2 tightens this.** Once `/register` exists, the permissive
+auto-create goes away and the handler rejects unknown usernames with
+`400`. That's a separate deliberate step, not silent drift.
+
+**Back-compat for existing tokens.** Tokens issued before Phase 1 keep
+working. The admin UI will grow a "legacy — no account binding" flag
+and a bind-to-account action (Phase 2). No forced migration.
 
 This is the load-bearing change: subscription tokens stop being
-disembodied bearers and start pointing at a real person.
+disembodied bearers and start pointing at a real account.
 
 ---
 

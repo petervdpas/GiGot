@@ -3,15 +3,18 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 
-	"github.com/petervdpas/GiGot/internal/admins"
+	"github.com/petervdpas/GiGot/internal/accounts"
 	"github.com/petervdpas/GiGot/internal/auth"
 )
 
 // handleAdminLogin godoc
 // @Summary      Admin login
-// @Description  Exchanges username/password for a session cookie.
+// @Description  Exchanges username/password for a session cookie. Only the
+// @Description  local provider is accepted on this endpoint; returns 404
+// @Description  when cfg.Auth.AllowLocal is false.
 // @Tags         admin
 // @Accept       json
 // @Produce      json
@@ -19,10 +22,15 @@ import (
 // @Success      200   {object}  AdminLoginResponse
 // @Failure      400   {object}  ErrorResponse
 // @Failure      401   {object}  ErrorResponse
+// @Failure      404   {object}  ErrorResponse
 // @Router       /admin/login [post]
 func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !s.cfg.Auth.AllowLocal {
+		writeError(w, http.StatusNotFound, "local login disabled")
 		return
 	}
 
@@ -31,17 +39,25 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	a, err := s.admins.Verify(req.Username, req.Password)
+	a, err := s.accounts.Verify(req.Username, req.Password)
 	if err != nil {
-		if errors.Is(err, admins.ErrNotFound) || errors.Is(err, admins.ErrInvalidPassword) {
+		if errors.Is(err, accounts.ErrNotFound) || errors.Is(err, accounts.ErrInvalidPassword) {
 			writeError(w, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if a.Role != accounts.RoleAdmin {
+		// Password is valid but the account isn't an admin. Return the
+		// same opaque 401 as a bad password so an attacker can't use
+		// /admin/login as a password oracle for regular accounts.
+		log.Printf("server: /admin/login denied: account %s:%s role=%s", a.Provider, a.Identifier, a.Role)
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
 
-	sess, err := s.sessionStrategy.Create(a.Username)
+	sess, err := s.sessionStrategy.Create(a.Identifier)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -57,7 +73,9 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		// itself is exposed over HTTPS.
 	})
 	writeJSON(w, http.StatusOK, AdminLoginResponse{
-		Username: a.Username,
+		Username:    a.Identifier,
+		DisplayName: a.DisplayName,
+		Role:        a.Role,
 	})
 }
 
@@ -209,8 +227,15 @@ func (s *Server) handleAdminSession(w http.ResponseWriter, r *http.Request) {
 	if id == nil {
 		return
 	}
-	writeJSON(w, http.StatusOK, AdminLoginResponse{
-		Username: id.Username,
-	})
+	resp := AdminLoginResponse{Username: id.Username}
+	// Enrich with display_name / role if the session's identifier
+	// resolves to a local account. Sessions today are only minted for
+	// local logins, so this is the common path; a missing row is fine
+	// (session is still valid, the UI just sees plain username).
+	if acc, err := s.accounts.Get(accounts.ProviderLocal, id.Username); err == nil {
+		resp.DisplayName = acc.DisplayName
+		resp.Role = acc.Role
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 

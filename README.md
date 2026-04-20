@@ -61,15 +61,19 @@ is schema-aware publishing (records → Azure DevOps wiki, Confluence,
 etc.) which explicitly belongs in Formidable's WikiWonder plugin, not
 here. The items below do not overlap with Track B.
 
-- [ ] **Gateway-trusted identity strategy.** A third `auth.Strategy`
-      alongside `TokenStrategy` and `SessionStrategy` that trusts a signed
-      identity header forwarded by a fronting gateway (e.g. Azure APIM).
-      Lets the admin UI skip server-side login when deployed behind a
-      gateway that already authenticates the caller.
-- [ ] **NaCl-challenge admin login.** Replace the password+session login
-      with curve25519 challenge/response, admin keypair held in the
-      browser (passphrase-encrypted in localStorage). Password path stays
-      available as a fallback. Requires vendoring `tweetnacl-js`.
+- [ ] **Accounts + roles (design: [`accounts.md`](docs/design/accounts.md)).**
+      One `Account` noun for every human (admin or regular), keyed by
+      `(provider, identifier)` with a closed `role ∈ {admin, regular}`
+      set. Phase 1 (in progress) evolves the sealed `admins.enc` into
+      `accounts.enc`, adds `auth.allow_local` + `--allow-local` CLI
+      flag, gates `/admin/login` on role, binds subscription tokens to
+      accounts, and seeds from `cfg.Admins`. Phase 2 adds `/register`
+      for self-service regulars. Phase 3 adds OAuth / OIDC for GitHub,
+      Entra ID, and consumer Microsoft (via `go-oidc` + `oauth2` — no
+      MSAL). Phase 4 adds gateway-trusted identity for APIM-fronted
+      deploys. Retires the former "NaCl-challenge admin login" item
+      (browser-held NaCl keys in `localStorage` lock admins out; see
+      `accounts.md` §1).
 
 Done and shipping:
 
@@ -535,7 +539,7 @@ idempotent — removing a target that is already absent is not an error.
 | Flag                   | Description                                                                                                                    |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `-wipe-repos`          | Remove every bare repository under `storage.repo_root`, including their audit chains. **Stop the server first.**               |
-| `-wipe-admins`         | Remove `data/admins.enc`. All admin accounts gone; recreate with `-add-admin`.                                                 |
+| `-wipe-admins`         | Remove `data/accounts.enc` (and the legacy `data/admins.enc` migration backup). All admin and regular accounts gone; recreate with `-add-admin`. |
 | `-wipe-tokens`         | Remove `data/tokens.enc`. All subscription keys revoked.                                                                       |
 | `-wipe-clients`        | Remove `data/clients.enc`. All enrolled client pubkeys dropped; clients will need to re-enroll.                                |
 | `-wipe-sessions`       | Remove `data/sessions.enc`. All active admin sessions dropped; operators must log in again.                                    |
@@ -659,7 +663,7 @@ config file, not the process's working directory. This makes it safe to invoke
 | ----------------- | ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | private_key_path  | string | `"./data/server.key"` | The server's curve25519 private key, base64-encoded in a 0600 file. Generated automatically on first run if missing.                       |
 | public_key_path   | string | `"./data/server.pub"` | Matching public key in a 0644 file. Also generated on first run.                                                                           |
-| data_dir          | string | `"./data"`            | Where encrypted stores live: `clients.enc` (enrolled Formidable clients), `tokens.enc` (subscription keys), `admins.enc` (admin accounts), `credentials.enc` (outbound credential vault), `destinations.enc` (per-repo mirror destinations), `sessions.enc` (active admin sessions). |
+| data_dir          | string | `"./data"`            | Where encrypted stores live: `clients.enc` (enrolled Formidable clients), `tokens.enc` (subscription keys), `accounts.enc` (admin + regular accounts; `admins.enc` left alongside it is a one-release migration backup), `credentials.enc` (outbound credential vault), `destinations.enc` (per-repo mirror destinations), `sessions.enc` (active admin sessions). |
 
 ### `logging`
 
@@ -696,13 +700,14 @@ After `-init` and a first run, you'll see something like:
     ├── server.pub            # 0644 — NaCl public key  (base64)
     ├── clients.enc           # sealed: enrolled clients + their pubkeys
     ├── tokens.enc            # sealed: issued subscription keys
-    ├── admins.enc            # sealed: admin accounts + bcrypt hashes
+    ├── accounts.enc          # sealed: admin + regular accounts (provider, identifier, role, bcrypt hash for local)
+    ├── admins.enc            # sealed: legacy admin store (migration backup, left in place for one release)
     ├── credentials.enc       # sealed: outbound credentials (PATs, SSH keys, …)
     ├── destinations.enc      # sealed: per-repo mirror-sync destinations
     └── sessions.enc          # sealed: active admin sessions (restart-survives)
 ```
 
-The six `.enc` files are NaCl-sealed to the server's own public key. **Only a
+The sealed `.enc` files are NaCl-sealed to the server's own public key. **Only a
 GiGot process holding the matching `server.key` can read them.** If you lose
 `server.key`, you lose every admin account, every subscription key, every
 enrolled client pubkey, every stored outbound credential, every configured
@@ -859,7 +864,7 @@ with the CLI:
 ./gigot -add-admin alice
 ```
 
-The account is stored in `data/admins.enc` (sealed), so it survives restarts.
+The account is stored in `data/accounts.enc` (sealed), so it survives restarts.
 
 ### Session model
 

@@ -142,6 +142,7 @@ func TestRotate_OldKeyCannotOpenAfterRotation(t *testing.T) {
 func TestDefaultSealedFiles(t *testing.T) {
 	got := DefaultSealedFiles("/var/lib/gigot/data")
 	want := []string{
+		"/var/lib/gigot/data/accounts.enc",
 		"/var/lib/gigot/data/admins.enc",
 		"/var/lib/gigot/data/clients.enc",
 		"/var/lib/gigot/data/credentials.enc",

@@ -135,7 +135,8 @@ func copyFile(src, dst string) error {
 // add to this list.
 func DefaultSealedFiles(dataDir string) []string {
 	return []string{
-		filepath.Join(dataDir, "admins.enc"),
+		filepath.Join(dataDir, "accounts.enc"),
+		filepath.Join(dataDir, "admins.enc"), // legacy; left in place as a backup after migration, but still rewrapped so a rotate-while-stale stays recoverable
 		filepath.Join(dataDir, "clients.enc"),
 		filepath.Join(dataDir, "credentials.enc"),
 		filepath.Join(dataDir, "destinations.enc"),

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/petervdpas/GiGot/internal/accounts"
 	"github.com/petervdpas/GiGot/internal/auth"
 	"github.com/petervdpas/GiGot/internal/credentials"
 )
@@ -17,7 +18,14 @@ import (
 func adminTestServer(t *testing.T) (*Server, *http.Cookie) {
 	t.Helper()
 	srv := testServer(t)
-	if _, err := srv.admins.Put("alice", "pw"); err != nil {
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: "alice",
+		Role:       accounts.RoleAdmin,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.accounts.SetPassword("alice", "pw"); err != nil {
 		t.Fatal(err)
 	}
 	sess, err := srv.sessionStrategy.Create("alice")

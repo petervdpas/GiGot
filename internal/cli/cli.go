@@ -72,6 +72,10 @@ type Options struct {
 	AddAdminUsername    string
 	Wipe                WipeTargets
 	WipeAssumeYes       bool
+	// AllowLocalOverride is the resolved value of `-allow-local`
+	// when that flag was explicitly set, and nil when it wasn't —
+	// nil means "leave cfg.Auth.AllowLocal alone."
+	AllowLocalOverride *bool
 }
 
 // ErrHelpRequested is returned by Parse when -help / -h was passed so
@@ -114,6 +118,7 @@ func Parse(args []string) (Options, error) {
 		assumeYes        bool
 		addDemoSetup     bool
 		removeDemoSetup  bool
+		allowLocal       bool
 	)
 	fs.BoolVar(&help, "help", false, "show this help and exit")
 	fs.BoolVar(&helpShort, "h", false, "alias for -help")
@@ -123,7 +128,7 @@ func Parse(args []string) (Options, error) {
 	fs.StringVar(&addAdmin, "add-admin", "", "create/update an admin account with the given username and exit")
 	fs.BoolVar(&rotateKeys, "rotate-keys", false, "rotate the server keypair and rewrap sealed stores (stop the server first)")
 	fs.BoolVar(&wipeRepos, "wipe-repos", false, "delete every bare repository under storage.repo_root (stop the server first)")
-	fs.BoolVar(&wipeAdmins, "wipe-admins", false, "delete data/admins.enc (all admin accounts)")
+	fs.BoolVar(&wipeAdmins, "wipe-admins", false, "delete data/accounts.enc + data/admins.enc (all accounts; legacy store is migration backup)")
 	fs.BoolVar(&wipeTokens, "wipe-tokens", false, "delete data/tokens.enc (all subscription keys)")
 	fs.BoolVar(&wipeClients, "wipe-clients", false, "delete data/clients.enc (all enrolled client pubkeys)")
 	fs.BoolVar(&wipeSessions, "wipe-sessions", false, "delete data/sessions.enc (all active admin sessions)")
@@ -133,6 +138,7 @@ func Parse(args []string) (Options, error) {
 	fs.BoolVar(&assumeYes, "yes", false, "skip the interactive confirmation prompt for wipe flags")
 	fs.BoolVar(&addDemoSetup, "add-demo-setup", false, "provision the Postman demo admin, repo, credential and subscription token (stop the server first)")
 	fs.BoolVar(&removeDemoSetup, "remove-demo-setup", false, "tear down everything -add-demo-setup provisioned (stop the server first)")
+	fs.BoolVar(&allowLocal, "allow-local", true, "override cfg.Auth.AllowLocal for this invocation (-allow-local=false disables local password login; only meaningful with serve)")
 
 	if err := fs.Parse(args); err != nil {
 		// flag.ErrHelp is returned when the flag package's builtin
@@ -215,6 +221,16 @@ func Parse(args []string) (Options, error) {
 		AddAdminUsername:    addAdmin,
 		WipeAssumeYes:       assumeYes,
 	}
+	// Only treat -allow-local as an override if the user actually
+	// passed it. A nil AllowLocalOverride means "keep cfg.Auth.AllowLocal
+	// as-is" — critical so tests / scripts that never touch this flag
+	// don't silently flip a config value.
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "allow-local" {
+			v := allowLocal
+			opts.AllowLocalOverride = &v
+		}
+	})
 	switch {
 	case initFlag:
 		opts.Mode = ModeInit
@@ -258,6 +274,13 @@ runs the HTTP server using the config at -config (or ./gigot.json).
 
 Run mode (default when no one-shot flag is set):
   -config <path>          Path to gigot.json (default: ./gigot.json).
+  -allow-local=<bool>     Override cfg.Auth.AllowLocal for this
+                          invocation. Passing the flag at all sets the
+                          override; omitting it leaves the config
+                          value untouched. -allow-local=false disables
+                          the /admin/login local password path (useful
+                          for break-glass testing of OAuth once Phase 3
+                          ships).
 
 One-shot commands (each exits after running; mutually exclusive):
   -init                   Write a fresh gigot.json in the current
@@ -271,7 +294,10 @@ One-shot commands (each exits after running; mutually exclusive):
                           sealed store. Stop the server first.
   -wipe-repos             Delete every bare repository under
                           storage.repo_root. Stop the server first.
-  -wipe-admins            Delete data/admins.enc (all admin accounts).
+  -wipe-admins            Delete data/accounts.enc (and the legacy
+                          data/admins.enc backup). All admin and
+                          regular accounts gone; recreate with
+                          -add-admin.
   -wipe-tokens            Delete data/tokens.enc (all subscription keys).
   -wipe-clients           Delete data/clients.enc (all enrolled clients).
   -wipe-sessions          Delete data/sessions.enc (all admin sessions).

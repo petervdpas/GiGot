@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/petervdpas/GiGot/internal/admins"
+	"github.com/petervdpas/GiGot/internal/accounts"
 	"github.com/petervdpas/GiGot/internal/auth"
 	"github.com/petervdpas/GiGot/internal/config"
 	"github.com/petervdpas/GiGot/internal/credentials"
@@ -56,7 +56,7 @@ func demoTokenUsernames() map[string]struct{} {
 // commands out of the HTTP-handler dependency graph — they're strictly
 // data-plane operations on the sealed files.
 type demoStores struct {
-	admins      *admins.Store
+	accounts    *accounts.Store
 	credentials *credentials.Store
 	tokens      *auth.TokenStrategy
 	git         *gitmanager.Manager
@@ -67,9 +67,13 @@ func openDemoStores(cfg *config.Config) (*demoStores, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load keypair: %w", err)
 	}
-	adminStore, err := admins.Open(filepath.Join(cfg.Crypto.DataDir, "admins.enc"), enc)
+	accountStore, err := accounts.Open(
+		filepath.Join(cfg.Crypto.DataDir, "accounts.enc"),
+		filepath.Join(cfg.Crypto.DataDir, "admins.enc"),
+		enc,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("open admins: %w", err)
+		return nil, fmt.Errorf("open accounts: %w", err)
 	}
 	credStore, err := credentials.Open(filepath.Join(cfg.Crypto.DataDir, "credentials.enc"), enc)
 	if err != nil {
@@ -84,7 +88,7 @@ func openDemoStores(cfg *config.Config) (*demoStores, error) {
 		return nil, fmt.Errorf("attach token persister: %w", err)
 	}
 	return &demoStores{
-		admins:      adminStore,
+		accounts:    accountStore,
 		credentials: credStore,
 		tokens:      tokenStrategy,
 		git:         gitmanager.NewManager(cfg.Storage.RepoRoot),
@@ -102,8 +106,16 @@ func runAddDemoSetup(cfg *config.Config, stdout io.Writer) error {
 		return err
 	}
 
-	if _, err := stores.admins.Put(DemoAdminUser, DemoAdminPassword); err != nil {
+	if _, err := stores.accounts.Put(accounts.Account{
+		Provider:    accounts.ProviderLocal,
+		Identifier:  DemoAdminUser,
+		Role:        accounts.RoleAdmin,
+		DisplayName: "Demo admin",
+	}); err != nil {
 		return fmt.Errorf("provision admin: %w", err)
+	}
+	if err := stores.accounts.SetPassword(DemoAdminUser, DemoAdminPassword); err != nil {
+		return fmt.Errorf("set admin password: %w", err)
 	}
 	fmt.Fprintf(stdout, "  admin      %-16s (password: %s)\n", DemoAdminUser, DemoAdminPassword)
 
@@ -211,7 +223,7 @@ func runRemoveDemoSetup(cfg *config.Config, stdout io.Writer) error {
 		}
 	}
 
-	if err := stores.admins.Remove(DemoAdminUser); err != nil {
+	if err := stores.accounts.Remove(accounts.ProviderLocal, DemoAdminUser); err != nil {
 		fmt.Fprintf(stdout, "  admin %s: %v (ok if already gone)\n", DemoAdminUser, err)
 	} else {
 		fmt.Fprintf(stdout, "  admin      %s removed\n", DemoAdminUser)

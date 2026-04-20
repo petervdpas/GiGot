@@ -47,7 +47,7 @@ func TestAddDemoSetup_ProvisionsEverything(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen stores: %v", err)
 	}
-	if _, err := stores.admins.Verify(DemoAdminUser, DemoAdminPassword); err != nil {
+	if _, err := stores.accounts.Verify(DemoAdminUser, DemoAdminPassword); err != nil {
 		t.Errorf("demo admin bcrypt verification failed: %v", err)
 	}
 
@@ -194,7 +194,7 @@ func TestRemoveDemoSetup_UndoesEverything(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen stores: %v", err)
 	}
-	if _, err := stores.admins.Verify(DemoAdminUser, DemoAdminPassword); err == nil {
+	if _, err := stores.accounts.Verify(DemoAdminUser, DemoAdminPassword); err == nil {
 		t.Error("demo admin should be gone after remove")
 	}
 	if stores.git.Exists(DemoRepoName) {

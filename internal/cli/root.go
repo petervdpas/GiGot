@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/petervdpas/GiGot/internal/accounts"
 	"github.com/petervdpas/GiGot/internal/config"
 	"github.com/petervdpas/GiGot/internal/crypto"
 	"github.com/petervdpas/GiGot/internal/server"
@@ -81,9 +82,15 @@ func Execute() {
 		}
 		return
 	case ModeServe:
+		if opts.AllowLocalOverride != nil {
+			cfg.Auth.AllowLocal = *opts.AllowLocalOverride
+		}
 		fmt.Printf("GiGot server starting on %s:%d\n", cfg.Server.Host, cfg.Server.Port)
 		fmt.Printf("Repository root: %s\n", cfg.Storage.RepoRoot)
 		fmt.Printf("Admin UI: http://%s:%d/admin\n", cfg.Server.Host, cfg.Server.Port)
+		if !cfg.Auth.AllowLocal {
+			fmt.Println("Local password login is DISABLED (auth.allow_local=false).")
+		}
 		srv := server.New(cfg)
 		if err := srv.Start(); err != nil {
 			log.Fatalf("server error: %v", err)
@@ -147,7 +154,15 @@ func runAddAdmin(cfg *config.Config, username string) error {
 	}
 
 	srv := server.New(cfg)
-	if _, err := srv.Admins().Put(username, pw); err != nil {
+	store := srv.Accounts()
+	if _, err := store.Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: username,
+		Role:       accounts.RoleAdmin,
+	}); err != nil {
+		return err
+	}
+	if err := store.SetPassword(username, pw); err != nil {
 		return err
 	}
 	fmt.Printf("Admin %q saved\n", username)

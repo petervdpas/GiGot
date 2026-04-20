@@ -126,6 +126,39 @@ func TestParse_Success(t *testing.T) {
 	}
 }
 
+func TestParse_AllowLocalOverride(t *testing.T) {
+	cases := []struct {
+		name     string
+		args     []string
+		wantSet  bool
+		wantVal  bool
+	}{
+		{"unset leaves override nil", nil, false, false},
+		{"-allow-local alone is true", []string{"-allow-local"}, true, true},
+		{"-allow-local=true explicit", []string{"-allow-local=true"}, true, true},
+		{"-allow-local=false disables", []string{"-allow-local=false"}, true, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			opts, err := Parse(c.args)
+			if err != nil {
+				t.Fatalf("Parse(%v): %v", c.args, err)
+			}
+			got := opts.AllowLocalOverride
+			if c.wantSet {
+				if got == nil {
+					t.Fatalf("AllowLocalOverride nil, want pointer to %v", c.wantVal)
+				}
+				if *got != c.wantVal {
+					t.Errorf("AllowLocalOverride = %v, want %v", *got, c.wantVal)
+				}
+			} else if got != nil {
+				t.Errorf("AllowLocalOverride = %v, want nil", *got)
+			}
+		})
+	}
+}
+
 // TestParse_Help verifies every help-triggering spelling produces
 // ErrHelpRequested and Mode=ModeHelp. The flag-package builtin -h/-help
 // handling is slightly different from our own bool flags, so both
@@ -243,6 +276,7 @@ func TestHelpText_AdvertisesEveryFlag(t *testing.T) {
 	text := helpText()
 	required := []string{
 		"-config",
+		"-allow-local",
 		"-init",
 		"-formidable-first",
 		"-add-admin",

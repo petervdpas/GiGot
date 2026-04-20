@@ -137,6 +137,10 @@ definitions:
     type: object
   server.AdminLoginResponse:
     properties:
+      display_name:
+        type: string
+      role:
+        type: string
       username:
         type: string
     type: object
@@ -776,7 +780,10 @@ paths:
     post:
       consumes:
       - application/json
-      description: Exchanges username/password for a session cookie.
+      description: |-
+        Exchanges username/password for a session cookie. Only the
+        local provider is accepted on this endpoint; returns 404
+        when cfg.Auth.AllowLocal is false.
       parameters:
       - description: Credentials
         in: body
@@ -797,6 +804,10 @@ paths:
             $ref: '#/definitions/server.ErrorResponse'
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       summary: Admin login

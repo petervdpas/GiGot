@@ -343,7 +343,7 @@ const docTemplate = `{
         },
         "/admin/login": {
             "post": {
-                "description": "Exchanges username/password for a session cookie.",
+                "description": "Exchanges username/password for a session cookie. Only the\nlocal provider is accepted on this endpoint; returns 404\nwhen cfg.Auth.AllowLocal is false.",
                 "consumes": [
                     "application/json"
                 ],
@@ -380,6 +380,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -3247,6 +3253,12 @@ const docTemplate = `{
         "server.AdminLoginResponse": {
             "type": "object",
             "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
                 "username": {
                     "type": "string"
                 }

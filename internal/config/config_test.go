@@ -142,6 +142,105 @@ func TestLoadInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestDefaultsHasAllowLocalAndSeed(t *testing.T) {
+	cfg := Defaults()
+	if !cfg.Auth.AllowLocal {
+		t.Error("AllowLocal should default true before OAuth ships")
+	}
+	if len(cfg.Admins) != 1 {
+		t.Fatalf("default seed count = %d, want 1", len(cfg.Admins))
+	}
+	seed := cfg.Admins[0]
+	if seed.Provider != "local" || seed.Identifier != "admin" {
+		t.Errorf("default seed = %+v, want local:admin", seed)
+	}
+}
+
+func TestLoadAdminsNormalisesAndAcceptsKnown(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gigot.json")
+	data := []byte(`{
+		"admins": [
+			{ "provider": "LOCAL",     "identifier": "  Admin  ",                                "display_name": "Primary" },
+			{ "provider": "github",    "identifier": "Peter-VDPas" },
+			{ "provider": "entra",     "identifier": "11111111-2222-3333-4444-555555555555" },
+			{ "provider": "microsoft", "identifier": "Peter@Example.com" }
+		]
+	}`)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if len(cfg.Admins) != 4 {
+		t.Fatalf("count = %d, want 4", len(cfg.Admins))
+	}
+	want := []AdminSeed{
+		{Provider: "local", Identifier: "admin", DisplayName: "Primary"},
+		{Provider: "github", Identifier: "peter-vdpas"},
+		{Provider: "entra", Identifier: "11111111-2222-3333-4444-555555555555"},
+		{Provider: "microsoft", Identifier: "peter@example.com"},
+	}
+	for i, w := range want {
+		if cfg.Admins[i] != w {
+			t.Errorf("admins[%d] = %+v, want %+v", i, cfg.Admins[i], w)
+		}
+	}
+}
+
+func TestLoadAdminsRejectsUnknownProvider(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gigot.json")
+	if err := os.WriteFile(path, []byte(`{ "admins": [ { "provider": "okta", "identifier": "x" } ] }`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for unknown provider")
+	}
+}
+
+func TestLoadAdminsRejectsDuplicate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gigot.json")
+	if err := os.WriteFile(path, []byte(`{ "admins": [
+		{ "provider": "local", "identifier": "admin" },
+		{ "provider": "LOCAL", "identifier": " admin " }
+	] }`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for duplicate seed")
+	}
+}
+
+func TestLoadAdminsRejectsBlank(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gigot.json")
+	if err := os.WriteFile(path, []byte(`{ "admins": [ { "provider": "local", "identifier": "   " } ] }`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for blank identifier")
+	}
+}
+
+func TestLoadAllowLocalOverride(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gigot.json")
+	if err := os.WriteFile(path, []byte(`{ "auth": { "allow_local": false } }`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Auth.AllowLocal {
+		t.Error("AllowLocal should be false after config override")
+	}
+}
+
 func TestSaveAndLoad(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "gigot.json")

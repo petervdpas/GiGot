@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/petervdpas/GiGot/internal/accounts"
 )
 
 func TestIssueToken(t *testing.T) {
@@ -52,6 +54,47 @@ func TestIssueTokenInvalidBody(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestIssueToken_AutoCreatesRegularAccount(t *testing.T) {
+	srv := testServer(t)
+	payload := `{"username":"newcomer"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(payload))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	acc, err := srv.accounts.Get(accounts.ProviderLocal, "newcomer")
+	if err != nil {
+		t.Fatalf("account not auto-created: %v", err)
+	}
+	if acc.Role != accounts.RoleRegular {
+		t.Errorf("auto-created account role=%q, want regular", acc.Role)
+	}
+}
+
+func TestIssueToken_UsesExistingAccountRoleUnchanged(t *testing.T) {
+	srv := testServer(t)
+	// Seed alice as admin; issuing a token for alice must not demote her.
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: "alice",
+		Role:       accounts.RoleAdmin,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(`{"username":"alice"}`))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rec.Code)
+	}
+	acc, _ := srv.accounts.Get(accounts.ProviderLocal, "alice")
+	if acc.Role != accounts.RoleAdmin {
+		t.Errorf("alice role was clobbered to %q, want admin", acc.Role)
 	}
 }
 

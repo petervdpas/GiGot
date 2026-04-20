@@ -39,7 +39,11 @@ func buildWipePlan(cfg *config.Config, targets WipeTargets) []wipeItem {
 	}
 	if targets.Admins {
 		plan = append(plan, wipeItem{
-			Label: "admin accounts (admins.enc)",
+			Label: "accounts (accounts.enc)",
+			Path:  filepath.Join(dataDir, "accounts.enc"),
+		})
+		plan = append(plan, wipeItem{
+			Label: "legacy admin store (admins.enc, migration backup)",
 			Path:  filepath.Join(dataDir, "admins.enc"),
 		})
 	}

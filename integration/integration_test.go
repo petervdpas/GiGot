@@ -18,6 +18,7 @@ import (
 	"os/exec"
 
 	"github.com/cucumber/godog"
+	"github.com/petervdpas/GiGot/internal/accounts"
 	"github.com/petervdpas/GiGot/internal/auth"
 	"github.com/petervdpas/GiGot/internal/config"
 	"github.com/petervdpas/GiGot/internal/crypto"
@@ -1091,8 +1092,15 @@ func (tc *testContext) anAdminExistsWithPassword(username, password string) erro
 	if tc.srv == nil {
 		return fmt.Errorf("server must be running")
 	}
-	_, err := tc.srv.Admins().Put(username, password)
-	return err
+	store := tc.srv.Accounts()
+	if _, err := store.Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: username,
+		Role:       accounts.RoleAdmin,
+	}); err != nil {
+		return err
+	}
+	return store.SetPassword(username, password)
 }
 
 func (tc *testContext) iLogInAsAdminWithPassword(username, password string) error {

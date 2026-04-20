@@ -6,9 +6,13 @@ type AdminLoginRequest struct {
 	Password string `json:"password"`
 }
 
-// AdminLoginResponse confirms a successful admin login.
+// AdminLoginResponse confirms a successful admin login (or reports the
+// current session). Username is the account identifier; DisplayName
+// and Role are enrichments used by the admin UI.
 type AdminLoginResponse struct {
-	Username string `json:"username"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name,omitempty"`
+	Role        string `json:"role,omitempty"`
 }
 
 // TokenListItem describes one issued token in an admin listing.

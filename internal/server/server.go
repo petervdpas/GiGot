@@ -15,7 +15,7 @@ import (
 
 	"path/filepath"
 
-	"github.com/petervdpas/GiGot/internal/admins"
+	"github.com/petervdpas/GiGot/internal/accounts"
 	"github.com/petervdpas/GiGot/internal/auth"
 	"github.com/petervdpas/GiGot/internal/clients"
 	"github.com/petervdpas/GiGot/internal/config"
@@ -40,7 +40,7 @@ type Server struct {
 	sessionStrategy *auth.SessionStrategy
 	encryptor       *crypto.Encryptor
 	clients         *clients.Store
-	admins          *admins.Store
+	accounts        *accounts.Store
 	credentials     *credentials.Store
 	destinations    *destinations.Store
 	policy          policy.Evaluator
@@ -108,10 +108,18 @@ func New(cfg *config.Config) *Server {
 		log.Fatalf("server: attach token persister: %v", err)
 	}
 
-	adminStore, err := admins.Open(filepath.Join(cfg.Crypto.DataDir, "admins.enc"), enc)
+	accountStore, err := accounts.Open(
+		filepath.Join(cfg.Crypto.DataDir, "accounts.enc"),
+		filepath.Join(cfg.Crypto.DataDir, "admins.enc"), // legacy, auto-migrated on first boot
+		enc,
+	)
 	if err != nil {
-		log.Fatalf("server: open admin store: %v", err)
+		log.Fatalf("server: open accounts store: %v", err)
 	}
+	if err := seedAdmins(accountStore, cfg.Admins); err != nil {
+		log.Fatalf("server: seed admins: %v", err)
+	}
+	warnPasswordlessLocalAdmins(accountStore)
 
 	credentialStore, err := credentials.Open(filepath.Join(cfg.Crypto.DataDir, "credentials.enc"), enc)
 	if err != nil {
@@ -141,7 +149,7 @@ func New(cfg *config.Config) *Server {
 		sessionStrategy: session,
 		encryptor:       enc,
 		clients:         clientStore,
-		admins:          adminStore,
+		accounts:        accountStore,
 		credentials:     credentialStore,
 		destinations:    destinationStore,
 		policy:          policy.TokenRepoPolicy{},
@@ -180,8 +188,45 @@ func New(cfg *config.Config) *Server {
 // per-deployment configuration.
 func (s *Server) SetPolicy(p policy.Evaluator) { s.policy = p }
 
-// Admins returns the admin store (used by CLI tools like --add-admin).
-func (s *Server) Admins() *admins.Store { return s.admins }
+// Accounts returns the account store (used by CLI tools like the demo
+// bootstrap and future `gigot admin set-password`).
+func (s *Server) Accounts() *accounts.Store { return s.accounts }
+
+// seedAdmins upserts bootstrap admin entries from cfg.Admins into the
+// account store, creating any that are missing with role=admin. Never
+// overwrites an existing account — the store wins once it has data
+// (Phase 2's /register flow and admin-UI role changes write there).
+func seedAdmins(store *accounts.Store, seeds []config.AdminSeed) error {
+	for _, s := range seeds {
+		if store.Has(s.Provider, s.Identifier) {
+			continue
+		}
+		if _, err := store.Put(accounts.Account{
+			Provider:    s.Provider,
+			Identifier:  s.Identifier,
+			Role:        accounts.RoleAdmin,
+			DisplayName: s.DisplayName,
+		}); err != nil {
+			return fmt.Errorf("seed %s:%s: %w", s.Provider, s.Identifier, err)
+		}
+	}
+	return nil
+}
+
+// warnPasswordlessLocalAdmins logs a loud notice for any local-provider
+// admin account with no password hash set. Common fresh-install case:
+// the default seed creates local:admin but no password is set yet, so
+// the /admin/login form can't succeed until the operator runs a
+// password-setting command (demo CLI or a future
+// `gigot admin set-password`). Silent failure here is worse than
+// noise; people notice when they can't log in anyway.
+func warnPasswordlessLocalAdmins(store *accounts.Store) {
+	for _, a := range store.List() {
+		if a.Provider == accounts.ProviderLocal && a.Role == accounts.RoleAdmin && a.PasswordHash == "" {
+			log.Printf("server: local admin %q has no password set — login will fail until one is configured", a.Identifier)
+		}
+	}
+}
 
 // Clients returns the enrolled-clients store.
 func (s *Server) Clients() *clients.Store { return s.clients }
