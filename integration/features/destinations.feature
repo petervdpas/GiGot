@@ -58,6 +58,39 @@ Feature: Mirror-sync destinations (admin)
     And I POST "/api/admin/repos/addresses/destinations" with body '{"credential_name":"c"}'
     Then the response status should be 400
 
+  Scenario: Enabled flag toggles both ways via PATCH and survives a URL-only PATCH
+    # Proves the click-to-toggle badge in the admin UI stays honest
+    # end-to-end: disable → re-enable cycles work, and an edit-form
+    # PATCH that only changes `url` must NOT reset the stored enabled
+    # flag. The admin UI relies on "nil pointer means unchanged"
+    # semantics on the UpdateDestinationRequest.
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a repository "addresses" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/credentials" with body '{"name":"c","kind":"pat","secret":"s"}'
+    And I POST "/api/admin/repos/addresses/destinations" with body '{"url":"https://x","credential_name":"c"}'
+    And I save the JSON response "id" as "dest_id"
+
+    # Create path defaults to enabled=true even though the body omitted it.
+    Then the JSON response "enabled" should be true
+
+    # Click-to-toggle: disable.
+    When I PATCH "/api/admin/repos/addresses/destinations/${dest_id}" with body '{"enabled":false}'
+    Then the response status should be 200
+    And the JSON response "enabled" should be false
+
+    # URL-only PATCH must NOT silently re-enable the destination.
+    When I PATCH "/api/admin/repos/addresses/destinations/${dest_id}" with body '{"url":"https://y"}'
+    Then the response status should be 200
+    And the JSON response "enabled" should be false
+    And the JSON response "url" should be "https://y"
+
+    # Click-to-toggle: re-enable.
+    When I PATCH "/api/admin/repos/addresses/destinations/${dest_id}" with body '{"enabled":true}'
+    Then the response status should be 200
+    And the JSON response "enabled" should be true
+
   Scenario: PATCH disables a destination without rewriting its id
     Given the server is running
     And an admin "alice" exists with password "hunter2"

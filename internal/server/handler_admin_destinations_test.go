@@ -175,6 +175,21 @@ func TestDestinations_PatchAndDelete(t *testing.T) {
 		t.Fatal("PATCH rewrote ID")
 	}
 
+	// PATCH: re-enable. Proves the toggle cycles both ways — the
+	// click-to-toggle badge in the admin UI relies on flipping either
+	// direction via the same PATCH endpoint, not just disable.
+	truthy := true
+	rec = do(t, srv, http.MethodPatch,
+		"/api/admin/repos/addresses/destinations/"+created.ID,
+		map[string]any{"enabled": &truthy}, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH re-enable want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &patched)
+	if !patched.Enabled {
+		t.Fatal("PATCH re-enable did not flip enabled back to true")
+	}
+
 	// DELETE
 	rec = do(t, srv, http.MethodDelete,
 		"/api/admin/repos/addresses/destinations/"+created.ID, nil, sess)
@@ -185,6 +200,52 @@ func TestDestinations_PatchAndDelete(t *testing.T) {
 		"/api/admin/repos/addresses/destinations/"+created.ID, nil, sess)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("second DELETE want 404, got %d", rec.Code)
+	}
+}
+
+// TestDestinations_PatchPreservesOmittedEnabled covers the
+// edit-form-doesn't-send-enabled contract the cleaned-up admin UI
+// depends on. The edit form in admin.js now POSTs only
+// {url, credential_name}; the enabled flag is managed by the
+// click-to-toggle badge, not the form. If PATCH were to silently
+// reset enabled=false to the zero value (false) on any request that
+// omitted it, every URL-edit on a disabled destination would
+// secretly re-enable the wrong one. Lock down "nil pointer means
+// unchanged" end-to-end through the handler.
+func TestDestinations_PatchPreservesOmittedEnabled(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	if err := srv.git.InitBare("addresses"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create + disable so enabled=false is load-bearing in the assertion.
+	rec := do(t, srv, http.MethodPost, "/api/admin/repos/addresses/destinations",
+		map[string]any{
+			"url":             "https://github.com/alice/addresses.git",
+			"credential_name": "github-personal",
+		}, sess)
+	var created DestinationView
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	falsy := false
+	do(t, srv, http.MethodPatch,
+		"/api/admin/repos/addresses/destinations/"+created.ID,
+		map[string]any{"enabled": &falsy}, sess)
+
+	// PATCH with only `url` — no `enabled` in the body. The stored
+	// enabled flag must not flip back to the default.
+	rec = do(t, srv, http.MethodPatch,
+		"/api/admin/repos/addresses/destinations/"+created.ID,
+		map[string]any{"url": "https://github.com/alice/addresses-renamed.git"}, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH url-only want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var patched DestinationView
+	_ = json.Unmarshal(rec.Body.Bytes(), &patched)
+	if patched.Enabled {
+		t.Fatal("PATCH that omits enabled must leave disabled destinations disabled; got enabled=true")
+	}
+	if patched.URL != "https://github.com/alice/addresses-renamed.git" {
+		t.Fatalf("URL should have been updated; got %q", patched.URL)
 	}
 }
 
