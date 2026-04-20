@@ -383,6 +383,71 @@ employee the gateway admits to be a known user.
 
 ---
 
+## 9.5 Hot-swap admin surface
+
+`/admin/auth` (UI) + `GET`/`PATCH /api/admin/auth` (API) let an
+authenticated admin inspect and rewrite the auth runtime without a
+process restart. Landed alongside Phase 4.
+
+### API contract
+
+- `GET /api/admin/auth` → `AuthRuntimeView { allow_local, oauth: {
+  github, entra, microsoft }, gateway, config_path }`. All fields
+  are names, not secrets — `client_secret_ref` and `secret_ref` are
+  vault lookup keys. The vault contents themselves never appear.
+- `PATCH /api/admin/auth` with `AuthReloadRequest { allow_local,
+  oauth, gateway }` → full-replace of those three sub-blocks.
+  Partial-merge semantics are intentionally rejected (JSON PATCH's
+  absent-vs-zero ambiguity is a documented footgun); the UI
+  re-posts the complete snapshot every save.
+
+### Atomicity
+
+`Server.ReloadAuth` builds the candidate OAuth registry and gateway
+strategy OUTSIDE the lock (discovery RPCs + secret lookups shouldn't
+block every in-flight auth check), then takes `authMu.Lock` for the
+pointer swaps + `cfg.Auth` assignment + `cfg.Save`. If any build
+step fails — unresolvable `secret_ref`, unreachable discovery URL,
+empty `client_id` on an enabled provider — the whole operation
+returns the error and nothing is touched. Partial application is
+the ONE outcome the handler refuses: reasoning about "did the
+reload apply the allow_local flip but not the gateway block" would
+be a mess.
+
+### Why mutate the live Registry instead of a pointer swap
+
+`oauth.Registry.Replace(name, p)` / `Remove(name)` mutate the
+existing map under the registry's own mutex, so one `*Registry`
+pointer lives for the whole process. `auth.Provider.Replace(s)` /
+`Remove(name)` do the same for the strategy list. Callers that
+captured a reference before the mutation finish against their
+snapshot — safe because `snapshotStrategies()` always returns a
+copy. The alternative (atomic pointer swap on the whole Registry)
+would force in-flight `/admin/login/<provider>/callback` handlers
+to either race the swap or hold a long-lived reference that defeats
+garbage collection.
+
+### Persistence
+
+`Config.Path` is set in `config.Load` (runtime-only; `json:"-"` so
+a Save round-trip can't leak it back into the file). On successful
+reload, `cfg.Save(cfg.Path)` writes the updated Auth block back.
+Path is empty in ad-hoc / test servers — those still reload fine
+in-memory, just don't survive a restart.
+
+### What's NOT on this surface
+
+- **`cfg.Auth.Enabled`**, **`cfg.Auth.Type`** — boot-time wiring
+  (middleware on/off, strategy-type selector). Flipping these at
+  runtime would invalidate every in-flight session; out of scope.
+- **`cfg.Crypto`**, **`cfg.Storage`** — file-system concerns that
+  need a restart to re-open the sealed stores cleanly.
+- **`cfg.Admins` seed list** — it's a bootstrap seed, not a live
+  allowlist (§4); editing it via PATCH would be confusing.
+  Admins-in-the-store come from `/admin/accounts`.
+
+---
+
 ## 10. Phasing summary
 
 | Phase | Status                 | What landed / lands                                                                                                                                       |
@@ -392,6 +457,7 @@ employee the gateway admits to be a known user.
 | 3     | **Shipped 2026-04-20** | OAuth / OIDC for GitHub (OAuth2 + /user API), Entra (OIDC, tenant-scoped, `oid` claim), and consumer Microsoft (OIDC, `consumers` audience, `sub` claim) via `go-oidc` + `oauth2` — **no MSAL**. Per-provider `allow_register` flag auto-creates `role=regular` accounts on first successful callback. `client_secret_ref` resolves against the existing credential vault. Scoped `"provider:identifier"` token binding (§6) lands in the same phase so OAuth accounts can actually hold subscription keys; `/admin/accounts` gains a `subscription_count` column with click-through to `/admin/subscriptions?user=<scoped>`. NaCl-challenge roadmap item formally retired in README. |
 | 4     | **Shipped 2026-04-20** | `internal/auth/gateway/` HMAC-SHA256 signed-header strategy with configurable header names and `max_skew_seconds` replay window, `secret_ref` → credential vault lookup, `allow_register` flag. Registered on `auth.Provider` after session so cookies still win; `requireAdminSession` honours a gateway claim when it resolves to a `role=admin` account. Boot-time lockout-risk warning flags `allow_local=false` + no non-local path or no non-local admin. Aligns with Roadmap #2. |
 | 5     | **Shipped 2026-04-20** | Documentation default flipped to `allow_local=false` for any deploy that has configured OAuth or gateway. Runtime `Defaults()` still ships `allow_local=true` — flipping that in a minor version would silently lock upgraders out; that mechanical flip is held for a separate release cycle with migration notes. |
+| Hot-swap | **Shipped 2026-04-21** | `/admin/auth` UI + `GET`/`PATCH /api/admin/auth`. `Server.ReloadAuth` rebuilds OAuth registry + gateway strategy outside the lock, swaps atomically on success, persists to `gigot.json`. Old state is preserved on any build failure. Covered §9.5. |
 
 ---
 

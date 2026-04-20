@@ -86,6 +86,34 @@ Feature: Accounts (admins + regulars)
     Then the response status should be 400
     And the response body should contain "no github account"
 
+  Scenario: Admin can GET the auth runtime snapshot
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I GET "/api/admin/auth"
+    Then the response status should be 200
+    And the JSON response "allow_local" should be true
+
+  Scenario: Admin can flip allow_local via PATCH, and /admin/login 404s afterwards
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I PATCH "/api/admin/auth" with body '{"allow_local":false,"oauth":{"github":{},"entra":{},"microsoft":{}},"gateway":{}}'
+    Then the response status should be 200
+    And the JSON response "allow_local" should be false
+    When I POST "/admin/login" with body '{"username":"alice","password":"hunter2"}'
+    Then the response status should be 404
+
+  Scenario: PATCH /api/admin/auth rejects a gateway with an unresolvable secret_ref
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I PATCH "/api/admin/auth" with body '{"allow_local":true,"oauth":{"github":{},"entra":{},"microsoft":{}},"gateway":{"enabled":true,"user_header":"X-U","sig_header":"X-S","timestamp_header":"X-T","secret_ref":"does-not-exist","max_skew_seconds":300}}'
+    Then the response status should be 400
+    When I GET "/api/admin/auth"
+    Then the response status should be 200
+    And the JSON response "allow_local" should be true
+
   Scenario: subscription_count on accounts list reflects issued keys
     Given the server is running
     And an admin "alice" exists with password "hunter2"

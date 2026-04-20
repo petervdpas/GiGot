@@ -63,6 +63,31 @@ here. The items below do not overlap with Track B.
 
 Done and shipping:
 
+- [x] **Auth hot-swap admin surface (design:
+      [`accounts.md`](docs/design/accounts.md) §9.5).** `/admin/auth`
+      UI + `GET`/`PATCH /api/admin/auth` let an admin inspect and
+      rewrite `allow_local`, every OAuth provider block, and the
+      gateway block without a process restart. `Server.ReloadAuth`
+      builds the candidate OAuth registry + gateway strategy
+      outside a lock, swaps them in atomically on success, and
+      persists the updated Auth block back to `gigot.json` (path
+      remembered from `config.Load`; `Config.Path` is
+      runtime-only, `json:"-"`). Any build failure —
+      unresolvable `secret_ref`, unreachable discovery URL,
+      empty `client_id` — short-circuits the reload and leaves
+      the previous state untouched; the API surfaces the error
+      verbatim. Response never leaks vault secret bytes (only the
+      ref names). Sidebar gains an **Authentication** entry. Tests:
+      `Provider.Replace/Remove` direct tests with concurrent
+      Authenticate, `Registry.Replace/Remove` direct tests
+      including nil-means-remove and stable provider ordering,
+      `GET /api/admin/auth` snapshot contract (secret-leak guard),
+      reload-semantics suite (enable/disable gateway, atomic
+      rejection on bad secret_ref, allow_local flip live, session
+      required on PATCH, persistence round-trip), plus three
+      cucumber scenarios covering GET/PATCH happy path, flip +
+      /admin/login 404, and bad-secret_ref rejection.
+
 - [x] **Accounts + roles — Phase 4 gateway-trusted identity + Phase 5
       default-flip (design: [`accounts.md`](docs/design/accounts.md)
       §9–§10).** `internal/auth/gateway/` verifies an HMAC-SHA256

@@ -223,6 +223,82 @@ func TestReloadAuth_PersistsToConfigFile(t *testing.T) {
 	}
 }
 
+// GET /api/admin/auth returns a snapshot of the current runtime —
+// allow_local, each OAuth block, gateway block, and the config_path.
+// The load-bearing assertion is that NO secret bytes leak: only refs
+// (names) are in the response, matching the §9 contract.
+func TestGetAuth_SnapshotContract(t *testing.T) {
+	srv := testServer(t)
+	// Seed an admin + session so the handler's requireAdminSession
+	// check passes. A regular user hitting this endpoint is separately
+	// covered by TestPatchAuth_RequiresAdminSession on the PATCH side.
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider: accounts.ProviderLocal, Identifier: "alice", Role: accounts.RoleAdmin,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.accounts.SetPassword("alice", "pw"); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := srv.sessionStrategy.Create("alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Plant a gateway config with a secret_ref that IS backed by a
+	// credential — the vault secret bytes must NEVER appear in the
+	// response; only the ref name.
+	seedCredential(t, srv, "gw-hmac", "super-secret-bytes-do-not-leak")
+	newCfg := srv.cfg.Auth
+	newCfg.Gateway = gatewayConfigFor("gw-hmac")
+	if err := srv.ReloadAuth(newCfg); err != nil {
+		t.Fatalf("precondition ReloadAuth: %v", err)
+	}
+
+	srv.auth.SetEnabled(true)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/auth", nil)
+	req.AddCookie(&http.Cookie{Name: "gigot_session", Value: sess.ID})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "super-secret-bytes-do-not-leak") {
+		t.Fatal("GET /api/admin/auth leaked the vault secret bytes!")
+	}
+	var view AuthRuntimeView
+	if err := json.Unmarshal(rec.Body.Bytes(), &view); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// Expected structure: top-level allow_local + oauth block + gateway
+	// block. The gateway block carries the ref name (the pointer), not
+	// the secret content.
+	if view.Gateway.SecretRef != "gw-hmac" {
+		t.Errorf("gateway.secret_ref = %q, want %q", view.Gateway.SecretRef, "gw-hmac")
+	}
+	if !view.Gateway.Enabled {
+		t.Error("gateway.enabled should be true after the reload")
+	}
+	if view.OAuth.GitHub.Enabled || view.OAuth.Entra.Enabled || view.OAuth.Microsoft.Enabled {
+		t.Error("no OAuth providers were enabled in this test — response should reflect that")
+	}
+}
+
+// GET /api/admin/auth without an admin session is a 401, same gate
+// as PATCH. Documented here as its own test so the session check
+// can't silently be removed from only one verb.
+func TestGetAuth_RequiresAdminSession(t *testing.T) {
+	srv := testServer(t)
+	srv.auth.SetEnabled(true)
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/auth", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("want 401, got %d", rec.Code)
+	}
+}
+
 // Sanity: signing/verifying through the production builder so that
 // any future divergence between buildGatewayStrategy and the
 // standalone Verifier surfaces here too, not just in the gateway

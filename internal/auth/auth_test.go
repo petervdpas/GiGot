@@ -277,6 +277,93 @@ func TestIdentityFromContextReturnsNilWhenMissing(t *testing.T) {
 	}
 }
 
+// --- Runtime mutation tests (Replace/Remove for hot-swap path) ---
+
+// Replace on an existing strategy keeps the original position so the
+// try-in-order contract isn't silently reordered when the admin UI
+// swaps a provider's config out from under the middleware.
+func TestProvider_ReplacePreservesOrder(t *testing.T) {
+	p := NewProvider()
+	p.Register(&stubStrategy{name: "a", err: ErrNoCredentials})
+	p.Register(&stubStrategy{name: "b", err: ErrNoCredentials})
+	p.Register(&stubStrategy{name: "c", identity: &Identity{Username: "c"}})
+
+	newB := &stubStrategy{name: "b", identity: &Identity{Username: "new-b"}}
+	if !p.Replace(newB) {
+		t.Fatal("Replace returned false for existing strategy")
+	}
+	// Expected flow now: a returns no-creds (skip) → b hits → c never
+	// runs. If Replace had appended instead, b would still return
+	// no-creds and c would win with username "c".
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	id, err := p.Authenticate(req)
+	if err != nil {
+		t.Fatalf("auth: %v", err)
+	}
+	if id.Username != "new-b" {
+		t.Errorf("expected new-b to win at position 2, got %q", id.Username)
+	}
+}
+
+func TestProvider_ReplaceReturnsFalseOnMissing(t *testing.T) {
+	p := NewProvider()
+	p.Register(&stubStrategy{name: "a"})
+	if p.Replace(&stubStrategy{name: "missing"}) {
+		t.Error("Replace should return false when no matching strategy exists")
+	}
+	// And the original shouldn't have been clobbered.
+	if len(p.strategies) != 1 || p.strategies[0].Name() != "a" {
+		t.Errorf("original strategies list was mutated on miss: %+v", p.strategies)
+	}
+}
+
+func TestProvider_Remove(t *testing.T) {
+	p := NewProvider()
+	p.Register(&stubStrategy{name: "a", err: ErrNoCredentials})
+	p.Register(&stubStrategy{name: "gateway", err: ErrNoCredentials})
+	p.Register(&stubStrategy{name: "c", identity: &Identity{Username: "c"}})
+
+	if !p.Remove("gateway") {
+		t.Fatal("Remove returned false for existing strategy")
+	}
+	if p.Remove("gateway") {
+		t.Error("Remove should return false on the second call (already gone)")
+	}
+	if len(p.strategies) != 2 {
+		t.Fatalf("strategies length = %d, want 2", len(p.strategies))
+	}
+	// Order of remaining entries must be preserved (a, c).
+	if p.strategies[0].Name() != "a" || p.strategies[1].Name() != "c" {
+		t.Errorf("remaining order wrong: %q, %q", p.strategies[0].Name(), p.strategies[1].Name())
+	}
+}
+
+// Concurrent Authenticate readers alongside Replace writers must not
+// race or see a torn strategies slice. -race flag catches the race;
+// the assertion here is just "runs to completion without deadlock or
+// panic." Critical because the hot-swap path is motivated by running
+// under load.
+func TestProvider_ReplaceConcurrentSafe(t *testing.T) {
+	p := NewProvider()
+	p.Register(&stubStrategy{name: "gateway", err: ErrNoCredentials})
+	p.Register(&stubStrategy{name: "session", identity: &Identity{Username: "u"}})
+
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 1000; i++ {
+			_ = p.Replace(&stubStrategy{name: "gateway", err: ErrNoCredentials})
+		}
+		close(done)
+	}()
+	for i := 0; i < 1000; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		if _, err := p.Authenticate(req); err != nil {
+			t.Fatalf("auth during concurrent replace: %v", err)
+		}
+	}
+	<-done
+}
+
 // --- Stub strategy for testing ---
 
 type stubStrategy struct {
