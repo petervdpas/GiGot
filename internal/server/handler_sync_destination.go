@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -71,8 +72,28 @@ func (s *Server) syncDestination(w http.ResponseWriter, r *http.Request, repo, i
 		return
 	}
 
+	updated, err := s.syncOnce(r.Context(), repo, dest, cred)
+	if err != nil {
+		// Push may have succeeded at the remote, but we couldn't record
+		// the fact. Surface the storage error — the admin can retry and
+		// the destination state is wrong in the store regardless.
+		writeError(w, http.StatusInternalServerError, "sync recorded partial: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, destinationView(*updated))
+}
+
+// syncOnce fires one outbound push and records the outcome on the
+// destination. Returns the updated destination on success, or an error
+// only when the record itself could not be written. A failed push is
+// NOT a syncOnce error — the destination's last_sync_status=error
+// captures that, and the caller (manual Sync-now handler, automatic
+// post-receive worker) decides whether to treat it as a user-visible
+// failure or a silent-and-log event. On a successful push the
+// credential's LastUsed timestamp is touched best-effort.
+func (s *Server) syncOnce(ctx context.Context, repo string, dest *destinations.Destination, cred *credentials.Credential) (*destinations.Destination, error) {
 	repoPath := s.git.RepoPath(repo)
-	out, pushErr := s.pushDest(r.Context(), repoPath, dest.URL, cred.Secret)
+	out, pushErr := s.pushDest(ctx, repoPath, dest.URL, cred.Secret)
 
 	now := time.Now().UTC()
 	var status, errText string
@@ -86,26 +107,20 @@ func (s *Server) syncDestination(w http.ResponseWriter, r *http.Request, repo, i
 		status = syncStatusOK
 	}
 
-	updated, updErr := s.destinations.Update(repo, id, func(d *destinations.Destination) {
+	updated, updErr := s.destinations.Update(repo, dest.ID, func(d *destinations.Destination) {
 		t := now
 		d.LastSyncAt = &t
 		d.LastSyncStatus = status
 		d.LastSyncError = errText
 	})
 	if updErr != nil {
-		// Push may have succeeded at the remote, but we couldn't record
-		// the fact. Surface the storage error — the admin can retry and
-		// the destination state is wrong in the store regardless.
-		writeError(w, http.StatusInternalServerError, "sync recorded partial: "+updErr.Error())
-		return
+		return nil, updErr
 	}
 
 	if pushErr == nil {
-		// Fire-and-forget Touch on success — best-effort bookkeeping for
-		// "last used 2 days ago" in the credentials UI. A touch failure
-		// is not a sync failure from the operator's perspective.
+		// Best-effort bookkeeping for "last used 2 days ago" in the
+		// credentials UI. Touch failure is not a sync failure.
 		_ = s.credentials.Touch(dest.CredentialName)
 	}
-
-	writeJSON(w, http.StatusOK, destinationView(*updated))
+	return updated, nil
 }

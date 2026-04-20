@@ -61,12 +61,6 @@ is schema-aware publishing (records → Azure DevOps wiki, Confluence,
 etc.) which explicitly belongs in Formidable's WikiWonder plugin, not
 here. The items below do not overlap with Track B.
 
-- [ ] **Mirror-sync — post-receive worker (slice 2b).** Wraps slice
-      2a's `pushToDestination` in a queue + post-receive hook +
-      retry/backoff so every client push automatically fans out to
-      enabled destinations. Failure semantics per §3.4: silent-and-
-      log, client push still succeeds, admin UI shows the red
-      `last_sync_status`.
 - [ ] **Credential vault — Expires field in the admin UI.** Store and API
       already accept `expires`; the `/admin/credentials` form and table
       don't surface it yet. Design doc §3 calls for an input on the form,
@@ -84,6 +78,34 @@ here. The items below do not overlap with Track B.
 
 Done and shipping:
 
+- [x] **Mirror-sync — post-receive worker (slice 2b of mirror-sync).**
+      Every accepted client push over `git-receive-pack` now
+      automatically fans out to the repo's enabled destinations — no
+      more manual Sync-now for the common case. New leaf
+      `internal/server/mirror_worker.go`: buffered channel (depth
+      128) + single worker goroutine per process; `enqueue` is
+      non-blocking and drops with a log line when the queue is full
+      so the receive-pack handler on the critical path of a user's
+      `git push` can't stall on a backed-up mirror. Trigger: the
+      existing audit step in `handler_git.go` now returns whether
+      any ref moved; only then does the handler call
+      `mirrorWorker.enqueue(repo)`. The worker fetches destinations
+      per event (so enable/disable edits take effect on the very
+      next push), skips `enabled=false`, skips destinations whose
+      credential has been deleted out from under them (logged, not
+      crashing), and calls the same `syncOnce` helper the manual
+      Sync-now button uses — one push+record path, not two.
+      One attempt per destination per trigger; a failed push lands
+      in `last_sync_status=error` and the operator can retry via the
+      Sync-now button. Retries + backoff + persistent queue are
+      deliberately out of scope for 2b — queue entries are lost on
+      restart, documented. Unit coverage in `mirror_worker_test.go`
+      (enabled-only fan-out, success recording, failure recording,
+      one-dest-failure-doesn't-starve-siblings, missing-credential
+      skip, queue-full-is-non-blocking) and handler-level fences in
+      `handler_git_test.go` (real `git push` enqueues exactly once,
+      no-op push enqueues zero times). Design: `docs/design/remote-
+      sync.md` §3.3–§3.4.
 - [x] **Mirror destination — enabled toggle moved off the create/edit
       form.** The checkbox was noise (nobody adds a destination with
       `enabled=false`); it's gone. New destinations default to enabled

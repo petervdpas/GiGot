@@ -175,7 +175,15 @@ func (s *Server) handleGitService(w http.ResponseWriter, r *http.Request, servic
 	}
 
 	if service == "receive-pack" && preRefs != nil {
-		s.auditPushedRefs(r, name, preRefs)
+		anyMoved := s.auditPushedRefs(r, name, preRefs)
+		// Fan out to mirror destinations only when at least one ref
+		// actually moved. A receive-pack that rejected every update
+		// leaves the tree exactly as the mirrors already have it; no
+		// point firing a no-op push. Worker is optional — tests that
+		// want deterministic behavior can nil it out.
+		if anyMoved && s.mirrorWorker != nil {
+			s.mirrorWorker.enqueue(name)
+		}
 	}
 
 	w.Header().Set("Content-Type", fmt.Sprintf("application/x-git-%s-result", service))
@@ -187,14 +195,18 @@ func (s *Server) handleGitService(w http.ResponseWriter, r *http.Request, servic
 // pre-push snapshot and appends one push_received audit entry per ref that
 // the client actually moved. A receive-pack that rejected every update
 // (non-ff, hook refusal) produces an empty diff and so no audit noise.
-func (s *Server) auditPushedRefs(r *http.Request, name string, preRefs map[string]string) {
+// Returns true when at least one ref moved — the caller uses that to
+// decide whether to enqueue a mirror fan-out.
+func (s *Server) auditPushedRefs(r *http.Request, name string, preRefs map[string]string) bool {
 	postRefs, err := s.git.RefSnapshot(name)
 	if err != nil {
 		log.Printf("audit: post-push ref snapshot failed on repo %q: %v", name, err)
-		return
+		return false
 	}
 	actor := auditActor(r)
+	moved := false
 	for _, change := range gitmanager.DiffRefSnapshots(preRefs, postRefs) {
+		moved = true
 		sha := change.NewSHA
 		if change.Kind == gitmanager.RefDeleted {
 			sha = change.OldSHA
@@ -207,6 +219,7 @@ func (s *Server) auditPushedRefs(r *http.Request, name string, preRefs map[strin
 			Notes: string(change.Kind),
 		})
 	}
+	return moved
 }
 
 // extractGitRepoName extracts the repo name from a git URL path.

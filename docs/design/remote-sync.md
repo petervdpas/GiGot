@@ -1,17 +1,18 @@
 # Remote sync — does GiGot need it, and if so, what shape?
 
-Status: **partially shipped.** Slice 1 (destinations data-model + admin
-API) and slice 2.5 (token abilities + `mirror` ability + subscriber-
-facing destinations API per §2.6) are live. The §2.2 privacy tension
-has been resolved in §2.4: sealed-body is scoped to GiGot↔client;
-mirroring is a deliberate per-destination operator opt-in. The
-refspec compatibility spike in §5 is complete — GitHub accepts
-`refs/audit/*` alongside `refs/heads/*` with a combined push, so
-the audit chain travels with the mirror without a fallback. Remaining
-work splits into slice 2a (manual sync endpoint invoking a shared
-`pushToDestination` helper), slice 2b (post-receive worker wrapping
-2a's helper in a queue), and slice 3 (admin UI with the §3.7
-privacy-warning gate).
+Status: **shipped.** Every slice called out below is live:
+slice 1 (destinations data-model + admin API), slice 2.5 (token
+abilities + `mirror` ability + subscriber-facing destinations API
+per §2.6), the refspec compatibility spike (§5), slice 2a (manual
+Sync-now endpoint + shared `syncOnce` helper), slice 2b (post-receive
+fan-out worker), and slice 3 (admin UI with the §3.7 privacy gate
+and click-to-toggle enabled badge). The §2.2 privacy tension is
+resolved in §2.4: sealed-body is scoped to GiGot↔client; mirroring
+is a deliberate per-destination operator opt-in. Outstanding
+follow-ups that didn't make a ship slice: retries + backoff on a
+failed auto-push, and a persistent queue that survives restart —
+both deliberately descoped (§3.4 "silent-and-log" is enough until
+a real user hits the limit).
 
 ---
 

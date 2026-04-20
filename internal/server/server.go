@@ -49,6 +49,13 @@ type Server struct {
 	// pushDest fires one outbound mirror push. Injected so tests can
 	// stub the shell-out without running real git against a real remote.
 	pushDest pushDestinationFn
+
+	// mirrorWorker is the post-receive fan-out queue (slice 2b). After
+	// every accepted client push, the receive-pack handler enqueues
+	// the repo name; the worker then fires one push per enabled
+	// destination. Optional so tests that need deterministic behavior
+	// can swap or disable it.
+	mirrorWorker *mirrorWorker
 }
 
 // New creates a new Server instance. A server keypair is loaded from
@@ -141,6 +148,22 @@ func New(cfg *config.Config) *Server {
 		mux:             http.NewServeMux(),
 		pushDest:        executeMirrorPush,
 	}
+	// Wire the mirror worker. listDests / getCred close over the stores;
+	// fireOne closes over the server so it can reuse the same syncOnce
+	// code the manual Sync-now handler calls. That way the two paths
+	// write last_sync_* identically and we have one push recording
+	// surface, not two.
+	s.mirrorWorker = newMirrorWorker(
+		func(repo string) []*destinations.Destination {
+			return s.destinations.All(repo)
+		},
+		func(name string) (*credentials.Credential, error) {
+			return s.credentials.Get(name)
+		},
+		func(ctx context.Context, repo string, dest *destinations.Destination, cred *credentials.Credential) (*destinations.Destination, error) {
+			return s.syncOnce(ctx, repo, dest, cred)
+		},
+	)
 	// Retro-install the refs/audit/* pre-receive guard on any repos
 	// created before slice 2 shipped. Newly-created repos get it in
 	// InitBare/CloneBare. Logged but not fatal — a running server with

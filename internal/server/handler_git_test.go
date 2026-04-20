@@ -2,13 +2,19 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
+
+	"github.com/petervdpas/GiGot/internal/credentials"
+	"github.com/petervdpas/GiGot/internal/destinations"
 )
 
 func TestGitInfoRefsUploadPack(t *testing.T) {
@@ -268,6 +274,127 @@ func TestGitPushEmitsPushReceivedAudit(t *testing.T) {
 	pushedSHA := strings.TrimSpace(runOut(t, "git", "-C", cloneDest, "rev-parse", "HEAD"))
 	if ev.SHA != pushedSHA {
 		t.Errorf("event sha = %q, want %q", ev.SHA, pushedSHA)
+	}
+}
+
+// TestGitPushEnqueuesMirrorFanout is the handler-level fence for slice
+// 2b: a real git push over smart-HTTP must trigger the mirror worker's
+// enqueue on the pushed-to repo. Without this, slice 2a's manual
+// Sync-now is the ONLY way a destination ever sees a commit — the
+// whole point of 2b is removing that manual step.
+//
+// pushDest is stubbed with a counter so the test doesn't hit the
+// network; the assertion is that the stub ran exactly once for the
+// single enabled destination after the real `git push` completed.
+func TestGitPushEnqueuesMirrorFanout(t *testing.T) {
+	srv := testServer(t)
+	if err := srv.git.InitBare("push-fan"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.credentials.Put(credentials.Credential{
+		Name: "c", Kind: "pat", Secret: "s",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	dest, err := srv.destinations.Add("push-fan", destinations.Destination{
+		URL: "https://mirror.example/x.git", CredentialName: "c", Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	called := 0
+	srv.pushDest = func(_ context.Context, _, _, _ string) ([]byte, error) {
+		mu.Lock()
+		called++
+		mu.Unlock()
+		return []byte("ok"), nil
+	}
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	cloneDest := filepath.Join(t.TempDir(), "work")
+	run(t, "git", "clone", ts.URL+"/git/push-fan.git", cloneDest)
+	run(t, "git", "-C", cloneDest, "commit", "--allow-empty", "-m", "first")
+	cmd := exec.Command("git", "-C", cloneDest, "push", "origin", "master")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git push failed: %s\n%s", err, string(out))
+	}
+
+	if err := srv.mirrorWorker.settle(3 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if called != 1 {
+		t.Fatalf("pushDest should have fired exactly once for the enabled destination; got %d calls", called)
+	}
+	got, _ := srv.destinations.Get("push-fan", dest.ID)
+	if got.LastSyncStatus != syncStatusOK {
+		t.Errorf("destination should be ok after successful fan-out; got %q", got.LastSyncStatus)
+	}
+}
+
+// TestGitPushWithNoMovedRefsDoesNotEnqueue — a receive-pack that
+// accepts the packfile but moves no refs (idempotent re-push with no
+// new commits) must not enqueue a mirror fan-out. Otherwise every
+// `git push` with nothing new would still spam the mirror queue.
+func TestGitPushWithNoMovedRefsDoesNotEnqueue(t *testing.T) {
+	srv := testServer(t)
+	if err := srv.git.InitBare("push-noop"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.credentials.Put(credentials.Credential{
+		Name: "c", Kind: "pat", Secret: "s",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.destinations.Add("push-noop", destinations.Destination{
+		URL: "https://mirror.example/x.git", CredentialName: "c", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	called := 0
+	srv.pushDest = func(_ context.Context, _, _, _ string) ([]byte, error) {
+		mu.Lock()
+		called++
+		mu.Unlock()
+		return []byte("ok"), nil
+	}
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// First push: establishes the ref. Allowed one fan-out call.
+	cloneDest := filepath.Join(t.TempDir(), "work")
+	run(t, "git", "clone", ts.URL+"/git/push-noop.git", cloneDest)
+	run(t, "git", "-C", cloneDest, "commit", "--allow-empty", "-m", "first")
+	run(t, "git", "-C", cloneDest, "push", "origin", "master")
+
+	// Wait for the legitimate fan-out to settle, then reset the counter.
+	if err := srv.mirrorWorker.settle(3 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	called = 0
+	mu.Unlock()
+
+	// Second push with no new commits: receive-pack accepts the (empty)
+	// request but moves no refs. The handler must not enqueue.
+	cmd := exec.Command("git", "-C", cloneDest, "push", "origin", "master")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("idempotent git push failed: %s\n%s", err, string(out))
+	}
+	if err := srv.mirrorWorker.settle(1 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if called != 0 {
+		t.Errorf("no-op push should not enqueue a fan-out; pushDest fired %d time(s)", called)
 	}
 }
 
