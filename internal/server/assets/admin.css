@@ -450,3 +450,51 @@ a:hover { text-decoration: underline; }
 .dest-form .dest-field input[type="checkbox"] { min-width: 0; }
 .dest-form .dest-actions { display: flex; align-items: center; gap: 0.4rem; }
 .dest-form .dest-actions .dest-err { margin-left: 0.3rem; }
+
+.dest-sync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: #8b949e;
+}
+.dest-sync-err-body {
+  flex-basis: 100%;
+  margin: 0.3rem 0 0;
+  background: #0d1117;
+  border: 1px solid #da363366;
+  color: #ffa198;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.72rem;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow: auto;
+}
+.dest-sync-msg { font-size: 0.75rem; }
+.dest-sync-msg.error { color: #f85149; }
+
+.dest-privacy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border: 1px solid #9e6a0366;
+  background: #9e6a0322;
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.78rem;
+}
+.dest-privacy .dest-privacy-warn {
+  color: #e3b341;
+  line-height: 1.4;
+}
+.dest-privacy .dest-privacy-warn code {
+  background: transparent;
+  color: #f0c674;
+  padding: 0;
+}
+.dest-privacy label {
+  color: #c9d1d9;
+}

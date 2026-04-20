@@ -116,6 +116,13 @@ const api = {
     });
     if (!r.ok) throw new Error('delete destination failed');
   },
+  async syncDestination(repo, id) {
+    const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/destinations/' + encodeURIComponent(id) + '/sync', {
+      method: 'POST', credentials: 'same-origin',
+    });
+    if (!r.ok) throw new Error((await r.json()).error || 'sync failed');
+    return r.json();
+  },
   async convertToFormidable(repo) {
     const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/formidable', {
       method: 'POST', credentials: 'same-origin',
@@ -306,9 +313,12 @@ function renderDestinationSection(container, repoName) {
       '<div class="dest-meta">' +
         '<span class="stat-label">Credential</span> ' + credPill + ' ' + enabledTag +
       '</div>' +
+      renderDestSyncBlock(dest) +
       '<div class="dest-actions">' +
+        '<button type="button" class="small sync-dest-btn">Sync now</button>' +
         '<button type="button" class="small secondary edit-dest-btn">Edit</button>' +
         '<button type="button" class="small danger remove-dest-btn">Remove</button>' +
+        '<span class="dest-sync-msg muted"></span>' +
       '</div>' +
     '</div>';
   container.querySelector('.edit-dest-btn').addEventListener('click', () => {
@@ -323,6 +333,55 @@ function renderDestinationSection(container, repoName) {
       alert(e.message);
     }
   });
+  const syncBtn = container.querySelector('.sync-dest-btn');
+  const syncMsg = container.querySelector('.dest-sync-msg');
+  syncBtn.addEventListener('click', async () => {
+    syncBtn.disabled = true;
+    syncMsg.textContent = 'pushing…';
+    syncMsg.className = 'dest-sync-msg muted';
+    try {
+      const updated = await api.syncDestination(repoName, dest.id);
+      destinationsByRepo[repoName] = updated;
+      // Re-render the section so the status badge and timestamp show.
+      renderDestinationSection(container, repoName);
+    } catch (e) {
+      syncBtn.disabled = false;
+      syncMsg.textContent = e.message;
+      syncMsg.className = 'dest-sync-msg error';
+    }
+  });
+}
+
+// renderDestSyncBlock formats the last-sync status line. Shown inside the
+// dest-row so the operator sees at a glance whether the last push worked,
+// when it ran, and — when it failed — what git said.
+function renderDestSyncBlock(dest) {
+  if (!dest.last_sync_status) {
+    return '<div class="dest-sync dest-sync-never"><span class="stat-label">Last sync</span> <span class="muted">never</span></div>';
+  }
+  const when = dest.last_sync_at ? formatSyncTime(dest.last_sync_at) : '';
+  if (dest.last_sync_status === 'ok') {
+    return '<div class="dest-sync dest-sync-ok">' +
+      '<span class="stat-label">Last sync</span> ' +
+      '<span class="badge formidable">ok</span> ' +
+      '<span class="muted">' + escapeHtml(when) + '</span>' +
+    '</div>';
+  }
+  const errText = dest.last_sync_error ? escapeHtml(dest.last_sync_error).slice(0, 400) : '';
+  return '<div class="dest-sync dest-sync-err">' +
+    '<span class="stat-label">Last sync</span> ' +
+    '<span class="badge warn">error</span> ' +
+    '<span class="muted">' + escapeHtml(when) + '</span>' +
+    (errText ? '<pre class="dest-sync-err-body">' + errText + '</pre>' : '') +
+  '</div>';
+}
+
+function formatSyncTime(iso) {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString();
+  } catch (_) { return iso; }
 }
 
 function renderDestinationEditor(container, repoName, existing) {
@@ -337,6 +396,22 @@ function renderDestinationEditor(container, repoName, existing) {
         .join('');
   const urlVal = existing ? escapeHtml(existing.url) : '';
   const enabledChecked = !existing || existing.enabled ? 'checked' : '';
+  // Privacy consent per remote-sync.md §3.7: required on every new
+  // destination. On an existing destination the admin already consented
+  // at creation time, so we don't re-prompt — edits of URL / credential
+  // / enabled flag keep the same consent.
+  const privacyBlock = isEdit ? '' :
+    '<div class="dest-privacy">' +
+      '<div class="dest-privacy-warn">' +
+        '<strong>Privacy notice.</strong> ' +
+        'Adding a mirror destination turns off GiGot\'s sealed-body advantage for this repo. ' +
+        'Git pushes plaintext commits to the destination — anyone with access to <code>' + escapeHtml(repoName.slice(0, 40)) + '</code> at that remote will be able to read every file and every past version of every file in this repository.' +
+      '</div>' +
+      '<label class="dest-field inline">' +
+        '<input type="checkbox" name="privacy_ack" required>' +
+        ' I understand the contents of this repo will be readable at the destination.' +
+      '</label>' +
+    '</div>';
   container.innerHTML =
     '<div class="ic-section-head">' +
       '<span class="ic-section-title">' + (isEdit ? 'Edit mirror destination' : 'Add mirror destination') + '</span>' +
@@ -351,6 +426,7 @@ function renderDestinationEditor(container, repoName, existing) {
       '<label class="dest-field inline">' +
         '<input type="checkbox" name="enabled" ' + enabledChecked + '> Enable mirror-sync to this destination' +
       '</label>' +
+      privacyBlock +
       '<div class="dest-actions">' +
         '<button type="submit" class="small">' + (isEdit ? 'Save' : 'Add') + '</button>' +
         '<button type="button" class="small secondary cancel-btn">Cancel</button>' +

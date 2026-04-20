@@ -67,10 +67,6 @@ here. The items below do not overlap with Track B.
       enabled destinations. Failure semantics per §3.4: silent-and-
       log, client push still succeeds, admin UI shows the red
       `last_sync_status`.
-- [ ] **Mirror-sync — admin UI (slice 3).** "Destinations" section on
-      the repo detail page with add/edit/delete rows and a prominent
-      privacy-warning checkbox per §3.7 of the remote-sync design.
-      Surfaces `last_sync_status` once slice 2 populates it.
 - [ ] **Mirror destination — move enabled toggle off the create/edit
       form.** Nobody adds a destination with `enabled = false`, so the
       checkbox in the form is noise. Default new destinations to
@@ -95,6 +91,25 @@ here. The items below do not overlap with Track B.
 
 Done and shipping:
 
+- [x] **Mirror-sync — admin UI (slice 3 of mirror-sync).** The
+      existing mirror-destination section on each repo card grows
+      three things: a last-sync status line ("never" /
+      `ok <timestamp>` / `error <timestamp>` + collapsible stderr),
+      a **Sync now** button that fires
+      `POST /api/admin/repos/{name}/destinations/{id}/sync` and
+      refreshes the card in place, and a prominent amber privacy
+      warning + required consent checkbox on the add form per
+      remote-sync.md §3.7 ("I understand the contents of this repo
+      will be readable at the destination"). The checkbox is required
+      on new destinations only — edits keep the original consent so
+      a URL or credential tweak doesn't force a re-ack. Failed pushes
+      show `last_sync_error` inline; successful pushes update
+      `last_sync_at` and the operator sees the green badge without
+      leaving the page. Stays on the existing 1:1-per-repo
+      convention the card UI established — no multi-destination
+      rewrite. No new Go code: `api.syncDestination`,
+      `renderDestSyncBlock`, `formatSyncTime`, and a `.dest-privacy`
+      CSS block are additive in `admin.js` / `admin.css`.
 - [x] **Mirror-sync — manual sync endpoint (slice 2a of mirror-sync).**
       Track A first-fire. New `internal/server/mirror.go`
       `executeMirrorPush` shells out to
