@@ -58,6 +58,22 @@ Feature: Credential vault (admin)
     When I GET "/api/admin/credentials/temp"
     Then the response status should be 404
 
+  Scenario: Expires round-trips on create and list
+    # Pins the contract the admin UI relies on: the date input on
+    # /admin/credentials is just metadata. The server stores whatever
+    # the client sent and replays it verbatim on the next list, so the
+    # "expires in 7 days" amber/red classifier can trust the field.
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/credentials" with body '{"name":"gh-exp","kind":"pat","secret":"ghp_x","expires":"2028-06-15T00:00:00Z"}'
+    Then the response status should be 201
+    And the JSON response "expires" should be "2028-06-15T00:00:00Z"
+
+    When I GET "/api/admin/credentials/gh-exp"
+    Then the response status should be 200
+    And the JSON response "expires" should be "2028-06-15T00:00:00Z"
+
   Scenario: Credentials survive a server restart
     Given the server is running
     And an admin "alice" exists with password "hunter2"

@@ -510,3 +510,9 @@ button.badge:disabled { opacity: 0.5; cursor: default; }
 .dest-privacy label {
   color: #c9d1d9;
 }
+
+/* Expires column on /admin/credentials. Amber within 7 days of the
+   date the admin recorded, red once it's in the past — the UI signal
+   that tells them to rotate before the next mirror push fails. */
+.cred-expiring { color: #e3b341; font-weight: 600; }
+.cred-expired  { color: #f85149; font-weight: 600; }

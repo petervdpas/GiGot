@@ -61,11 +61,6 @@ is schema-aware publishing (records → Azure DevOps wiki, Confluence,
 etc.) which explicitly belongs in Formidable's WikiWonder plugin, not
 here. The items below do not overlap with Track B.
 
-- [ ] **Credential vault — Expires field in the admin UI.** Store and API
-      already accept `expires`; the `/admin/credentials` form and table
-      don't surface it yet. Design doc §3 calls for an input on the form,
-      a column in the list, and a warning when a credential is within 7
-      days of expiring.
 - [ ] **Gateway-trusted identity strategy.** A third `auth.Strategy`
       alongside `TokenStrategy` and `SessionStrategy` that trusts a signed
       identity header forwarded by a fronting gateway (e.g. Azure APIM).
@@ -78,6 +73,24 @@ here. The items below do not overlap with Track B.
 
 Done and shipping:
 
+- [x] **Credential vault — Expires field in the admin UI.** Closes the
+      last UI gap on the vault (design doc §3). The
+      `/admin/credentials` add form gained an optional
+      `<input type="date" name="expires">`; the list table gained an
+      `Expires` column between `Kind` and `Notes`. A small client-side
+      classifier paints the cell red when the date is already past and
+      amber when it's within 7 days, matching the design doc's
+      "warning when a credential is within 7 days of expiring"
+      language — it's advisory only, the server still never refuses to
+      use an expired credential (see design doc §8 on the
+      don't-double-gate decision). The wire shape didn't change:
+      `CredentialView.Expires` was already declared and round-tripped
+      by the store, so no Swagger regen was needed; the form now
+      normalises the date input to UTC midnight before sending it. Tests:
+      handler-level POST-with-expires + PATCH-expires round-trips in
+      `handler_admin_credentials_test.go` (new file), plus a cucumber
+      scenario in `integration/features/credentials.feature` that pins
+      the create→list contract the UI classifier depends on.
 - [x] **Mirror-sync — post-receive worker (slice 2b of mirror-sync).**
       Every accepted client push over `git-receive-pack` now
       automatically fans out to the repo's enabled destinations — no

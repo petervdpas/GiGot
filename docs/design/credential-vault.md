@@ -1,19 +1,18 @@
 # Credential vault
 
 Status: **shipped** (storage + admin API + admin page + §5 destination
-linkage). A generic place to store secrets the server uses on your
-behalf when it talks to outside systems (GitHub, Azure DevOps, Gitea,
-anything future). Written UI-first, because the point of the vault is
-that a normal admin can manage it without knowing the plumbing.
+linkage + §3 Expires UI). A generic place to store secrets the server
+uses on your behalf when it talks to outside systems (GitHub, Azure
+DevOps, Gitea, anything future). Written UI-first, because the point
+of the vault is that a normal admin can manage it without knowing the
+plumbing.
 
 Implementation lives in `internal/credentials/` (store) and
 `internal/server/handler_admin_credentials.go` (REST); destinations
 in `internal/destinations/` and
 `internal/server/handler_admin_destinations.go`. Cucumber coverage in
 `integration/features/credentials.feature` +
-`integration/features/destinations.feature`. The only UI gap still
-open is surfacing the `Expires` field on `/admin/credentials` — see
-the README roadmap.
+`integration/features/destinations.feature`.
 
 ---
 
