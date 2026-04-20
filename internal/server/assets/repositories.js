@@ -63,26 +63,40 @@
     const convertEl = card.querySelector('.convert-formidable-btn');
     if (convertEl) {
       convertEl.addEventListener('click', async () => {
-        if (!confirm('Stamp "' + r.name + '" as a Formidable context? One commit is added on top of HEAD carrying .formidable/context.json. Subsequent writes pick up structured record-merge behaviour.')) return;
+        const ok = await GG.dialog.confirm({
+          title: 'Stamp as Formidable context',
+          message: 'Stamp "' + r.name + '" as a Formidable context?\n\nOne commit is added on top of HEAD carrying .formidable/context.json. Subsequent writes pick up structured record-merge behaviour.',
+          okText: 'Stamp',
+        });
+        if (!ok) return;
         try {
           const res = await api.convertToFormidable(r.name);
           if (!res.stamped) {
-            alert(r.name + ' already carries a valid Formidable marker; no commit was written.');
+            await GG.dialog.alert(
+              'Already stamped',
+              r.name + ' already carries a valid Formidable marker; no commit was written.'
+            );
           }
           await refreshRepos();
         } catch (e) {
-          alert(e.message);
+          await GG.dialog.alert('Stamp failed', e.message);
         }
       });
     }
 
     card.querySelector('.delete-btn').addEventListener('click', async () => {
-      if (!confirm('Delete repo "' + r.name + '"? This is destructive — the bare repo and any attached destinations are dropped.')) return;
+      const ok = await GG.dialog.confirm({
+        title: 'Delete repository',
+        message: 'Delete repo "' + r.name + '"?\n\nThis is destructive — the bare repo and any attached destinations are dropped.',
+        okText: 'Delete',
+        dangerOk: true,
+      });
+      if (!ok) return;
       try {
         await api.deleteRepo(r.name);
         await refreshRepos();
       } catch (e) {
-        alert(e.message);
+        await GG.dialog.alert('Delete failed', e.message);
       }
     });
 
@@ -151,12 +165,18 @@
       renderDestinationEditor(container, repoName, dest);
     });
     container.querySelector('.remove-dest-btn').addEventListener('click', async () => {
-      if (!confirm('Remove mirror destination from "' + repoName + '"?')) return;
+      const ok = await GG.dialog.confirm({
+        title: 'Remove mirror destination',
+        message: 'Remove mirror destination from "' + repoName + '"?',
+        okText: 'Remove',
+        dangerOk: true,
+      });
+      if (!ok) return;
       try {
         await api.deleteDestination(repoName, dest.id);
         await refreshRepos();
       } catch (e) {
-        alert(e.message);
+        await GG.dialog.alert('Remove failed', e.message);
       }
     });
     const toggleBtn = container.querySelector('.enabled-toggle');
@@ -167,7 +187,7 @@
         await refreshRepos();
       } catch (e) {
         toggleBtn.disabled = false;
-        alert(e.message);
+        await GG.dialog.alert('Update failed', e.message);
       }
     });
     const syncBtn = container.querySelector('.sync-dest-btn');

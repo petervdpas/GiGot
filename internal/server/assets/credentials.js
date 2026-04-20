@@ -54,11 +54,31 @@
         '<td class="muted">' + escapeHtml(formatWhen(c.last_used)) + '</td>' +
         '<td><button class="small danger">Delete</button></td>';
       tr.querySelector('button').addEventListener('click', async () => {
-        if (!confirm('Delete credential "' + c.name + '"?')) return;
+        const ok = await GG.dialog.confirm({
+          title: 'Delete credential',
+          message: 'Delete credential "' + c.name + '"? The sealed secret is destroyed — you can\'t recover it from the server.',
+          okText: 'Delete',
+          dangerOk: true,
+        });
+        if (!ok) return;
         try {
           await api.deleteCredential(c.name);
           await refresh();
-        } catch (e) { alert(e.message); }
+        } catch (e) {
+          // 409 means one or more repo destinations still reference
+          // this credential — surface the repo list so the operator
+          // knows where to go clear the references first.
+          if (e.refRepos && e.refRepos.length) {
+            await GG.dialog.alert(
+              'Credential still in use',
+              e.message + '\n\nRepos still referencing this credential:\n  • ' +
+              e.refRepos.join('\n  • ') +
+              '\n\nRetarget or remove those destinations, then try again.'
+            );
+          } else {
+            await GG.dialog.alert('Delete failed', e.message);
+          }
+        }
       });
       return tr;
     }));

@@ -49,17 +49,42 @@ func (s *Server) handleAccountsPage(w http.ResponseWriter, r *http.Request) {
 	s.adminPageHandler(accountsPageTmpl, "/admin/accounts", "/admin/accounts/")(w, r)
 }
 
-// handleRegisterPage serves the self-service register card. Hidden
-// (404) when auth.allow_local is false — same gating as the
-// /api/register POST endpoint, so an operator who disables local
-// login doesn't leave the register page visible.
+// handleRegisterPage serves the self-service register card. When
+// auth.allow_local is false, the backing /api/register endpoint
+// 404s, so the page can't do anything useful — we render a small
+// "registration disabled" card instead of a bare 404 so someone
+// who bookmarked /admin/register gets a human-readable dead-end.
 func (s *Server) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/admin/register" {
 		http.NotFound(w, r)
 		return
 	}
 	if !s.cfg.Auth.AllowLocal {
-		http.NotFound(w, r)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GiGot — Registration disabled</title>
+<link rel="stylesheet" href="/assets/admin.css">
+<script>
+  try {
+    var t = localStorage.getItem('gigot.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) { /* default dark */ }
+</script>
+</head>
+<body>
+<div class="login-wrap card">
+  <img class="logo" src="/assets/gigot.png" alt="GiGot">
+  <div class="brand-name">GiGot</div>
+  <div class="brand-tag">Registration disabled</div>
+  <p class="muted">This server doesn't accept self-service registration. Ask an administrator to create an account for you, or sign in with a configured identity provider.</p>
+  <p class="login-footer"><a href="/admin">Back to sign-in</a></p>
+</div>
+</body>
+</html>`))
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

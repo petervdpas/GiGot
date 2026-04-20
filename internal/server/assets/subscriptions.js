@@ -147,7 +147,13 @@
 
     card.querySelector('.copy-btn').addEventListener('click', e => copyToClipboard(t.token, e.currentTarget));
     card.querySelector('.revoke-btn').addEventListener('click', async () => {
-      if (!confirm('Revoke this key?')) return;
+      const ok = await GG.dialog.confirm({
+        title: 'Revoke subscription key',
+        message: 'Revoke this key? Holder loses access immediately and the key can\'t be restored.',
+        okText: 'Revoke',
+        dangerOk: true,
+      });
+      if (!ok) return;
       await api.revokeToken(t.token);
       refreshTokens();
     });
@@ -158,7 +164,7 @@
         try {
           await api.bindToken(t.token);
           refreshTokens();
-        } catch (e) { alert(e.message); }
+        } catch (e) { GG.dialog.alert('Bind failed', e.message); }
       });
     }
     return card;

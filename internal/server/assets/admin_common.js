@@ -165,7 +165,15 @@
       const r = await fetch('/api/admin/credentials/' + encodeURIComponent(name), {
         method: 'DELETE', credentials: 'same-origin',
       });
-      if (!r.ok) throw new Error('delete failed');
+      if (r.ok) return;
+      // 409 ships { error, ref_repos } — surface both so the caller
+      // can tell the operator which destinations still reference the
+      // credential. Other errors fall back to the raw error field.
+      let body = {};
+      try { body = await r.json(); } catch { /* non-JSON body */ }
+      const err = new Error(body.error || ('delete failed (' + r.status + ')'));
+      if (Array.isArray(body.ref_repos)) err.refRepos = body.ref_repos;
+      throw err;
     },
     async listAccounts() {
       const r = await fetch('/api/admin/accounts', { credentials: 'same-origin' });

@@ -52,7 +52,7 @@
       try {
         await api.patchAccount(a.provider, a.identifier, { role: next });
         refresh();
-      } catch (e) { alert(e.message); }
+      } catch (e) { GG.dialog.alert('Role change failed', e.message); }
     });
     actions.appendChild(flipRoleBtn);
 
@@ -61,12 +61,15 @@
       pwBtn.className = 'small secondary';
       pwBtn.textContent = a.has_password ? 'Reset password' : 'Set password';
       pwBtn.addEventListener('click', async () => {
+        // GG.dialog.prompt isn't ported yet; native prompt() is
+        // unavoidable here until we do. Acceptable because the value
+        // never reaches the DOM — only the API call.
         const pw = prompt('New password for ' + a.identifier + ':');
         if (!pw) return;
         try {
           await api.patchAccount(a.provider, a.identifier, { password: pw });
           refresh();
-        } catch (e) { alert(e.message); }
+        } catch (e) { GG.dialog.alert('Password update failed', e.message); }
       });
       actions.appendChild(pwBtn);
     }
@@ -75,11 +78,17 @@
     delBtn.className = 'small danger';
     delBtn.textContent = 'Delete';
     delBtn.addEventListener('click', async () => {
-      if (!confirm('Delete ' + a.provider + ':' + a.identifier + '? This cannot be undone.')) return;
+      const ok = await GG.dialog.confirm({
+        title: 'Delete account',
+        message: 'Delete ' + a.provider + ':' + a.identifier + '? This cannot be undone.',
+        okText: 'Delete',
+        dangerOk: true,
+      });
+      if (!ok) return;
       try {
         await api.deleteAccount(a.provider, a.identifier);
         refresh();
-      } catch (e) { alert(e.message); }
+      } catch (e) { GG.dialog.alert('Delete failed', e.message); }
     });
     actions.appendChild(delBtn);
 
