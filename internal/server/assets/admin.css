@@ -379,6 +379,19 @@ button.badge {
 button.badge:hover:not(:disabled) { filter: brightness(1.15); }
 button.badge:disabled { opacity: 0.5; cursor: default; }
 
+/* Subscription-count badge on the Accounts page — an <a> rendered as
+ * a chip, pointing at /admin/subscriptions?user=<scoped>. Same
+ * palette as .badge.formidable but underlined on hover so it reads
+ * as a link, not just decoration. */
+a.sub-badge {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent-line);
+  text-decoration: none;
+  cursor: pointer;
+}
+a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
+
 /* Token field inside a subscription-key card — tall enough to wrap the
    full hex, with a small copy button aligned flush-right. */
 .token-field {

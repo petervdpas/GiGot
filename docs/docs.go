@@ -3686,6 +3686,9 @@ const docTemplate = `{
                 },
                 "role": {
                     "type": "string"
+                },
+                "subscription_count": {
+                    "type": "integer"
                 }
             }
         },

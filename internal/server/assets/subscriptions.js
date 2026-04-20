@@ -9,8 +9,28 @@
   let repoInfoCache = [];
   let tokensCache = [];
   let credentialsCache = [];
+  let accountsCache = [];
 
   function repoNames() { return repoInfoCache.map(r => r.name); }
+
+  // accountOption turns a row from /api/admin/accounts into the
+  // { value, label } pair the GG.select picker wants. Value is the
+  // scoped "provider:identifier" string the server's token binding
+  // expects; label is human — display name, identifier, provider in
+  // parens. Keep regulars before admins (admins rarely hold subs but
+  // the server allows it, so we surface them at the bottom).
+  function accountOption(a) {
+    const pretty = a.display_name ? a.display_name + ' — ' + a.identifier : a.identifier;
+    return {
+      value: a.provider + ':' + a.identifier,
+      label: pretty + ' (' + a.provider + (a.role === 'admin' ? ' / admin' : '') + ')',
+    };
+  }
+  function accountOptionsSorted() {
+    const regulars = accountsCache.filter(a => a.role === 'regular').map(accountOption);
+    const admins   = accountsCache.filter(a => a.role === 'admin').map(accountOption);
+    return regulars.concat(admins);
+  }
 
   // ──────────────────────────────────────────────────────────────── pickers
 
@@ -214,12 +234,26 @@
     });
   }
 
+  // userFilter pulls ?user=<scoped> off the URL. When set, the token
+  // grid narrows to rows whose stored username matches (either the
+  // scoped form or, for back-compat, the bare local shorthand).
+  function userFilter() {
+    return (new URLSearchParams(location.search).get('user') || '').toLowerCase();
+  }
+  function tokenMatchesUser(t, scoped) {
+    if (!scoped) return true;
+    const legacyLocal = scoped.startsWith('local:') ? scoped.slice('local:'.length) : null;
+    return t.username === scoped || (legacyLocal && t.username === legacyLocal);
+  }
+
   function renderTokensGrid() {
-    document.getElementById('count').textContent = tokensCache.length;
+    const scoped = userFilter();
+    const visible = scoped ? tokensCache.filter(t => tokenMatchesUser(t, scoped)) : tokensCache;
+    document.getElementById('count').textContent = visible.length;
     const grid = document.getElementById('token-grid');
     const empty = document.getElementById('token-empty');
-    grid.replaceChildren(...tokensCache.map(renderTokenCard));
-    empty.classList.toggle('hidden', tokensCache.length !== 0);
+    grid.replaceChildren(...visible.map(renderTokenCard));
+    empty.classList.toggle('hidden', visible.length !== 0);
   }
 
   async function refreshTokens() {
@@ -232,30 +266,52 @@
     }
   }
 
-  // Full page refresh: repos + tokens + creds. Called on boot and
-  // after issue/revoke/edit so the ability picker, repo picker, and
-  // token grid stay in sync.
+  // Render / re-render the Account picker (GG.select) with current
+  // accountsCache. Preserves whatever scoped value was selected.
+  function renderAccountPicker(selectedValue) {
+    const host = document.getElementById('issue-account-host');
+    if (!host) return;
+    const opts = accountOptionsSorted();
+    const value = selectedValue && opts.some(o => o.value === selectedValue)
+      ? selectedValue
+      : (opts[0] ? opts[0].value : '');
+    host.innerHTML = GG.select.html({
+      name: 'username',
+      value,
+      options: opts.length
+        ? opts
+        : [{ value: '', label: 'No accounts yet — register or create one first', disabled: true }],
+    });
+    GG.select.initAll(host);
+  }
+
+  // Full page refresh: repos + tokens + creds + accounts. Called on
+  // boot and after issue/revoke/edit so every picker stays in sync.
   async function refreshAll() {
     try {
-      const [repoData, tokenData, credData] = await Promise.all([
+      const [repoData, tokenData, credData, acctData] = await Promise.all([
         api.listRepos().catch(() => ({ repos: [] })),
         api.listTokens().catch(() => ({ tokens: [] })),
         api.listCredentials().catch(() => ({ credentials: [] })),
+        api.listAccounts().catch(() => ({ accounts: [] })),
       ]);
       repoInfoCache = repoData.repos || [];
       tokensCache = tokenData.tokens || [];
       credentialsCache = credData.credentials || [];
+      accountsCache = acctData.accounts || [];
       renderTokensGrid();
       renderRepoPicker(document.getElementById('issue-repos'), []);
       syncIssueAbilities();
 
-      // Pre-select repo from ?repo=<name> if the admin arrived here
-      // via the "+ Issue key" button on a repo card.
-      const preselect = new URLSearchParams(location.search).get('repo');
-      if (preselect && repoNames().includes(preselect)) {
-        renderRepoPicker(document.getElementById('issue-repos'), [preselect]);
-        const u = document.querySelector('#issue-form [name="username"]');
-        if (u) u.focus();
+      // ?user= pre-selects the account picker. ?repo= pre-ticks the
+      // repo picker. Both live behind the same "I arrived via a link
+      // on another page" pattern, so they coexist cleanly.
+      const params = new URLSearchParams(location.search);
+      const preUser = params.get('user');
+      renderAccountPicker(preUser || '');
+      const preRepo = params.get('repo');
+      if (preRepo && repoNames().includes(preRepo)) {
+        renderRepoPicker(document.getElementById('issue-repos'), [preRepo]);
       }
     } catch (e) {
       console.error(e);
@@ -274,12 +330,23 @@
       msg.textContent = '';
       const repos = selectedReposFromPicker(document.getElementById('issue-repos'));
       const abilities = selectedAbilitiesFromPicker(document.getElementById('issue-abilities'));
+      // Read the picker's hidden input — GG.select projects its value
+      // onto an <input name="username"> inside the host span.
+      const usernameEl = document.querySelector('#issue-account-host input[name="username"]');
+      const scoped = usernameEl ? usernameEl.value : '';
+      if (!scoped) {
+        msg.textContent = 'Pick an account to issue the key to.';
+        msg.className = 'error';
+        return;
+      }
       try {
-        const t = await api.issueToken(f.username.value, repos, abilities);
+        const t = await api.issueToken(scoped, repos, abilities);
         msg.textContent = 'Issued: ' + t.token;
-        f.reset();
+        // Reset the repo + ability pickers but leave the account
+        // picker alone — issuing several keys for the same holder is
+        // a common pattern and retyping would be annoying.
         renderRepoPicker(document.getElementById('issue-repos'), []);
-        refreshTokens();
+        refreshAll();
       } catch (ex) {
         msg.textContent = ex.message;
         msg.className = 'error';

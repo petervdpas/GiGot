@@ -26,7 +26,10 @@
         <div class="card">
           <h2>Issue subscription key</h2>
           <form id="issue-form" class="row issue-form-row">
-            <input name="username" placeholder="Client username" required>
+            <div>
+              <div class="muted issue-repos-label">Account this key is issued to:</div>
+              <span id="issue-account-host"></span>
+            </div>
             <div>
               <div class="muted issue-repos-label">Repos this key can access:</div>
               <div id="issue-repos" class="repo-picker"></div>

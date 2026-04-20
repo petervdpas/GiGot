@@ -4,14 +4,18 @@ import "time"
 
 // AccountView is the wire-format account returned on list / get /
 // create / update responses. PasswordHash is intentionally omitted —
-// it never leaves the server.
+// it never leaves the server. SubscriptionCount lets the accounts
+// console show, per row, how many active subscription keys point at
+// this account (see docs/design/accounts.md §6); 0 renders as a
+// muted dash in the UI.
 type AccountView struct {
-	Provider    string    `json:"provider"`
-	Identifier  string    `json:"identifier"`
-	Role        string    `json:"role"`
-	DisplayName string    `json:"display_name,omitempty"`
-	HasPassword bool      `json:"has_password"`
-	CreatedAt   time.Time `json:"created_at"`
+	Provider          string    `json:"provider"`
+	Identifier        string    `json:"identifier"`
+	Role              string    `json:"role"`
+	DisplayName       string    `json:"display_name,omitempty"`
+	HasPassword       bool      `json:"has_password"`
+	SubscriptionCount int       `json:"subscription_count"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 // AccountListResponse is the body of GET /api/admin/accounts.

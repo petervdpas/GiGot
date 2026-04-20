@@ -185,6 +185,58 @@ func TestAdminAccounts_Delete(t *testing.T) {
 	}
 }
 
+// TestAdminAccounts_SubscriptionCount covers the count the Accounts
+// page uses to render its "Subscriptions" column. Scoped tokens
+// (github:peter) and the legacy bare shorthand (local shorthand
+// "alice") both land on their matching account — counts come out
+// right for both forms, and admins with no subs show 0.
+func TestAdminAccounts_SubscriptionCount(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	// Two accounts to count against.
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider: accounts.ProviderLocal, Identifier: "bob", Role: accounts.RoleRegular,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider: accounts.ProviderGitHub, Identifier: "peter", Role: accounts.RoleRegular,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Three tokens: two for bob (one scoped, one legacy), one for peter.
+	if _, err := srv.tokenStrategy.Issue("local:bob", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.tokenStrategy.Issue("bob", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.tokenStrategy.Issue("github:peter", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := do(t, srv, http.MethodGet, "/api/admin/accounts", nil, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	var list AccountListResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &list)
+
+	counts := map[string]int{}
+	for _, a := range list.Accounts {
+		counts[a.Provider+":"+a.Identifier] = a.SubscriptionCount
+	}
+	if counts["local:bob"] != 2 {
+		t.Errorf("local:bob sub count = %d, want 2 (scoped + legacy)", counts["local:bob"])
+	}
+	if counts["github:peter"] != 1 {
+		t.Errorf("github:peter sub count = %d, want 1", counts["github:peter"])
+	}
+	// alice (seeded by adminTestServer) has no tokens; must report 0.
+	if counts["local:alice"] != 0 {
+		t.Errorf("local:alice sub count = %d, want 0", counts["local:alice"])
+	}
+}
+
 func TestAdminAccounts_DeleteRefusesLastAdmin(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	_ = srv.accounts.Remove(accounts.ProviderLocal, "admin")

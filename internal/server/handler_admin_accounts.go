@@ -12,7 +12,10 @@ import (
 // accountView projects a stored Account onto its wire shape. Password
 // hash is never shipped — HasPassword is the only leak, and it's
 // deliberate: the admin UI needs to know whether a local account is
-// "activated" (can log in) or still dormant.
+// "activated" (can log in) or still dormant. The free-function form
+// is kept for paths that don't have Server (tests, one-off POST
+// responses); it leaves SubscriptionCount=0. Call s.accountView when
+// you want the count populated.
 func accountView(a accounts.Account) AccountView {
 	return AccountView{
 		Provider:    a.Provider,
@@ -22,6 +25,37 @@ func accountView(a accounts.Account) AccountView {
 		HasPassword: a.PasswordHash != "",
 		CreatedAt:   a.CreatedAt,
 	}
+}
+
+// accountView (method form) returns the same view with
+// SubscriptionCount populated from the current token store. Walks
+// every token entry — O(n·m) where n=tokens, m=accounts-in-response.
+// At the scale these stores run (tens of tokens, tens of accounts)
+// that's fine; if a future deployment pushes either dimension into
+// thousands, swap to a single pass that builds a username→count
+// map once per request.
+func (s *Server) accountView(a accounts.Account) AccountView {
+	v := accountView(a)
+	v.SubscriptionCount = s.countSubscriptionsFor(a.Provider, a.Identifier)
+	return v
+}
+
+// countSubscriptionsFor counts token entries whose Username resolves
+// to (provider, identifier). Handles both storage shapes: scoped
+// "provider:identifier" (post-Phase-3) and bare "identifier" (legacy
+// local, accounts.md §6 back-compat).
+func (s *Server) countSubscriptionsFor(provider, identifier string) int {
+	n := 0
+	for _, e := range s.tokenStrategy.List() {
+		p, id, err := parseTokenUsername(e.Username)
+		if err != nil {
+			continue
+		}
+		if p == provider && id == identifier {
+			n++
+		}
+	}
+	return n
 }
 
 // splitAccountsPath pulls {provider}/{identifier} out of
@@ -115,7 +149,7 @@ func (s *Server) adminListAccounts(w http.ResponseWriter, _ *http.Request) {
 	items := s.accounts.List()
 	views := make([]AccountView, 0, len(items))
 	for _, a := range items {
-		views = append(views, accountView(*a))
+		views = append(views, s.accountView(*a))
 	}
 	writeJSON(w, http.StatusOK, AccountListResponse{
 		Accounts: views,
@@ -163,7 +197,7 @@ func (s *Server) adminCreateAccount(w http.ResponseWriter, r *http.Request) {
 			stored = refreshed
 		}
 	}
-	writeJSON(w, http.StatusCreated, accountView(*stored))
+	writeJSON(w, http.StatusCreated, s.accountView(*stored))
 }
 
 func (s *Server) adminUpdateAccount(w http.ResponseWriter, r *http.Request, provider, identifier string) {
@@ -232,7 +266,7 @@ func (s *Server) adminUpdateAccount(w http.ResponseWriter, r *http.Request, prov
 		}
 	}
 
-	writeJSON(w, http.StatusOK, accountView(*updated))
+	writeJSON(w, http.StatusOK, s.accountView(*updated))
 }
 
 func (s *Server) adminDeleteAccount(w http.ResponseWriter, _ *http.Request, provider, identifier string) {

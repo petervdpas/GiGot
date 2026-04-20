@@ -62,6 +62,50 @@ func TestIssueTokenInvalidBody(t *testing.T) {
 	}
 }
 
+// TestIssueToken_ScopedProvider locks down the Phase-3 scoped-username
+// shape: "github:peter" resolves to (github, peter) and succeeds when
+// the account exists under that provider. Bare "peter" still means
+// (local, peter) for back-compat. Cross-provider collisions are
+// isolated — local:alice and github:alice don't shadow each other.
+func TestIssueToken_ScopedProvider(t *testing.T) {
+	srv := testServer(t)
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider: accounts.ProviderGitHub, Identifier: "peter", Role: accounts.RoleRegular,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"username":"github:peter"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(payload))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("scoped username should succeed, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body TokenResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	if body.Username != "github:peter" {
+		t.Fatalf("token echoed username=%q, want scoped form preserved", body.Username)
+	}
+}
+
+func TestIssueToken_ScopedRejectsUnknownProviderAccount(t *testing.T) {
+	srv := testServer(t)
+	// local:peter exists but github:peter does not — scoped form must
+	// check the exact provider, not fall back.
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider: accounts.ProviderLocal, Identifier: "peter", Role: accounts.RoleRegular,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"username":"github:peter"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(payload))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("scoped miss should 400, got %d", rec.Code)
+	}
+}
+
 // TestIssueToken_RejectsUnknownAccount locks down the Phase 2 rule:
 // an admin issuing a token for a username with no matching account is
 // rejected outright. Phase 1's permissive auto-create is gone — callers

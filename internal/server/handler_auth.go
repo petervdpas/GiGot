@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/petervdpas/GiGot/internal/accounts"
 )
@@ -78,22 +80,54 @@ func (s *Server) issueToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ensureAccountForToken enforces the subscription-to-account binding
-// for /api/auth/token and /api/admin/tokens. The "bare username"
-// shorthand resolves to (provider=local, identifier=username) — the
-// only form Phase 2 supports; see docs/design/accounts.md §6.
+// parseTokenUsername resolves the TokenRequest.Username string into
+// (provider, identifier). Accepts two shapes:
 //
-// Phase 2 tightens the rule: no permissive auto-create. If no account
-// exists, we reject with a 400 that points the caller at the two
-// legitimate ways to create one (self-service /register, or admin
-// creation via POST /api/admin/accounts). This is the deliberate
-// follow-up to Phase 1's back-compat window — tokens are now always
-// bound to a row that somebody explicitly provisioned.
+//   - scoped   "provider:identifier"   — e.g. "github:petervdpas",
+//     "entra:<oid>", "local:alice". Introduced in Phase 3 so OAuth
+//     accounts can hold subscription keys; see accounts.md §6.
+//   - bare     "identifier"            — resolves to (local,
+//     identifier), back-compat for callers (integration tests,
+//     Postman collection, CLI demos) that were written before the
+//     accounts model.
+//
+// Empty string is caller error and surfaces as 400.
+func parseTokenUsername(s string) (provider, identifier string, err error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", "", fmt.Errorf("username is required")
+	}
+	// If the part before the first ":" names a known provider, treat
+	// it as scoped. Otherwise the colon is just a legal character in
+	// the identifier (rare but OIDC subs can contain anything) and
+	// we fall back to the bare-string → local shorthand.
+	if i := strings.IndexByte(s, ':'); i > 0 {
+		head := strings.ToLower(s[:i])
+		if slices.Contains(accounts.KnownProviders, head) {
+			id := strings.ToLower(strings.TrimSpace(s[i+1:]))
+			if id == "" {
+				return "", "", fmt.Errorf("identifier is required after %q:", head)
+			}
+			return head, id, nil
+		}
+	}
+	return accounts.ProviderLocal, strings.ToLower(s), nil
+}
+
+// ensureAccountForToken enforces the subscription-to-account binding
+// for /api/auth/token and /api/admin/tokens. The username is parsed
+// via parseTokenUsername, and the resolved (provider, identifier)
+// must already exist in the accounts store — no permissive
+// auto-create (Phase 2 retired that). See accounts.md §6.
 func (s *Server) ensureAccountForToken(username string) error {
-	if s.accounts.Has(accounts.ProviderLocal, username) {
+	provider, identifier, err := parseTokenUsername(username)
+	if err != nil {
+		return err
+	}
+	if s.accounts.Has(provider, identifier) {
 		return nil
 	}
-	return fmt.Errorf("no local account for %q — register via /register or create one via POST /api/admin/accounts before issuing a token", username)
+	return fmt.Errorf("no %s account for %q — register via /register or create one via POST /api/admin/accounts before issuing a token", provider, identifier)
 }
 
 func (s *Server) revokeToken(w http.ResponseWriter, r *http.Request) {

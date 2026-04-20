@@ -32,6 +32,14 @@
 
   function renderRow(a) {
     const tr = document.createElement('tr');
+    // Subscription cell: click-through to /admin/subscriptions filtered
+    // by this account. Zero → muted dash (nothing to click).
+    const subsCell = a.subscription_count > 0
+      ? '<a class="badge sub-badge" href="/admin/subscriptions?user=' +
+          encodeURIComponent(a.provider + ':' + a.identifier) + '">' +
+          a.subscription_count + ' key' + (a.subscription_count === 1 ? '' : 's') +
+        '</a>'
+      : '<span class="muted">—</span>';
     tr.innerHTML =
       '<td><code>' + escapeHtml(a.provider) + '</code></td>' +
       '<td><code>' + escapeHtml(a.identifier) + '</code></td>' +
@@ -39,6 +47,7 @@
       '<td><span class="badge ' + (a.role === 'admin' ? 'formidable' : '') + '">' +
         escapeHtml(a.role) + '</span></td>' +
       '<td>' + (a.has_password ? 'yes' : '<span class="muted">dormant</span>') + '</td>' +
+      '<td>' + subsCell + '</td>' +
       '<td class="muted">' + escapeHtml((a.created_at || '').slice(0, 10)) + '</td>' +
       '<td class="row-actions"></td>';
 

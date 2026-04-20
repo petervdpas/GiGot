@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -199,15 +200,19 @@ func (s *Server) adminListTokens(w http.ResponseWriter, _ *http.Request) {
 	entries := s.tokenStrategy.List()
 	items := make([]TokenListItem, 0, len(entries))
 	for _, e := range entries {
+		// HasAccount flags tokens whose stored username resolves to a
+		// live account. Scoped form ("github:peter") is normal; the
+		// bare form ("alice") is the back-compat shorthand for
+		// (local, alice). Either way, a false flag triggers the "Bind"
+		// action on the subscriptions UI.
+		provider, identifier, perr := parseTokenUsername(e.Username)
+		has := perr == nil && s.accounts.Has(provider, identifier)
 		items = append(items, TokenListItem{
-			Token:     e.Token,
-			Username:  e.Username,
-			Repos:     e.Repos,
-			Abilities: e.Abilities,
-			// HasAccount flags the tokens whose username pre-dates the
-			// accounts model (§6 back-compat). The subscriptions UI uses
-			// this to show a "Bind" action on legacy rows.
-			HasAccount: s.accounts.Has(accounts.ProviderLocal, e.Username),
+			Token:      e.Token,
+			Username:   e.Username,
+			Repos:      e.Repos,
+			Abilities:  e.Abilities,
+			HasAccount: has,
 		})
 	}
 	writeJSON(w, http.StatusOK, TokenListResponse{
@@ -254,15 +259,30 @@ func (s *Server) handleAdminBindToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "token not found")
 		return
 	}
-	if acc, err := s.accounts.Get(accounts.ProviderLocal, entry.Username); err == nil {
+	provider, identifier, err := parseTokenUsername(entry.Username)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if acc, err := s.accounts.Get(provider, identifier); err == nil {
 		// Already bound — return the existing account so the UI can
 		// refresh without branching.
-		writeJSON(w, http.StatusOK, accountView(*acc))
+		writeJSON(w, http.StatusOK, s.accountView(*acc))
+		return
+	}
+	// Bind only creates local accounts — non-local tokens can't be
+	// legacy in practice (OAuth accounts are always registered via
+	// the callback that mints the token's account in the first place).
+	// Guard the invariant so a future scoped "github:..." token that
+	// somehow lost its account row doesn't silently get a bogus row.
+	if provider != accounts.ProviderLocal {
+		writeError(w, http.StatusBadRequest,
+			fmt.Sprintf("can only bind local accounts; %q has provider %q — re-register via the OAuth flow", entry.Username, provider))
 		return
 	}
 	stored, err := s.accounts.Put(accounts.Account{
 		Provider:   accounts.ProviderLocal,
-		Identifier: entry.Username,
+		Identifier: identifier,
 		Role:       accounts.RoleRegular,
 	})
 	if err != nil {
@@ -270,7 +290,7 @@ func (s *Server) handleAdminBindToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("server: bound legacy token (user=%q) to new regular account", entry.Username)
-	writeJSON(w, http.StatusOK, accountView(*stored))
+	writeJSON(w, http.StatusOK, s.accountView(*stored))
 }
 
 // handleAdminSession godoc

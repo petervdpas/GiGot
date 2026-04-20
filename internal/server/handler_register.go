@@ -88,5 +88,5 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		stored = refreshed
 	}
-	writeJSON(w, http.StatusCreated, accountView(*stored))
+	writeJSON(w, http.StatusCreated, s.accountView(*stored))
 }
