@@ -551,6 +551,83 @@ func TestEnsureFormidableShape_AppendsToExistingGitignore(t *testing.T) {
 	}
 }
 
+// TestEnsureFormidableGitignore_AutofixOnExistingFormidableRepo proves
+// the post-write self-heal hook: a Formidable-first repo that predates
+// the .gitignore fix gets the entry injected on the next REST write
+// without the user doing anything.
+func TestEnsureFormidableGitignore_AutofixOnExistingFormidableRepo(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("autofix-exists")
+	seedFile(t, srv, "autofix-exists", "README.md", "hi\n", "seed readme")
+	seedFile(t, srv, "autofix-exists", "templates/basic.yaml", "name: Basic\n", "seed tpl")
+	seedFile(t, srv, "autofix-exists", "storage/.gitkeep", "", "seed storage")
+	seedFile(t, srv, "autofix-exists", formidableMarkerPath,
+		`{"version":1,"scaffolded_by":"gigot","scaffolded_at":"2024-01-01T00:00:00Z"}`+"\n",
+		"seed marker")
+
+	sha, err := ensureFormidableGitignore(srv.git, "autofix-exists", time.Now())
+	if err != nil {
+		t.Fatalf("autofix: %v", err)
+	}
+	if sha == "" {
+		t.Fatal("expected autofix to advance HEAD; got empty sha")
+	}
+	f, err := srv.git.File("autofix-exists", "", gitignorePath)
+	if err != nil {
+		t.Fatalf("gitignore should exist after autofix: %v", err)
+	}
+	raw, _ := base64.StdEncoding.DecodeString(f.ContentB64)
+	if !gitignoreHasEntry(raw, gitignoreLedgerEntry) {
+		t.Errorf("autofix left .gitignore without the ledger entry; got:\n%s", raw)
+	}
+}
+
+// TestEnsureFormidableGitignore_SkipsNonFormidableRepo proves the
+// narrow-scope guard: a repo without a valid Formidable marker is not
+// a formidable-able target, so autofix does nothing. Without this
+// guard a plain repo would accidentally gain a .gitignore on its next
+// write — silent conversion.
+func TestEnsureFormidableGitignore_SkipsNonFormidableRepo(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("autofix-plain")
+	seedFile(t, srv, "autofix-plain", "README.md", "hi\n", "seed readme")
+
+	sha, err := ensureFormidableGitignore(srv.git, "autofix-plain", time.Now())
+	if err != nil {
+		t.Fatalf("autofix: %v", err)
+	}
+	if sha != "" {
+		t.Errorf("expected no-op on non-Formidable repo; got sha %q", sha)
+	}
+	if _, err := srv.git.File("autofix-plain", "", gitignorePath); err == nil {
+		t.Error(".gitignore should not have been added to a non-Formidable repo")
+	}
+}
+
+// TestEnsureFormidableGitignore_NoopWhenEntryPresent — idempotent path.
+func TestEnsureFormidableGitignore_NoopWhenEntryPresent(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("autofix-noop")
+	seedFile(t, srv, "autofix-noop", formidableMarkerPath,
+		`{"version":1,"scaffolded_by":"gigot","scaffolded_at":"2024-01-01T00:00:00Z"}`+"\n",
+		"seed marker")
+	seedFile(t, srv, "autofix-noop", gitignorePath,
+		gitignoreLedgerEntry+"\n", "seed gitignore")
+	before, _ := srv.git.Head("autofix-noop")
+
+	sha, err := ensureFormidableGitignore(srv.git, "autofix-noop", time.Now())
+	if err != nil {
+		t.Fatalf("autofix: %v", err)
+	}
+	if sha != "" {
+		t.Errorf("expected no-op when entry present; got sha %q", sha)
+	}
+	after, _ := srv.git.Head("autofix-noop")
+	if after.Version != before.Version {
+		t.Error("HEAD must not advance when .gitignore already has the entry")
+	}
+}
+
 // TestEnsureFormidableShape_SkipsGitignoreWhenEntryPresent proves the
 // "don't spam commits" half: when the .gitignore already lists the
 // ledger entry, ensure does not add or rewrite it — no-op for that

@@ -223,6 +223,83 @@ func ensureFormidableShape(git *gitmanager.Manager, name string, scaffoldedAt ti
 	return added, nil
 }
 
+// ensureFormidableGitignore is the narrow self-heal hook fired after
+// every successful REST write on a Formidable-first repo. Brings just
+// the .gitignore file into compliance — it either lacks the
+// .formidable/sync.json entry or is missing entirely — and leaves
+// everything else untouched. Deliberately narrower than
+// ensureFormidableShape: we never re-inject a deleted template or
+// storage placeholder via this path, because that would silently
+// reverse a user's intentional deletion. .gitignore, by contrast, is
+// scoped to "ensure teammates using git CLI can't leak local client
+// state" — it's infrastructure, not user content, so resisting its
+// disappearance is the right behaviour.
+//
+// No-op for non-Formidable repos (no valid marker on HEAD). Returns
+// ("", nil) when nothing needed doing, otherwise the new HEAD SHA.
+func ensureFormidableGitignore(git *gitmanager.Manager, name string, scaffoldedAt time.Time) (string, error) {
+	// Gate on the marker — non-Formidable repos stay untouched.
+	markerFile, err := git.File(name, "", formidableMarkerPath)
+	if err != nil {
+		if errors.Is(err, gitmanager.ErrPathNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	markerRaw, decodeErr := base64.StdEncoding.DecodeString(markerFile.ContentB64)
+	if decodeErr != nil || !isValidFormidableMarker(markerRaw) {
+		return "", nil
+	}
+
+	// Read the current .gitignore — missing is fine, we'll create it.
+	var existing []byte
+	giFile, ferr := git.File(name, "", gitignorePath)
+	if ferr == nil {
+		if raw, derr := base64.StdEncoding.DecodeString(giFile.ContentB64); derr == nil {
+			existing = raw
+		}
+	} else if !errors.Is(ferr, gitmanager.ErrPathNotFound) {
+		return "", ferr
+	}
+	if gitignoreHasEntry(existing, gitignoreLedgerEntry) {
+		return "", nil
+	}
+
+	var body []byte
+	if len(existing) == 0 {
+		scaffoldFiles, sErr := formidableScaffoldFiles(scaffoldedAt)
+		if sErr != nil {
+			return "", sErr
+		}
+		for _, f := range scaffoldFiles {
+			if f.Path == gitignorePath {
+				body = f.Content
+				break
+			}
+		}
+		if body == nil {
+			return "", errors.New("scaffold is missing " + gitignorePath)
+		}
+	} else {
+		body = appendGitignoreEntry(existing, gitignoreLedgerEntry)
+	}
+
+	res, err := git.WriteFile(name, gitmanager.WriteOptions{
+		ParentVersion:  "HEAD",
+		Path:           gitignorePath,
+		Content:        body,
+		AuthorName:     scaffoldCommitterName,
+		AuthorEmail:    scaffoldCommitterEmail,
+		CommitterName:  scaffoldCommitterName,
+		CommitterEmail: scaffoldCommitterEmail,
+		Message:        "Autofix: add " + gitignoreLedgerEntry + " to .gitignore",
+	})
+	if err != nil {
+		return "", err
+	}
+	return res.Version, nil
+}
+
 // gitignoreHasEntry reports whether body already lists entry on its own
 // line. Leading/trailing whitespace is tolerated; comments are not
 // matched (a line starting with `#` is a comment in .gitignore syntax

@@ -84,6 +84,28 @@ Feature: Config-driven marker provisioning (server.formidable_first)
     And the repository "clone-optin" has 2 commits
     And the repository "clone-optin" contains file ".formidable/context.json"
 
+  Scenario: REST commit on a Formidable repo auto-fixes a missing .gitignore
+    # Simulates a repo where .gitignore somehow got deleted — same
+    # shape as a repo created before the .gitignore scaffold change.
+    # The user's next Sync (POST /commits) must self-heal it so
+    # teammates using git CLI can't commit local ledger state.
+    Given the server is running in formidable-first mode
+    When I POST "/api/repos" with body '{"name":"autofix-sync","scaffold_formidable":true}'
+    Then the response status should be 201
+    And the repository "autofix-sync" contains file ".gitignore"
+    # Delete .gitignore to simulate a legacy-shaped Formidable repo.
+    When I GET "/api/repos/autofix-sync/head"
+    And I save the JSON response "version" as "head1"
+    And I POST "/api/repos/autofix-sync/commits" with body '{"parent_version":"${head1}","message":"drop gitignore","changes":[{"op":"delete","path":".gitignore"}]}'
+    Then the response status should be 200
+    # Any subsequent REST write must bring .gitignore back automatically.
+    When I GET "/api/repos/autofix-sync/head"
+    And I save the JSON response "version" as "head2"
+    And I POST "/api/repos/autofix-sync/commits" with body '{"parent_version":"${head2}","message":"sync a record","changes":[{"op":"put","path":"storage/basic/r.meta.json","content_b64":"e30K"}]}'
+    Then the response status should be 200
+    And the repository "autofix-sync" contains file ".gitignore"
+    And the repository "autofix-sync" file ".gitignore" contains ".formidable/sync.json"
+
   Scenario: Convert a plain repo to a Formidable context (formidable_first mode)
     Given the server is running in formidable-first mode
     And an admin "alice" exists with password "hunter2"

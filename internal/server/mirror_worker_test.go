@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -380,6 +381,47 @@ func TestHandleRepoCommits_FansOutToMirror(t *testing.T) {
 	defer mu.Unlock()
 	if len(called) != 1 {
 		t.Fatalf("expected mirror fan-out to fire exactly once after POST /commits, got %d call(s)", len(called))
+	}
+}
+
+// TestHandleRepoCommits_AutofixesGitignoreOnFormidableRepo — end-to-end
+// proof that a Formidable-first repo missing the .gitignore ledger
+// entry gets auto-fixed on the next REST write. Closes the gap for
+// repos that predate the .gitignore scaffold change: users don't have
+// to run a migration; their next Sync self-heals.
+func TestHandleRepoCommits_AutofixesGitignoreOnFormidableRepo(t *testing.T) {
+	srv := mirrorWorkerTestServer(t, "autofix-commits")
+	// Seed a Formidable-first repo WITHOUT .gitignore — simulates a
+	// repo created before the .gitignore scaffold change landed.
+	seedFile(t, srv, "autofix-commits", "README.md", "hi\n", "seed readme")
+	seedFile(t, srv, "autofix-commits", "templates/basic.yaml", "name: Basic\n", "seed tpl")
+	seedFile(t, srv, "autofix-commits", "storage/.gitkeep", "", "seed storage")
+	seedFile(t, srv, "autofix-commits", formidableMarkerPath,
+		`{"version":1,"scaffolded_by":"gigot","scaffolded_at":"2024-01-01T00:00:00Z"}`+"\n",
+		"seed marker")
+	headInfo, _ := srv.git.Head("autofix-commits")
+	parent := headInfo.Version
+
+	body := `{"parent_version":"` + parent + `","message":"formidable push","changes":[` +
+		`{"op":"put","path":"storage/basic/r.meta.json","content_b64":"e30="}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/repos/autofix-commits/commits",
+		strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// After the user's commit, .gitignore must exist on HEAD with the
+	// ledger entry — even though the user never pushed it.
+	f, err := srv.git.File("autofix-commits", "", gitignorePath)
+	if err != nil {
+		t.Fatalf("gitignore should exist after autofix; got: %v", err)
+	}
+	raw, _ := base64.StdEncoding.DecodeString(f.ContentB64)
+	if !gitignoreHasEntry(raw, gitignoreLedgerEntry) {
+		t.Errorf("autofix left .gitignore without ledger entry; got:\n%s", raw)
 	}
 }
 

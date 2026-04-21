@@ -355,6 +355,11 @@ func (s *Server) handleRepoFilePut(w http.ResponseWriter, r *http.Request) {
 	if s.mirrorWorker != nil {
 		s.mirrorWorker.enqueue(name)
 	}
+	// Self-heal .gitignore on Formidable-first repos so existing repos
+	// created before this fix landed still protect teammates from
+	// accidentally committing .formidable/sync.json via git CLI.
+	// Best-effort — any error is logged, never propagated to the user.
+	s.autofixFormidableGitignore(r, name)
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -551,6 +556,9 @@ func (s *Server) handleRepoCommits(w http.ResponseWriter, r *http.Request) {
 	if s.mirrorWorker != nil {
 		s.mirrorWorker.enqueue(name)
 	}
+	// Self-heal .gitignore on Formidable-first repos — see
+	// handleRepoFilePut for the rationale.
+	s.autofixFormidableGitignore(r, name)
 	writeJSON(w, http.StatusOK, res)
 }
 

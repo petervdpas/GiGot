@@ -3,6 +3,7 @@ package server
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/petervdpas/GiGot/internal/auth"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
@@ -41,5 +42,32 @@ func auditActor(r *http.Request) gitmanager.AuditActor {
 func (s *Server) appendAudit(name string, event gitmanager.AuditEvent) {
 	if _, err := s.git.AppendAudit(name, event); err != nil {
 		log.Printf("audit: append failed on repo %q (type=%s): %v", name, event.Type, err)
+	}
+}
+
+// autofixFormidableGitignore is the post-write self-heal hook for
+// Formidable-first repos. Runs ensureFormidableGitignore (narrow to the
+// .gitignore file only), and when it advances HEAD, audits the new
+// commit as file_put with a "(autofix)" note + re-enqueues the mirror
+// worker so the fix travels to GitHub with the user's own push. All
+// errors are logged, never surfaced — the user's original write has
+// already succeeded by the time this runs.
+func (s *Server) autofixFormidableGitignore(r *http.Request, name string) {
+	newVersion, err := ensureFormidableGitignore(s.git, name, time.Now())
+	if err != nil {
+		log.Printf("autofix gitignore: repo %q: %v", name, err)
+		return
+	}
+	if newVersion == "" {
+		return
+	}
+	s.appendAudit(name, gitmanager.AuditEvent{
+		Type:  AuditTypeFilePut,
+		Actor: auditActor(r),
+		SHA:   newVersion,
+		Notes: gitignorePath + " (autofix)",
+	})
+	if s.mirrorWorker != nil {
+		s.mirrorWorker.enqueue(name)
 	}
 }
