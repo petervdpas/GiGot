@@ -64,22 +64,33 @@ func (m *Manager) Changes(name, since string) (ChangesInfo, error) {
 		return ChangesInfo{}, ErrStaleParent
 	}
 
-	// diff-tree --raw -z yields NUL-separated records of the form
-	//   ":<old-mode> <new-mode> <old-sha> <new-sha> <status>\0<path>\0"
-	// which is unambiguous even for paths with spaces or newlines.
-	cmd := exec.Command("git", "-C", repoPath, "diff-tree",
-		"--raw", "-r", "-z", "--no-commit-id", from, head.Version)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
-		return ChangesInfo{}, fmt.Errorf("diff-tree: %s: %w", strings.TrimSpace(stderr.String()), err)
-	}
-
-	entries, err := parseDiffTreeZ(stdout.Bytes())
+	entries, err := diffTreeChanges(repoPath, from, head.Version)
 	if err != nil {
 		return ChangesInfo{}, err
 	}
 	return ChangesInfo{From: from, To: head.Version, Changes: entries}, nil
+}
+
+// diffTreeChanges runs `git diff-tree --raw -z -r --no-commit-id from to`
+// and parses the NUL-delimited output into ChangeEntry values. Shared by
+// the /changes endpoint and the post-commit file list we attach to
+// WriteResult / CommitResult (design: structured-sync-api.md §3.7). An
+// empty `from` switches to `--root` so the initial commit reports every
+// path as added.
+func diffTreeChanges(repoPath, from, to string) ([]ChangeEntry, error) {
+	args := []string{"-C", repoPath, "diff-tree", "--raw", "-r", "-z", "--no-commit-id"}
+	if from == "" {
+		args = append(args, "--root", to)
+	} else {
+		args = append(args, from, to)
+	}
+	cmd := exec.Command("git", args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("diff-tree: %s: %w", strings.TrimSpace(stderr.String()), err)
+	}
+	return parseDiffTreeZ(stdout.Bytes())
 }
 
 // parseDiffTreeZ walks the NUL-separated output of `git diff-tree --raw -z`.

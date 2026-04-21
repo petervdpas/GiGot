@@ -43,10 +43,11 @@ type CommitOptions struct {
 // CommitResult describes a successful atomic commit. Shape mirrors
 // WriteResult so the wire format is consistent between PUT and POST.
 type CommitResult struct {
-	Version     string `json:"version"`
-	MergedFrom  string `json:"merged_from,omitempty"`
-	MergedWith  string `json:"merged_with,omitempty"`
-	FastForward bool   `json:"-"`
+	Version     string        `json:"version"`
+	MergedFrom  string        `json:"merged_from,omitempty"`
+	MergedWith  string        `json:"merged_with,omitempty"`
+	Changes     []ChangeEntry `json:"changes,omitempty"`
+	FastForward bool          `json:"-"`
 }
 
 // CommitConflictError carries the full set of per-path conflicts for a
@@ -134,7 +135,12 @@ func (m *Manager) Commit(name string, opts CommitOptions) (CommitResult, error) 
 
 		if parent == head.Version {
 			if err := updateRefCAS(repoPath, head.DefaultBranch, clientCommit, head.Version); err == nil {
-				return CommitResult{Version: clientCommit, FastForward: true}, nil
+				changes, _ := diffTreeChanges(repoPath, parent, clientCommit)
+				return CommitResult{
+					Version:     clientCommit,
+					FastForward: true,
+					Changes:     changes,
+				}, nil
 			}
 			continue
 		}
@@ -170,10 +176,16 @@ func (m *Manager) Commit(name string, opts CommitOptions) (CommitResult, error) 
 			return CommitResult{}, fmt.Errorf("merge commit-tree: %w", err)
 		}
 		if err := updateRefCAS(repoPath, head.DefaultBranch, mergeCommit, head.Version); err == nil {
+			// Diff against HEAD, not our client commit — the merge
+			// reconciles both sides, and the client ledger needs to
+			// know what landed on the branch (authoritative post-merge
+			// blob SHAs) rather than what we originally sent.
+			changes, _ := diffTreeChanges(repoPath, head.Version, mergeCommit)
 			return CommitResult{
 				Version:    mergeCommit,
 				MergedFrom: parent,
 				MergedWith: head.Version,
+				Changes:    changes,
 			}, nil
 		}
 	}

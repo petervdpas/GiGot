@@ -3711,6 +3711,12 @@ const docTemplate = `{
         "git.CommitResult": {
             "type": "object",
             "properties": {
+                "changes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/git.ChangeEntry"
+                    }
+                },
                 "merged_from": {
                     "type": "string"
                 },
@@ -3820,6 +3826,12 @@ const docTemplate = `{
         "git.WriteResult": {
             "type": "object",
             "properties": {
+                "changes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/git.ChangeEntry"
+                    }
+                },
                 "merged_from": {
                     "type": "string"
                 },

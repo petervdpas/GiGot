@@ -36,6 +36,24 @@ Feature: Tamper-evident audit trail on refs/audit/main
     And the audit ref in repo "audit-commit" has 2 entries
     And the top audit event in repo "audit-commit" has type "commit"
 
+  Scenario: Clone back-fills one audit entry per upstream commit
+    Given the server is running
+    And a local git source "src-audit" exists
+    When I POST "/api/repos" with body '{"name":"audit-clone","source_url":"${src-audit}"}'
+    Then the response status should be 201
+    # Source has 1 upstream commit (README) → 1 backfill entry + 1 repo_create = 2.
+    And the audit ref in repo "audit-clone" has 2 entries
+    And the top audit event in repo "audit-clone" has type "repo_create"
+
+  Scenario: Scaffold-only creation does not back-fill the seed commit
+    Given the server is running in formidable-first mode
+    When I POST "/api/repos" with body '{"name":"audit-scaf","scaffold_formidable":true}'
+    Then the response status should be 201
+    # Scaffold seed commit is server-internal — no back-fill entry for it.
+    # Only the repo_create entry lands.
+    And the audit ref in repo "audit-scaf" has 1 entries
+    And the top audit event in repo "audit-scaf" has type "repo_create"
+
   Scenario: A client push via smart-HTTP emits a push_received audit entry
     Given the server is running
     When I POST "/api/repos" with body '{"name":"audit-push"}'

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -149,6 +150,15 @@ func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {
 		if err := s.git.CloneBare(req.Name, req.SourceURL); err != nil {
 			writeError(w, http.StatusConflict, err.Error())
 			return
+		}
+		// Back-fill refs/audit/main with the upstream commit history
+		// BEFORE the optional stamp step so only user-authored upstream
+		// commits appear in the back-fill. Any marker-stamp commit that
+		// follows is server-internal (like scaffold) and deliberately
+		// not represented in the audit chain — the repo_create entry's
+		// notes already say "stamped as Formidable context".
+		if _, err := s.git.SeedAuditFromHistory(req.Name); err != nil {
+			log.Printf("audit: backfill on repo %q failed: %v", req.Name, err)
 		}
 	} else {
 		if err := s.git.InitBare(req.Name); err != nil {

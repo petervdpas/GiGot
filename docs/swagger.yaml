@@ -122,6 +122,10 @@ definitions:
     type: object
   git.CommitResult:
     properties:
+      changes:
+        items:
+          $ref: '#/definitions/git.ChangeEntry'
+        type: array
       merged_from:
         type: string
       merged_with:
@@ -192,6 +196,10 @@ definitions:
     type: object
   git.WriteResult:
     properties:
+      changes:
+        items:
+          $ref: '#/definitions/git.ChangeEntry'
+        type: array
       merged_from:
         type: string
       merged_with:

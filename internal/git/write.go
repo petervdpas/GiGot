@@ -43,12 +43,18 @@ func (e *WriteConflictError) Error() string {
 	return "write conflict on " + e.Conflict.Path
 }
 
-// WriteResult describes a successful single-file write.
+// WriteResult describes a successful single-file write. Changes always
+// has exactly one entry (the written path) so consumers can share code
+// with the multi-file commit response shape and the /changes endpoint.
+// See design/structured-sync-api.md §3.7 for the ChangeEntry contract —
+// clients use this to maintain a local ledger of "what version is each
+// path at" without having to re-fetch /tree after every write.
 type WriteResult struct {
-	Version     string `json:"version"`
-	MergedFrom  string `json:"merged_from,omitempty"`
-	MergedWith  string `json:"merged_with,omitempty"`
-	FastForward bool   `json:"-"`
+	Version     string        `json:"version"`
+	MergedFrom  string        `json:"merged_from,omitempty"`
+	MergedWith  string        `json:"merged_with,omitempty"`
+	Changes     []ChangeEntry `json:"changes,omitempty"`
+	FastForward bool          `json:"-"`
 }
 
 // WriteOptions carries the client-supplied pieces of a PUT /files/{path}
@@ -146,7 +152,12 @@ func (m *Manager) WriteFile(name string, opts WriteOptions) (WriteResult, error)
 		if parent == head.Version {
 			err := updateRefCAS(repoPath, head.DefaultBranch, clientCommit, head.Version)
 			if err == nil {
-				return WriteResult{Version: clientCommit, FastForward: true}, nil
+				changes, _ := diffTreeChanges(repoPath, parent, clientCommit)
+				return WriteResult{
+					Version:     clientCommit,
+					FastForward: true,
+					Changes:     changes,
+				}, nil
 			}
 			continue // lost the CAS race — someone advanced HEAD
 		}
@@ -190,10 +201,16 @@ func (m *Manager) WriteFile(name string, opts WriteOptions) (WriteResult, error)
 			return WriteResult{}, fmt.Errorf("merge commit-tree: %w", err)
 		}
 		if err := updateRefCAS(repoPath, head.DefaultBranch, mergeCommit, head.Version); err == nil {
+			// Diff against HEAD (the ancestor we merged onto), not
+			// our client commit — the merge commit's tree reconciles
+			// both sides, and the client ledger needs to know what
+			// landed on the branch, not what we originally sent.
+			changes, _ := diffTreeChanges(repoPath, head.Version, mergeCommit)
 			return WriteResult{
 				Version:    mergeCommit,
 				MergedFrom: parent,
 				MergedWith: head.Version,
+				Changes:    changes,
 			}, nil
 		}
 		// CAS lost again — loop and re-evaluate against the new HEAD.
@@ -373,3 +390,4 @@ func maybeB64(b []byte) string {
 	}
 	return base64.StdEncoding.EncodeToString(b)
 }
+

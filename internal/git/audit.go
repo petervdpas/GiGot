@@ -157,3 +157,112 @@ func auditCommitMessage(e AuditEvent) string {
 	}
 	return "audit: " + e.Type
 }
+
+// SeedAuditFromHistory walks the default-branch commit log oldest-first
+// and writes one synthetic `commit` audit entry per commit. Only runs
+// when the repo's audit ref is empty — existing audit history is never
+// modified. Closes the back-fill gap for repos that arrive with commits
+// already in place (imported via `source_url` clone, migrated from a
+// pre-audit layout, or bulk-pushed over git-receive-pack before the
+// first GiGot-authored write).
+//
+// Back-fill entries carry Actor.Provider="backfill" so readers can
+// tell them apart from real-time events. The server's commit identity
+// still authors each audit commit, preserving tamper evidence.
+//
+// Returns the number of entries written. An empty-repo target yields 0
+// entries with no error — nothing to seed, nothing to fail.
+func (m *Manager) SeedAuditFromHistory(name string) (int, error) {
+	if !m.Exists(name) {
+		return 0, fmt.Errorf("repository %q does not exist", name)
+	}
+	head, err := m.AuditHead(name)
+	if err != nil {
+		return 0, err
+	}
+	if head != "" {
+		// Already populated — back-fill would duplicate entries.
+		return 0, nil
+	}
+
+	hi, err := m.Head(name)
+	if err != nil {
+		if err == ErrRepoEmpty {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	repoPath := m.RepoPath(name)
+	// `--reverse` emits oldest-first so the audit chain's parent links
+	// follow git's topological order. Fields: SHA | author name |
+	// author date (RFC3339) | subject.
+	cmd := exec.Command("git", "-C", repoPath, "log",
+		"--reverse",
+		"--format=%H|%an|%aI|%s",
+		hi.Version,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("git log: %w", err)
+	}
+
+	count := 0
+	for _, line := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		sha := parts[0]
+		author := parts[1]
+		dateStr := parts[2]
+		subject := parts[3]
+
+		ts, err := time.Parse(time.RFC3339, dateStr)
+		if err != nil {
+			ts = time.Now().UTC()
+		}
+
+		event := AuditEvent{
+			Time: ts,
+			Type: "commit",
+			Actor: AuditActor{
+				Username: author,
+				Provider: "backfill",
+			},
+			SHA:   sha,
+			Notes: subject,
+		}
+		if _, err := m.AppendAudit(name, event); err != nil {
+			return count, fmt.Errorf("append audit for %s: %w", sha, err)
+		}
+		count++
+	}
+	return count, nil
+}
+
+// BackfillAuditForAll walks every repo under the manager's root and seeds
+// the audit ref from git history for any repo whose audit ref is empty
+// but whose main branch has commits. Idempotent: repos with existing
+// audit history are skipped. Failures are collected and joined so one
+// bad repo doesn't abort the rest.
+func (m *Manager) BackfillAuditForAll() error {
+	names, err := m.List()
+	if err != nil {
+		return fmt.Errorf("list repos: %w", err)
+	}
+	var failures []string
+	for _, name := range names {
+		if _, err := m.SeedAuditFromHistory(name); err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", name, err))
+		}
+	}
+	if len(failures) > 0 {
+		return fmt.Errorf("backfill failed on %d repo(s): %s",
+			len(failures), strings.Join(failures, "; "))
+	}
+	return nil
+}

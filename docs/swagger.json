@@ -3705,6 +3705,12 @@
         "git.CommitResult": {
             "type": "object",
             "properties": {
+                "changes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/git.ChangeEntry"
+                    }
+                },
                 "merged_from": {
                     "type": "string"
                 },
@@ -3814,6 +3820,12 @@
         "git.WriteResult": {
             "type": "object",
             "properties": {
+                "changes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/git.ChangeEntry"
+                    }
+                },
                 "merged_from": {
                     "type": "string"
                 },

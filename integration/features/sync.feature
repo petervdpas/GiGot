@@ -144,6 +144,18 @@ Feature: Structured sync API
     Then the response status should be 200
     And the response body should contain "\"version\":\""
 
+  Scenario: File write returns changes[] with the touched path and new blob
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"put-ch","scaffold_formidable":true}'
+    And I GET "/api/repos/put-ch/head"
+    And I save the JSON response "version" as "head"
+    When I PUT "/api/repos/put-ch/files/templates/basic.yaml" with body '{"parent_version":"${head}","content_b64":"bmV3Cg=="}'
+    Then the response status should be 200
+    And the response body should contain "\"changes\":["
+    And the response body should contain "\"path\":\"templates/basic.yaml\""
+    And the response body should contain "\"op\":\"modified\""
+    And the response body should contain "\"blob\":\""
+
   Scenario: File write auto-merges when parent is a strict ancestor of HEAD
     Given the server is running
     And I POST "/api/repos" with body '{"name":"put-am","scaffold_formidable":true}'
@@ -206,6 +218,19 @@ Feature: Structured sync API
     And I POST "/api/repos" with body '{"name":"c-badver","scaffold_formidable":true}'
     When I POST "/api/repos/c-badver/commits" with body '{"parent_version":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","changes":[{"op":"put","path":"a","content_b64":"eA=="}]}'
     Then the response status should be 422
+
+  Scenario: Multi-file commit returns changes[] listing every touched path with its op
+    Given the server is running
+    And I POST "/api/repos" with body '{"name":"c-changes","scaffold_formidable":true}'
+    And I GET "/api/repos/c-changes/head"
+    And I save the JSON response "version" as "head"
+    When I POST "/api/repos/c-changes/commits" with body '{"parent_version":"${head}","message":"mixed ops","changes":[{"op":"delete","path":"templates/basic.yaml"},{"op":"put","path":"templates/new.yaml","content_b64":"bmV3Cg=="}]}'
+    Then the response status should be 200
+    And the response body should contain "\"changes\":["
+    And the response body should contain "\"path\":\"templates/basic.yaml\""
+    And the response body should contain "\"op\":\"deleted\""
+    And the response body should contain "\"path\":\"templates/new.yaml\""
+    And the response body should contain "\"op\":\"added\""
 
   Scenario: Multi-file rename produces exactly one commit
     Given the server is running

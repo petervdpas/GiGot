@@ -252,6 +252,13 @@ func New(cfg *config.Config) *Server {
 	if err := s.git.EnsureAuditGuards(); err != nil {
 		log.Printf("server: EnsureAuditGuards: %v", err)
 	}
+	// Back-fill refs/audit/main for any repo that has commits but an
+	// empty audit ref — closes the gap for repos that existed before
+	// audit was enabled or were cloned in before the backfill-on-create
+	// path landed. Idempotent: repos with audit history are skipped.
+	if err := s.git.BackfillAuditForAll(); err != nil {
+		log.Printf("server: BackfillAuditForAll: %v", err)
+	}
 	s.routes()
 	return s
 }
