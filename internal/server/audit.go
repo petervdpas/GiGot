@@ -46,20 +46,23 @@ func (s *Server) appendAudit(name string, event gitmanager.AuditEvent) {
 }
 
 // autofixFormidableGitignore is the post-write self-heal hook for
-// Formidable-first repos. Runs ensureFormidableGitignore (narrow to the
-// .gitignore file only), and when it advances HEAD, audits the new
-// commit as file_put with a "(autofix)" note + re-enqueues the mirror
-// worker so the fix travels to GitHub with the user's own push. All
-// errors are logged, never surfaced — the user's original write has
-// already succeeded by the time this runs.
-func (s *Server) autofixFormidableGitignore(r *http.Request, name string) {
+// Formidable-first repos. Runs ensureFormidableGitignore (narrow to
+// the .gitignore file only) and audits the new commit on success.
+// Returns true when a fix commit actually landed so the caller can
+// decide whether to also enqueue the mirror worker — handlers that
+// aren't themselves triggering a push (POST /commits, PUT /files)
+// want that enqueue, while handlers that are already pushing
+// (Sync-now) don't, because syncOnce will carry the new commit to
+// the mirror anyway. All errors are logged, never surfaced — the
+// user's original write has already succeeded by the time this runs.
+func (s *Server) autofixFormidableGitignore(r *http.Request, name string) bool {
 	newVersion, err := ensureFormidableGitignore(s.git, name, time.Now())
 	if err != nil {
 		log.Printf("autofix gitignore: repo %q: %v", name, err)
-		return
+		return false
 	}
 	if newVersion == "" {
-		return
+		return false
 	}
 	s.appendAudit(name, gitmanager.AuditEvent{
 		Type:  AuditTypeFilePut,
@@ -67,7 +70,5 @@ func (s *Server) autofixFormidableGitignore(r *http.Request, name string) {
 		SHA:   newVersion,
 		Notes: gitignorePath + " (autofix)",
 	})
-	if s.mirrorWorker != nil {
-		s.mirrorWorker.enqueue(name)
-	}
+	return true
 }

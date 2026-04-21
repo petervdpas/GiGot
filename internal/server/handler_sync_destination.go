@@ -72,6 +72,13 @@ func (s *Server) syncDestination(w http.ResponseWriter, r *http.Request, repo, i
 		return
 	}
 
+	// Autofix .gitignore before the mirror push so any self-heal commit
+	// rides along. No-op for non-Formidable repos and for repos whose
+	// .gitignore already lists the ledger entry. Matches the post-write
+	// autofix wired on POST /commits and PUT /files — the Sync-now
+	// button becomes a single "bring this repo into shape and push" gesture.
+	s.autofixFormidableGitignore(r, repo)
+
 	updated, err := s.syncOnce(r.Context(), repo, dest, cred)
 	if err != nil {
 		// Push may have succeeded at the remote, but we couldn't record

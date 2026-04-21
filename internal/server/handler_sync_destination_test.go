@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -289,6 +290,62 @@ func TestSyncDestination_MissingDestinationReturns404(t *testing.T) {
 		"/api/admin/repos/addresses/destinations/does-not-exist/sync", nil, sess)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("sync with unknown id want 404, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestSyncDestination_AutofixesGitignoreOnFormidableRepo — clicking
+// Sync-now on a Formidable-first repo that's missing .gitignore must
+// self-heal before the mirror push so the fix travels with whatever
+// else is on master. Same rationale as the REST-commit autofix — the
+// admin Sync-now button becomes a single "bring this repo into shape
+// and push" gesture.
+func TestSyncDestination_AutofixesGitignoreOnFormidableRepo(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	if err := srv.git.InitBare("autofix-admin-sync"); err != nil {
+		t.Fatal(err)
+	}
+	// Seed a Formidable-first repo WITHOUT .gitignore.
+	seedFile(t, srv, "autofix-admin-sync", "README.md", "hi\n", "seed readme")
+	seedFile(t, srv, "autofix-admin-sync", "templates/basic.yaml", "name: Basic\n", "seed tpl")
+	seedFile(t, srv, "autofix-admin-sync", "storage/.gitkeep", "", "seed storage")
+	seedFile(t, srv, "autofix-admin-sync", formidableMarkerPath,
+		`{"version":1,"scaffolded_by":"gigot","scaffolded_at":"2024-01-01T00:00:00Z"}`+"\n",
+		"seed marker")
+
+	var calls []pushCall
+	srv.pushDest = stubPush(&calls, []byte("ok"), nil)
+
+	rec := do(t, srv, http.MethodPost, "/api/admin/repos/autofix-admin-sync/destinations",
+		map[string]any{
+			"url":             "https://target.example/x.git",
+			"credential_name": "github-personal",
+		}, sess)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create dest want 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var created DestinationView
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sync-now — expect .gitignore to be added as a fresh commit
+	// BEFORE the mirror push fires.
+	rec = do(t, srv, http.MethodPost,
+		"/api/admin/repos/autofix-admin-sync/destinations/"+created.ID+"/sync", nil, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("sync want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	f, err := srv.git.File("autofix-admin-sync", "", gitignorePath)
+	if err != nil {
+		t.Fatalf(".gitignore should exist after Sync-now autofix; got: %v", err)
+	}
+	raw, _ := base64.StdEncoding.DecodeString(f.ContentB64)
+	if !gitignoreHasEntry(raw, gitignoreLedgerEntry) {
+		t.Errorf(".gitignore after autofix missing ledger entry; got:\n%s", raw)
+	}
+	if len(calls) != 1 {
+		t.Errorf("expected exactly one mirror push AFTER autofix, got %d", len(calls))
 	}
 }
 
