@@ -102,6 +102,11 @@ Feature: Config-driven marker provisioning (server.formidable_first)
     # not just stamped with a marker.
     And the repository "to-convert" contains file "templates/basic.yaml"
     And the repository "to-convert" contains file "storage/.gitkeep"
+    # And a .gitignore entry that keeps local client state (.formidable/sync.json)
+    # out of commits made via git CLI — matches the Formidable walker
+    # exclusion so both surfaces agree.
+    And the repository "to-convert" contains file ".gitignore"
+    And the repository "to-convert" file ".gitignore" contains ".formidable/sync.json"
     And the top audit event in repo "to-convert" has type "repo_convert_formidable"
 
   Scenario: Converting an already-Formidable repo is idempotent

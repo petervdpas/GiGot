@@ -348,6 +348,13 @@ func (s *Server) handleRepoFilePut(w http.ResponseWriter, r *http.Request) {
 		SHA:   res.Version,
 		Notes: filePath,
 	})
+	// REST writes need the same mirror fan-out as git-receive-pack, or
+	// a Formidable push via the structured-sync-api never reaches any
+	// configured destination (GitHub, Azure DevOps, …). Worker is
+	// optional so tests that want deterministic behavior can nil it.
+	if s.mirrorWorker != nil {
+		s.mirrorWorker.enqueue(name)
+	}
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -539,6 +546,11 @@ func (s *Server) handleRepoCommits(w http.ResponseWriter, r *http.Request) {
 		Actor: auditActor(r),
 		SHA:   res.Version,
 	})
+	// REST writes need the same mirror fan-out as git-receive-pack.
+	// See the matching call in handleRepoFilePut for the rationale.
+	if s.mirrorWorker != nil {
+		s.mirrorWorker.enqueue(name)
+	}
 	writeJSON(w, http.StatusOK, res)
 }
 

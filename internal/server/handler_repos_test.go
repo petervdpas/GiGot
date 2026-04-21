@@ -575,8 +575,12 @@ func seedCloneSourceWithFullFormidable(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, "storage", ".gitkeep"), nil, 0644); err != nil {
 		t.Fatalf("write storage/.gitkeep: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"),
+		[]byte(".formidable/sync.json\n"), 0644); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
+	}
 	cmds := [][]string{
-		{"-C", dir, "add", "templates", "storage"},
+		{"-C", dir, "add", "templates", "storage", ".gitignore"},
 		{"-C", dir, "commit", "-m", "add formidable layout"},
 	}
 	for _, args := range cmds {

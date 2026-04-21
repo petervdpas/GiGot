@@ -385,6 +385,22 @@ func (tc *testContext) theRepositoryContainsFile(repo, file string) error {
 	return fmt.Errorf("repo %q does not contain %q (tree: %s)", repo, file, string(out))
 }
 
+// theRepositoryFileContains reads HEAD:file from the named repo and
+// checks that the body contains the given substring. Kept substring-
+// based (not regex) because the common case is asserting a literal
+// marker/path — regex is over-scoped for scenario readability.
+func (tc *testContext) theRepositoryFileContains(repo, file, want string) error {
+	path := tc.git.RepoPath(repo)
+	out, err := exec.Command("git", "-C", path, "show", "HEAD:"+file).Output()
+	if err != nil {
+		return fmt.Errorf("show HEAD:%s in %q: %w", file, repo, err)
+	}
+	if !strings.Contains(string(out), want) {
+		return fmt.Errorf("file %q in %q does not contain %q; got:\n%s", file, repo, want, string(out))
+	}
+	return nil
+}
+
 func (tc *testContext) theRepositoryFileIsJSONWithField(repo, file, key, want string) error {
 	path := tc.git.RepoPath(repo)
 	out, err := exec.Command("git", "-C", path, "show", "HEAD:"+file).Output()
@@ -1346,6 +1362,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the repository "([^"]*)" contains file "([^"]*)"$`, tc.theRepositoryContainsFile)
 	ctx.Step(`^the repository "([^"]*)" does not contain file "([^"]*)"$`, tc.theRepositoryDoesNotContainFile)
 	ctx.Step(`^the repository "([^"]*)" file "([^"]*)" is valid JSON with field "([^"]*)" equal to "([^"]*)"$`, tc.theRepositoryFileIsJSONWithField)
+	ctx.Step(`^the repository "([^"]*)" file "([^"]*)" contains "([^"]*)"$`, tc.theRepositoryFileContains)
 	ctx.Step(`^the repository "([^"]*)" head commit is authored by "([^"]*)"$`, tc.theRepositoryHeadCommitAuthor)
 	ctx.Step(`^I put a record "([^"]*)" in repo "([^"]*)" with data '([^']*)' updated "([^"]*)" and parent "([^"]*)"$`, tc.iPutARecord)
 	ctx.Step(`^I put a record "([^"]*)" in repo "([^"]*)" with data '([^']*)' created "([^"]*)" updated "([^"]*)" and parent "([^"]*)"$`, tc.iPutARecordWithCreated)

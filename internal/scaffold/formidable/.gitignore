@@ -1,0 +1,5 @@
+# Local Formidable client state — never shared across clones.
+# Each Formidable user keeps their own ledger of "what did I last sync"
+# at this path; committing it would cause one user's local state to
+# silently overwrite another's on the next pull.
+.formidable/sync.json

@@ -293,7 +293,7 @@ func TestEnsureFormidableShape_AddsAllWhenOnlyReadme(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
-	want := []string{formidableMarkerPath, "templates/basic.yaml", "storage/.gitkeep"}
+	want := []string{formidableMarkerPath, "templates/basic.yaml", "storage/.gitkeep", gitignorePath}
 	if len(added) != len(want) {
 		t.Fatalf("added: want %v, got %v", want, added)
 	}
@@ -380,6 +380,8 @@ func TestEnsureFormidableShape_AlreadyCompleteIsNoop(t *testing.T) {
 	seedFile(t, srv, "shape-complete", formidableMarkerPath,
 		`{"version":1,"scaffolded_by":"gigot","scaffolded_at":"2024-01-01T00:00:00Z"}`+"\n",
 		"seed marker")
+	seedFile(t, srv, "shape-complete", gitignorePath,
+		gitignoreLedgerEntry+"\n", "seed gitignore")
 	before, _ := srv.git.Head("shape-complete")
 
 	added, err := ensureFormidableShape(srv.git, "shape-complete", time.Now())
@@ -423,4 +425,153 @@ func contains(xs []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// ── .gitignore hygiene — unit coverage for the helpers ────────────
+
+func TestGitignoreHasEntry(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"exact match on own line", ".formidable/sync.json\n", true},
+		{"with leading whitespace", "  .formidable/sync.json  \n", true},
+		{"in middle of file", "*.tmp\n.formidable/sync.json\n*.log\n", true},
+		{"missing entirely", "*.tmp\n*.log\n", false},
+		{"only as comment — not a rule", "# .formidable/sync.json\n", false},
+		{"empty file", "", false},
+		{"prefix-of-other-line is not a match", ".formidable/sync.jsonx\n", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := gitignoreHasEntry([]byte(c.body), ".formidable/sync.json")
+			if got != c.want {
+				t.Errorf("gitignoreHasEntry(%q) = %v, want %v", c.body, got, c.want)
+			}
+		})
+	}
+}
+
+func TestAppendGitignoreEntry(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{
+			name: "empty file gets a clean entry line",
+			in:   "",
+			want: ".formidable/sync.json\n",
+		},
+		{
+			name: "existing newline-terminated body — append cleanly",
+			in:   "*.tmp\n",
+			want: "*.tmp\n.formidable/sync.json\n",
+		},
+		{
+			name: "body missing trailing newline — insert one",
+			in:   "*.tmp",
+			want: "*.tmp\n.formidable/sync.json\n",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := appendGitignoreEntry([]byte(c.in), ".formidable/sync.json")
+			if string(got) != c.want {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// ── .gitignore hygiene — integration with ensureFormidableShape ────
+
+// TestEnsureFormidableShape_AddsGitignoreWhenMissing proves a repo that
+// has everything else but no .gitignore gets one scaffolded. Covers the
+// "convert" path: an existing plain repo that already has templates/ and
+// storage/ still needs .gitignore to protect against accidental
+// commits of .formidable/sync.json via git CLI.
+func TestEnsureFormidableShape_AddsGitignoreWhenMissing(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("shape-nogi")
+	seedFile(t, srv, "shape-nogi", "README.md", "hi\n", "seed readme")
+	seedFile(t, srv, "shape-nogi", "templates/basic.yaml", "name: Basic\n", "seed tpl")
+	seedFile(t, srv, "shape-nogi", "storage/.gitkeep", "", "seed storage")
+	seedFile(t, srv, "shape-nogi", formidableMarkerPath,
+		`{"version":1,"scaffolded_by":"gigot","scaffolded_at":"2024-01-01T00:00:00Z"}`+"\n",
+		"seed marker")
+
+	added, err := ensureFormidableShape(srv.git, "shape-nogi", time.Now())
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if !contains(added, gitignorePath) {
+		t.Fatalf("expected %q in added list %v", gitignorePath, added)
+	}
+	f, err := srv.git.File("shape-nogi", "", gitignorePath)
+	if err != nil {
+		t.Fatalf("gitignore should exist at HEAD after ensure: %v", err)
+	}
+	raw, _ := base64.StdEncoding.DecodeString(f.ContentB64)
+	if !gitignoreHasEntry(raw, gitignoreLedgerEntry) {
+		t.Errorf("new .gitignore should list %q; got:\n%s", gitignoreLedgerEntry, raw)
+	}
+}
+
+// TestEnsureFormidableShape_AppendsToExistingGitignore proves the
+// "preserve user content" half: a repo whose .gitignore already lists
+// other patterns gets only the missing ledger line appended — never a
+// wholesale overwrite.
+func TestEnsureFormidableShape_AppendsToExistingGitignore(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("shape-gi-preserve")
+	seedFile(t, srv, "shape-gi-preserve", "README.md", "hi\n", "seed readme")
+	seedFile(t, srv, "shape-gi-preserve", "templates/basic.yaml", "name: Basic\n", "seed tpl")
+	seedFile(t, srv, "shape-gi-preserve", "storage/.gitkeep", "", "seed storage")
+	seedFile(t, srv, "shape-gi-preserve", formidableMarkerPath,
+		`{"version":1,"scaffolded_by":"gigot","scaffolded_at":"2024-01-01T00:00:00Z"}`+"\n",
+		"seed marker")
+	existing := "*.tmp\nnode_modules/\n"
+	seedFile(t, srv, "shape-gi-preserve", gitignorePath, existing, "seed custom gitignore")
+
+	added, err := ensureFormidableShape(srv.git, "shape-gi-preserve", time.Now())
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if !contains(added, gitignorePath) {
+		t.Fatalf("expected %q in added list %v (entry was missing)", gitignorePath, added)
+	}
+	f, _ := srv.git.File("shape-gi-preserve", "", gitignorePath)
+	raw, _ := base64.StdEncoding.DecodeString(f.ContentB64)
+	got := string(raw)
+	if !strings.Contains(got, "*.tmp") || !strings.Contains(got, "node_modules/") {
+		t.Errorf("existing entries lost; got:\n%s", got)
+	}
+	if !gitignoreHasEntry(raw, gitignoreLedgerEntry) {
+		t.Errorf("ledger entry not appended; got:\n%s", got)
+	}
+}
+
+// TestEnsureFormidableShape_SkipsGitignoreWhenEntryPresent proves the
+// "don't spam commits" half: when the .gitignore already lists the
+// ledger entry, ensure does not add or rewrite it — no-op for that
+// file even if other shape pieces are missing.
+func TestEnsureFormidableShape_SkipsGitignoreWhenEntryPresent(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("shape-gi-present")
+	seedFile(t, srv, "shape-gi-present", "README.md", "hi\n", "seed readme")
+	seedFile(t, srv, "shape-gi-present", "templates/basic.yaml", "name: Basic\n", "seed tpl")
+	seedFile(t, srv, "shape-gi-present", "storage/.gitkeep", "", "seed storage")
+	seedFile(t, srv, "shape-gi-present", formidableMarkerPath,
+		`{"version":1,"scaffolded_by":"gigot","scaffolded_at":"2024-01-01T00:00:00Z"}`+"\n",
+		"seed marker")
+	seedFile(t, srv, "shape-gi-present", gitignorePath,
+		"*.tmp\n"+gitignoreLedgerEntry+"\n", "seed gitignore with entry")
+
+	added, err := ensureFormidableShape(srv.git, "shape-gi-present", time.Now())
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if contains(added, gitignorePath) {
+		t.Errorf(".gitignore should not be added when entry is already present; added=%v", added)
+	}
 }

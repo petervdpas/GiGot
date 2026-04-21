@@ -22,6 +22,14 @@ const (
 	scaffoldCommitterEmail = scaffold.CommitterEmail
 	scaffoldCommitMessage  = scaffold.CommitMessage
 	markerStampMessage     = scaffold.MarkerMessage
+
+	gitignorePath = ".gitignore"
+	// gitignoreLedgerEntry is the single line every Formidable-first repo
+	// must have in .gitignore so a teammate using git CLI can't
+	// accidentally commit their local .formidable/sync.json. Kept in
+	// sync with the walker exclusion in controls/gigotManager.js on the
+	// Formidable side — both paths (REST and git CLI) must agree.
+	gitignoreLedgerEntry = ".formidable/sync.json"
 )
 
 func formidableScaffoldFiles(scaffoldedAt time.Time) ([]gitmanager.ScaffoldFile, error) {
@@ -104,6 +112,8 @@ func ensureFormidableShape(git *gitmanager.Manager, name string, scaffoldedAt ti
 	hasMarker := false
 	hasTemplates := false
 	hasStorage := false
+	var existingGitignore []byte
+	hasGitignoreEntry := false
 	for _, e := range tree.Files {
 		switch {
 		case e.Path == formidableMarkerPath:
@@ -113,6 +123,13 @@ func ensureFormidableShape(git *gitmanager.Manager, name string, scaffoldedAt ti
 			if f, ferr := git.File(name, "", formidableMarkerPath); ferr == nil {
 				if raw, derr := base64.StdEncoding.DecodeString(f.ContentB64); derr == nil && isValidFormidableMarker(raw) {
 					hasMarker = true
+				}
+			}
+		case e.Path == gitignorePath:
+			if f, ferr := git.File(name, "", gitignorePath); ferr == nil {
+				if raw, derr := base64.StdEncoding.DecodeString(f.ContentB64); derr == nil {
+					existingGitignore = raw
+					hasGitignoreEntry = gitignoreHasEntry(raw, gitignoreLedgerEntry)
 				}
 			}
 		case strings.HasPrefix(e.Path, "templates/"):
@@ -168,6 +185,24 @@ func ensureFormidableShape(git *gitmanager.Manager, name string, scaffoldedAt ti
 			return nil, aerr
 		}
 	}
+	if !hasGitignoreEntry {
+		var body []byte
+		if len(existingGitignore) == 0 {
+			// File missing entirely — drop in the scaffolded default.
+			body = scaffoldByPath[gitignorePath]
+			if body == nil {
+				return nil, errors.New("scaffold is missing " + gitignorePath)
+			}
+		} else {
+			// File exists but doesn't list the ledger — append the
+			// line, preserving whatever the user already has.
+			body = appendGitignoreEntry(existingGitignore, gitignoreLedgerEntry)
+		}
+		changes = append(changes, gitmanager.Change{
+			Op: gitmanager.OpPut, Path: gitignorePath, Content: body,
+		})
+		added = append(added, gitignorePath)
+	}
 
 	if len(changes) == 0 {
 		return nil, nil
@@ -186,4 +221,35 @@ func ensureFormidableShape(git *gitmanager.Manager, name string, scaffoldedAt ti
 		return nil, err
 	}
 	return added, nil
+}
+
+// gitignoreHasEntry reports whether body already lists entry on its own
+// line. Leading/trailing whitespace is tolerated; comments are not
+// matched (a line starting with `#` is a comment in .gitignore syntax
+// and never an ignore rule).
+func gitignoreHasEntry(body []byte, entry string) bool {
+	for _, line := range strings.Split(string(body), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if trimmed == entry {
+			return true
+		}
+	}
+	return false
+}
+
+// appendGitignoreEntry returns body with entry appended on its own line,
+// preserving the caller's existing content. A missing trailing newline
+// is added before the new entry so the file stays POSIX-clean.
+func appendGitignoreEntry(body []byte, entry string) []byte {
+	out := make([]byte, 0, len(body)+len(entry)+2)
+	out = append(out, body...)
+	if len(out) > 0 && out[len(out)-1] != '\n' {
+		out = append(out, '\n')
+	}
+	out = append(out, entry...)
+	out = append(out, '\n')
+	return out
 }

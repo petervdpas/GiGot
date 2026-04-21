@@ -3,6 +3,9 @@ package server
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -324,4 +327,101 @@ func TestMirrorWorker_EnqueueIsNonBlockingWhenQueueFull(t *testing.T) {
 	// Let the worker unblock so the goroutine doesn't leak past the test.
 	close(release)
 	_ = srv.mirrorWorker.settle(5 * time.Second)
+}
+
+// TestHandleRepoCommits_FansOutToMirror proves the REST commit path
+// triggers the mirror worker the same way git-receive-pack does. The
+// symmetry matters for teams — without it a Formidable push via
+// POST /commits lands on GiGot but never reaches the configured
+// mirror destinations (GitHub, Azure DevOps) until someone manually
+// clicks Sync now. See docs/design/remote-sync.md §3.3.
+func TestHandleRepoCommits_FansOutToMirror(t *testing.T) {
+	srv := mirrorWorkerTestServer(t, "rest-commits-fan")
+	// mirrorWorkerTestServer already InitBare'd the repo — seed one
+	// commit directly so we have a HEAD to commit against without a
+	// double-init collision.
+	seedFile(t, srv, "rest-commits-fan", "README.md", "hi\n", "seed")
+	headInfo, err := srv.git.Head("rest-commits-fan")
+	if err != nil {
+		t.Fatalf("head: %v", err)
+	}
+	parent := headInfo.Version
+
+	if _, err := srv.destinations.Add("rest-commits-fan", destinations.Destination{
+		URL: "https://target.example/x.git", CredentialName: "c", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	var called []string
+	srv.pushDest = func(_ context.Context, _, destURL, _ string) ([]byte, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		called = append(called, destURL)
+		return []byte("ok"), nil
+	}
+
+	body := `{"parent_version":"` + parent + `","message":"formidable push","changes":[` +
+		`{"op":"put","path":"templates/basic.yaml","content_b64":"bmV3Cg=="}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/repos/rest-commits-fan/commits",
+		strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := srv.mirrorWorker.settle(2 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(called) != 1 {
+		t.Fatalf("expected mirror fan-out to fire exactly once after POST /commits, got %d call(s)", len(called))
+	}
+}
+
+// TestHandleRepoFilePut_FansOutToMirror is the single-file analogue of
+// the above — PUT /files/{path} must trigger fan-out just like a
+// git-receive-pack push would. Together these cover every REST write
+// path that advances refs/heads/master.
+func TestHandleRepoFilePut_FansOutToMirror(t *testing.T) {
+	srv := mirrorWorkerTestServer(t, "rest-put-fan")
+	seedFile(t, srv, "rest-put-fan", "README.md", "hi\n", "seed")
+	headInfo, err := srv.git.Head("rest-put-fan")
+	if err != nil {
+		t.Fatalf("head: %v", err)
+	}
+	parent := headInfo.Version
+
+	if _, err := srv.destinations.Add("rest-put-fan", destinations.Destination{
+		URL: "https://target.example/x.git", CredentialName: "c", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	var called []string
+	srv.pushDest = func(_ context.Context, _, destURL, _ string) ([]byte, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		called = append(called, destURL)
+		return []byte("ok"), nil
+	}
+
+	rec := putFile(t, srv, "rest-put-fan", "templates/basic.yaml", parent, "bmV3Cg==")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := srv.mirrorWorker.settle(2 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(called) != 1 {
+		t.Fatalf("expected mirror fan-out to fire exactly once after PUT /files, got %d call(s)", len(called))
+	}
 }
