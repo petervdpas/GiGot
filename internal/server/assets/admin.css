@@ -322,8 +322,13 @@ a:hover { text-decoration: underline; }
   border-top: 1px solid var(--line-2);
   font-size: 0.85rem;
   color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
+.sidebar .me .me-label { flex: 1; min-width: 0; }
 .sidebar .me strong { color: var(--text); display: block; }
+.sidebar .me .me-actions { flex-shrink: 0; }
 
 /* Theme toggle block sits between the signed-in-as line and the top of
    the sidebar's flex spacer, rendered from both admin.html and
@@ -391,11 +396,25 @@ a:hover { text-decoration: underline; }
   justify-content: space-between;
   gap: 0.5rem;
 }
+.info-card .ic-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
 .info-card .ic-title {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.95rem;
   color: var(--text-strong);
-  word-break: break-all;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.info-card .ic-subtitle {
+  font-size: 0.75rem;
+  color: var(--muted);
+  overflow: hidden;
 }
 .info-card .ic-stats {
   display: flex;
@@ -561,6 +580,55 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
   display: flex;
   gap: 0.3rem;
 }
+
+/* --- Mirror destination disclosure -----------------------------
+ * Section collapses behind a <summary> row so a repo list with
+ * many mirrors doesn't eat half the screen. Summary is clickable;
+ * a CSS chevron indicates state. The <details>/<summary> primitive
+ * handles keyboard + a11y for free. */
+.dest-details { border-radius: var(--radius-sm); }
+.dest-details > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.dest-details > summary::-webkit-details-marker { display: none; }
+.dest-details > summary::before {
+  content: "▸";
+  display: inline-block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  transition: transform 120ms ease;
+}
+.dest-details[open] > summary::before { transform: rotate(90deg); }
+
+/* Compact URL-or-"not mirrored" hint next to the title so the
+ * user can decide whether to expand without opening every repo. */
+.dest-summary-hint {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 30ch;
+}
+
+.dest-body { padding-top: 0.5rem; }
+
+/* Empty-state row: muted message + right-aligned Add button. */
+.dest-empty-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.dest-empty-row .add-dest-btn { margin-left: auto; }
+
 
 .cred-pill {
   background: var(--chip);

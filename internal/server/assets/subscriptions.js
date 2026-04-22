@@ -24,6 +24,26 @@
     return regulars.concat(admins);
   }
 
+  // resolveAccountForToken takes a token's stored Username (either
+  // "provider:identifier" or bare = local) and returns the matching
+  // account row from accountsCache, or null if none matches. Used
+  // by the token card to render a display name instead of the raw
+  // compound string — OAuth identifiers are opaque, so "Peter van
+  // de Pas" beats "microsoft:aaaa…6waw" for at-a-glance reading.
+  function resolveAccountForToken(username) {
+    if (!username) return null;
+    const idx = username.indexOf(':');
+    let prov = 'local', ident = username;
+    if (idx > 0) {
+      const head = username.slice(0, idx).toLowerCase();
+      if (['local', 'github', 'entra', 'microsoft', 'gateway'].includes(head)) {
+        prov = head;
+        ident = username.slice(idx + 1);
+      }
+    }
+    return accountsCache.find(a => a.provider === prov && a.identifier === ident) || null;
+  }
+
   // ──────────────────────────────────────────────────────────────── pickers
 
   function renderRepoPicker(container, selected) {
@@ -139,9 +159,25 @@
     const legacyBadge = t.has_account ? '' :
       '<span class="badge" title="This key was issued before the accounts model shipped. Click Bind to create a regular account for it.">legacy — no account</span>';
 
+    // Title: prefer the account's display name when we can resolve
+    // it — OAuth `sub` identifiers are 40+ chars of opaque base64
+    // and make the card header unreadable. Fall back to the raw
+    // compound string for legacy tokens whose account was deleted
+    // or never existed. The `title` attribute always carries the
+    // exact token.username for disambiguation on hover.
+    const resolved = resolveAccountForToken(t.username);
+    const titleText = resolved ? Admin.accountLabel(resolved) : t.username;
+    const titleSub = resolved
+      ? '<div class="ic-subtitle"><code class="acct-identifier" title="' + escapeHtml(t.username) + '">' +
+          escapeHtml(resolved.provider) + ':' + escapeHtml(resolved.identifier) + '</code></div>'
+      : '';
+
     card.innerHTML =
       '<div class="ic-header">' +
-        '<div class="ic-title">' + escapeHtml(t.username) + '</div>' +
+        '<div class="ic-title-wrap">' +
+          '<div class="ic-title" title="' + escapeHtml(t.username) + '">' + escapeHtml(titleText) + '</div>' +
+          titleSub +
+        '</div>' +
         '<div class="ic-chips">' + legacyBadge + '<span class="badge formidable">' + (t.repos ? t.repos.length : 0) + ' ' +
           ((t.repos && t.repos.length === 1) ? 'repo' : 'repos') + '</span></div>' +
       '</div>' +

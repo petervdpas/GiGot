@@ -124,20 +124,53 @@
     });
   }
 
+  // destOpenState tracks per-repo open/closed state across a refresh.
+  // Without it, refreshRepos() collapses any section the user had
+  // expanded — re-rendering blows away the <details open> attribute.
+  const destOpenState = Object.create(null);
+
   function renderDestinationSection(container, repoName) {
     const dest = destinationsByRepo[repoName] || null;
-    const header = '<div class="ic-section-head">' +
-      '<span class="ic-section-title">Mirror destination</span>' +
-      (dest ? '' : '<button type="button" class="small secondary add-dest-btn">+ Add</button>') +
-      '</div>';
+
+    // Entire section is one <details> disclosure. Summary carries the
+    // title + a compact status hint (URL host or "— add one") so the
+    // user can decide whether to expand without opening every repo.
+    // Actions and the editor live in the body; the summary itself is
+    // noise-free.
+    const statusHint = dest
+      ? '<span class="dest-summary-hint">' + escapeHtml(shortenUrl(dest.url)) + '</span>'
+      : '<span class="dest-summary-hint muted">not mirrored</span>';
+    const open = destOpenState[repoName] ? ' open' : '';
+
+    container.innerHTML =
+      '<details class="dest-details"' + open + '>' +
+        '<summary class="ic-section-head">' +
+          '<span class="ic-section-title">Mirror destination</span>' +
+          statusHint +
+        '</summary>' +
+        '<div class="dest-body"></div>' +
+      '</details>';
+
+    const details = container.querySelector('.dest-details');
+    details.addEventListener('toggle', () => { destOpenState[repoName] = details.open; });
+
+    const body = container.querySelector('.dest-body');
+
     if (!dest) {
-      container.innerHTML = header +
-        '<div class="muted ic-section-empty">Not mirrored. Add a destination to push this repo to an external git remote.</div>';
-      container.querySelector('.add-dest-btn').addEventListener('click', () => {
+      body.innerHTML =
+        '<div class="dest-empty-row">' +
+          '<span class="muted">Not mirrored. Add a destination to push this repo to an external git remote.</span>' +
+          '<button type="button" class="small secondary add-dest-btn">+ Add destination</button>' +
+        '</div>';
+      body.querySelector('.add-dest-btn').addEventListener('click', () => {
+        // Editor replaces the whole container — re-open when we come
+        // back to this view so the user doesn't have to click twice.
+        destOpenState[repoName] = true;
         renderDestinationEditor(container, repoName, null);
       });
       return;
     }
+
     const credPill = dest.credential_name
       ? '<span class="cred-pill">' + escapeHtml(dest.credential_name) + '</span>'
       : '<span class="cred-pill missing">(no credential)</span>';
@@ -147,7 +180,7 @@
     const enabledBadge = dest.enabled
       ? '<button type="button" class="badge formidable enabled-toggle" title="Click to disable automatic mirror-sync">enabled</button>'
       : '<button type="button" class="badge empty enabled-toggle" title="Click to enable automatic mirror-sync">disabled</button>';
-    container.innerHTML = header +
+    body.innerHTML =
       '<div class="dest-row">' +
         '<div class="dest-url"><span class="stat-label">URL</span> <code>' + escapeHtml(dest.url) + '</code></div>' +
         '<div class="dest-meta">' +
@@ -161,7 +194,9 @@
           '<span class="dest-sync-msg muted"></span>' +
         '</div>' +
       '</div>';
+
     container.querySelector('.edit-dest-btn').addEventListener('click', () => {
+      destOpenState[repoName] = true;
       renderDestinationEditor(container, repoName, dest);
     });
     container.querySelector('.remove-dest-btn').addEventListener('click', async () => {
@@ -177,17 +212,6 @@
         await refreshRepos();
       } catch (e) {
         await GG.dialog.alert('Remove failed', e.message);
-      }
-    });
-    const toggleBtn = container.querySelector('.enabled-toggle');
-    toggleBtn.addEventListener('click', async () => {
-      toggleBtn.disabled = true;
-      try {
-        await api.updateDestination(repoName, dest.id, { enabled: !dest.enabled });
-        await refreshRepos();
-      } catch (e) {
-        toggleBtn.disabled = false;
-        await GG.dialog.alert('Update failed', e.message);
       }
     });
     const syncBtn = container.querySelector('.sync-dest-btn');
@@ -206,6 +230,30 @@
         syncMsg.className = 'dest-sync-msg error';
       }
     });
+
+    const toggleBtn = container.querySelector('.enabled-toggle');
+    toggleBtn.addEventListener('click', async () => {
+      toggleBtn.disabled = true;
+      try {
+        await api.updateDestination(repoName, dest.id, { enabled: !dest.enabled });
+        await refreshRepos();
+      } catch (e) {
+        toggleBtn.disabled = false;
+        await GG.dialog.alert('Update failed', e.message);
+      }
+    });
+  }
+
+  // shortenUrl produces a compact summary hint like "github.com/org/repo"
+  // so the collapsed summary is informative at a glance without wrapping.
+  function shortenUrl(url) {
+    if (!url) return '';
+    try {
+      const u = new URL(url);
+      return u.host + u.pathname.replace(/\.git$/, '');
+    } catch {
+      return url;
+    }
   }
 
   function renderDestSyncBlock(dest) {

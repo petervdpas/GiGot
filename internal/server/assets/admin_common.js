@@ -286,10 +286,13 @@
         ).join('') +
         '<div class="spacer"></div>' +
         '<a href="/swagger/index.html" target="_blank" rel="noopener">API documentation</a>' +
-        '<a id="logout">Sign out</a>' +
       '</nav>' +
+      // Sign out belongs with the identity strip, not with the nav —
+      // it's a session verb about WHO you are, not a destination you
+      // navigate to. Kebab keeps it from hiding the display name.
       '<div class="me">' +
-        'signed in as<strong id="me-name">' + escapeHtml(label) + '</strong>' +
+        '<div class="me-label">signed in as<strong id="me-name">' + escapeHtml(label) + '</strong></div>' +
+        '<span class="me-actions row-actions"></span>' +
       '</div>' +
       '<div class="theme-row">' +
         '<span class="theme-label">Light theme</span>' +
@@ -303,10 +306,12 @@
     });
     GG.theme.initToggle('theme-toggle');
 
-    document.getElementById('logout').addEventListener('click', async () => {
-      await api.logout();
-      location.href = '/admin';
-    });
+    GG.row_menu.attach(aside.querySelector('.me-actions'), [
+      { label: 'Sign out', onClick: async () => {
+        await api.logout();
+        location.href = '/admin';
+      }, danger: true },
+    ]);
   }
 
   // ---------------------------------------------------- session guard
