@@ -345,6 +345,93 @@
     GG.datepicker = { attach, initAll };
   })();
 
+  // --------------------------------------------------------- row_menu
+  // Kebab-trigger action menu for table rows. Renders a single "⋮"
+  // button into the caller's host element and a popup dropdown
+  // containing the supplied items. Clicking the trigger toggles the
+  // popup; outside click / Escape close it. Designed as a drop-in
+  // replacement for inline `<button>` clusters — one narrow column
+  // instead of 3-4 wrapping buttons.
+  //
+  // Usage:
+  //   GG.row_menu.attach(host, [
+  //     { label: 'Rename',     onClick: () => ... },
+  //     { label: 'Promote',    onClick: () => ... },
+  //     { label: 'Delete',     onClick: () => ..., danger: true },
+  //   ]);
+  //
+  // `host` is any element (usually a `<td>`). Items with `hidden: true`
+  // are skipped — lets callers compose the list conditionally without
+  // branching their factory code.
+  (function () {
+    const esc = GG.core.escapeHtml;
+    let openMenu = null;
+
+    function closeOpen() {
+      if (openMenu) {
+        openMenu.classList.remove('open');
+        openMenu = null;
+      }
+    }
+
+    // Global listeners registered once: outside-click + Escape both
+    // close the currently-open menu. Using capture phase on click so
+    // the menu closes BEFORE anything else reacts (prevents a ghost
+    // click from triggering another row's action).
+    document.addEventListener('click', (e) => {
+      if (openMenu && !openMenu.contains(e.target)) closeOpen();
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeOpen();
+    });
+
+    function attach(host, items) {
+      if (!host) return;
+      const visible = (items || []).filter(it => it && !it.hidden);
+      if (visible.length === 0) return;
+
+      const wrap = document.createElement('div');
+      wrap.className = 'rowmenu';
+
+      const trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.className = 'rowmenu-trigger';
+      trigger.setAttribute('aria-label', 'Row actions');
+      trigger.innerHTML = '&#8942;'; // ⋮
+      wrap.appendChild(trigger);
+
+      const popup = document.createElement('div');
+      popup.className = 'rowmenu-popup';
+      for (const it of visible) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'rowmenu-item' + (it.danger ? ' danger' : '');
+        b.textContent = it.label;
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          closeOpen();
+          if (typeof it.onClick === 'function') it.onClick();
+        });
+        popup.appendChild(b);
+      }
+      wrap.appendChild(popup);
+
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = wrap.classList.contains('open');
+        closeOpen();
+        if (!isOpen) {
+          wrap.classList.add('open');
+          openMenu = wrap;
+        }
+      });
+
+      host.appendChild(wrap);
+    }
+
+    GG.row_menu = { attach };
+  })();
+
   // -------------------------------------------------------------- theme
   // Persists light/dark to localStorage under "gigot.theme" and mirrors it
   // to <html data-theme=…>. No server-side config — the admin's own

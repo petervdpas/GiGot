@@ -69,6 +69,83 @@ code {
   word-break: break-all;
 }
 
+/* Opaque OAuth identifiers (MSA `sub`, etc.) are 40+ chars and
+ * make table rows wrap into vertical stacks. Truncate to a single
+ * line with an ellipsis; the `title` attribute in the markup
+ * exposes the full value on hover. */
+.acct-identifier {
+  display: inline-block;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* --- row_menu (kebab action menu) ------------------------------ */
+/* Wrapper owns the relative positioning so the popup anchors to
+ * the trigger. `.open` toggles popup visibility — js keeps only
+ * one menu open at a time. */
+.rowmenu {
+  position: relative;
+  display: inline-block;
+}
+
+.rowmenu-trigger {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.rowmenu-trigger:hover,
+.rowmenu.open .rowmenu-trigger {
+  background: var(--chip);
+  border-color: var(--line);
+}
+
+.rowmenu-popup {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 11rem;
+  background: var(--card-bg, var(--field-bg));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  padding: 0.25rem;
+  display: none;
+  flex-direction: column;
+  z-index: 20;
+}
+.rowmenu.open .rowmenu-popup { display: flex; }
+
+/* Scoped under `button.` so these rules beat the page-level
+ * `button.danger { background: #da3633 }` — menu items ARE buttons
+ * and the generic danger rule would otherwise paint them solid red
+ * on top of faded-red text, which is unreadable. */
+button.rowmenu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.9rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+button.rowmenu-item:hover { background: var(--chip); }
+button.rowmenu-item.danger { background: transparent; color: #f85149; }
+button.rowmenu-item.danger:hover {
+  background: rgba(218, 54, 51, 0.18);
+  color: #ffb4b1;
+}
+
 .error { color: #f85149; font-size: 0.9rem; margin-top: 0.5rem; }
 .success { color: #3fb950; font-size: 0.9rem; margin-top: 0.5rem; }
 .hidden { display: none; }

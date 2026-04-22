@@ -43,25 +43,25 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 
 	resp := MeResponse{
 		Username:      id.Username,
-		Provider:      id.Provider,
+		Provider:      id.AccountProvider,
 		Subscriptions: []TokenListItem{},
 	}
-	if acc, err := s.accounts.Get(id.Provider, id.Username); err == nil {
+	if acc, err := s.accounts.Get(id.AccountProvider, id.Username); err == nil {
 		resp.DisplayName = acc.DisplayName
 		resp.Role = acc.Role
 	}
 
 	// Walk tokens once, keep only those whose stored Username parses to
-	// the caller's (provider, identifier). The token.Username can be
-	// either "provider:identifier" or a bare string that resolves to
-	// (local, string); reuse parseTokenUsername so the matching rules
-	// stay aligned with /api/auth/token's acceptance.
+	// the caller's (account_provider, identifier). The token.Username
+	// can be either "provider:identifier" or a bare string that
+	// resolves to (local, string); reuse parseTokenUsername so the
+	// matching rules stay aligned with /api/auth/token's acceptance.
 	for _, tok := range s.tokenStrategy.List() {
 		prov, ident, err := parseTokenUsername(tok.Username)
 		if err != nil {
 			continue
 		}
-		if prov != id.Provider || ident != id.Username {
+		if prov != id.AccountProvider || ident != id.Username {
 			continue
 		}
 		resp.Subscriptions = append(resp.Subscriptions, TokenListItem{

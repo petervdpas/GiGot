@@ -52,8 +52,9 @@
         '<td class="' + expClass + '"' + expTitle + '>' + escapeHtml(formatExpires(c.expires)) + '</td>' +
         '<td>' + escapeHtml(c.notes || '') + '</td>' +
         '<td class="muted">' + escapeHtml(formatWhen(c.last_used)) + '</td>' +
-        '<td><button class="small danger">Delete</button></td>';
-      tr.querySelector('button').addEventListener('click', async () => {
+        '<td class="row-actions"></td>';
+
+      async function deleteCredential() {
         const ok = await GG.dialog.confirm({
           title: 'Delete credential',
           message: 'Delete credential "' + c.name + '"? The sealed secret is destroyed — you can\'t recover it from the server.',
@@ -79,7 +80,11 @@
             await GG.dialog.alert('Delete failed', e.message);
           }
         }
-      });
+      }
+
+      GG.row_menu.attach(tr.querySelector('.row-actions'), [
+        { label: 'Delete', onClick: deleteCredential, danger: true },
+      ]);
       return tr;
     }));
   }

@@ -2,7 +2,7 @@
 // Shows the caller's profile strip and subscription keys. Admins see
 // the same page but get a link to the admin console too.
 (function () {
-  const { api, escapeHtml, copyToClipboard } = window.Admin;
+  const { api, escapeHtml, copyToClipboard, accountLabel } = window.Admin;
 
   async function loadMe() {
     const res = await fetch('/api/me', { credentials: 'include' });
@@ -17,7 +17,7 @@
   }
 
   function renderProfile(me) {
-    const label = me.display_name || me.username;
+    const label = accountLabel(me);
     const providerBadge = '<code>' + escapeHtml(me.provider || '') + '</code>';
     const roleBadge = '<span class="badge ' + (me.role === 'admin' ? 'formidable' : '') + '">' +
       escapeHtml(me.role) + '</span>';

@@ -111,19 +111,21 @@ func (s *SessionStrategy) Authenticate(r *http.Request) (*Identity, error) {
 		return nil, ErrInvalidToken
 	}
 
-	// Provider on the Identity is the upstream account provider (local,
-	// microsoft, github, …) so handlers can look the account back up
-	// and re-check its role on every request. A legacy session minted
-	// before this field existed falls back to "local" — which was the
-	// only login path at the time and matches the on-disk invariant.
-	prov := sess.Provider
-	if prov == "" {
-		prov = "local"
+	// Provider is the strategy name ("session") — the policy layer
+	// keys on this to grant admin tier. AccountProvider carries the
+	// account-store provider (local, microsoft, ...) so handlers can
+	// look the row back up. Legacy sessions minted before the field
+	// existed fall back to "local" — local was the only login path
+	// at the time and matches the on-disk invariant.
+	acctProv := sess.Provider
+	if acctProv == "" {
+		acctProv = "local"
 	}
 	return &Identity{
-		ID:       sess.Username,
-		Username: sess.Username,
-		Provider: prov,
+		ID:              sess.Username,
+		Username:        sess.Username,
+		Provider:        s.Name(),
+		AccountProvider: acctProv,
 	}, nil
 }
 

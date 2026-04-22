@@ -226,6 +226,31 @@
   }
   function shortSha(sha) { return sha ? sha.slice(0, 7) : ''; }
 
+  // accountLabel picks the best human-readable label for an
+  // account-shaped object. Accepts rows from /api/admin/accounts
+  // (identifier), session / /api/me responses (username), and
+  // anywhere else we need to render "who". OAuth `sub` identifiers
+  // are opaque so display_name always wins when present. One helper
+  // so subscriptions dropdown, accounts table, sidebar, and user
+  // strip all render the same label for the same account.
+  function accountLabel(obj) {
+    if (!obj) return '';
+    return obj.display_name || obj.identifier || obj.username || '';
+  }
+
+  // accountOption shapes an account row for a GG.select dropdown.
+  // Value is the scoped "provider:identifier" the server accepts
+  // for token binding; label is human, with provider and (if admin)
+  // role suffixed in parens. Admin badge only — regulars are the
+  // expected subscription target, no need to flag them.
+  function accountOption(a) {
+    const suffix = ' (' + a.provider + (a.role === 'admin' ? ' · admin' : '') + ')';
+    return {
+      value: a.provider + ':' + a.identifier,
+      label: accountLabel(a) + suffix,
+    };
+  }
+
   // ---------------------------------------------------------- sidebar
   // Every authenticated admin page carries the same sidebar. Instead
   // of duplicating ~30 lines of HTML in three templates, each page
@@ -236,9 +261,7 @@
   // claims. activeKey picks which nav link gets `.active`.
   function initSidebar(activeKey, who) {
     // Back-compat: older call sites passed a plain username string.
-    const label = (typeof who === 'string')
-      ? who
-      : (who && (who.display_name || who.username)) || '';
+    const label = (typeof who === 'string') ? who : accountLabel(who);
     const aside = document.getElementById('admin-sidebar');
     if (!aside) return;
     const navItems = [
@@ -324,5 +347,11 @@
     }
   }
 
-  window.Admin = { api, escapeHtml, shortSha, initSidebar, guardSession, copyToClipboard };
+  window.Admin = {
+    api,
+    escapeHtml, shortSha,
+    accountLabel, accountOption,
+    initSidebar, guardSession,
+    copyToClipboard,
+  };
 })();

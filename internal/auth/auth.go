@@ -43,7 +43,17 @@ type Identity struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
 	Email    string `json:"email,omitempty"`
+	// Provider names the AUTH STRATEGY that minted this identity
+	// ("session", "token", "gateway", "auth-disabled"). The policy
+	// evaluator keys on this to decide trust tiers; do not repurpose.
 	Provider string `json:"provider"`
+	// AccountProvider names the account-store provider the identity
+	// resolves to (local, microsoft, github, entra, gateway). Zero
+	// value for strategies that don't own an account row (e.g.
+	// bearer tokens — tokens are bound to accounts via TokenEntry,
+	// not via the identity itself). Handlers that need to load the
+	// caller's account row use this field, not Provider.
+	AccountProvider string `json:"account_provider,omitempty"`
 }
 
 // Strategy is the interface every authentication method implements.

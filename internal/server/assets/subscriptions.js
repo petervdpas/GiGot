@@ -4,7 +4,8 @@
 // ability is relevant — see KNOWN_ABILITIES below).
 
 (function () {
-  const { api, escapeHtml, initSidebar, guardSession, copyToClipboard } = window.Admin;
+  const Admin = window.Admin;
+  const { api, escapeHtml, initSidebar, guardSession, copyToClipboard } = Admin;
 
   let repoInfoCache = [];
   let tokensCache = [];
@@ -13,22 +14,13 @@
 
   function repoNames() { return repoInfoCache.map(r => r.name); }
 
-  // accountOption turns a row from /api/admin/accounts into the
-  // { value, label } pair the GG.select picker wants. Value is the
-  // scoped "provider:identifier" string the server's token binding
-  // expects; label is human — display name, identifier, provider in
-  // parens. Keep regulars before admins (admins rarely hold subs but
-  // the server allows it, so we surface them at the bottom).
-  function accountOption(a) {
-    const pretty = a.display_name ? a.display_name + ' — ' + a.identifier : a.identifier;
-    return {
-      value: a.provider + ':' + a.identifier,
-      label: pretty + ' (' + a.provider + (a.role === 'admin' ? ' / admin' : '') + ')',
-    };
-  }
+  // Regulars first, admins last — admins can hold subscription
+  // keys but they're the rarer case, so we surface them at the
+  // bottom of the dropdown. accountOption comes from Admin so the
+  // label format stays consistent with the sidebar / user strip.
   function accountOptionsSorted() {
-    const regulars = accountsCache.filter(a => a.role === 'regular').map(accountOption);
-    const admins   = accountsCache.filter(a => a.role === 'admin').map(accountOption);
+    const regulars = accountsCache.filter(a => a.role === 'regular').map(Admin.accountOption);
+    const admins   = accountsCache.filter(a => a.role === 'admin').map(Admin.accountOption);
     return regulars.concat(admins);
   }
 

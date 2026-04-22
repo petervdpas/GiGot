@@ -132,9 +132,10 @@ func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *au
 	if id, err := s.sessionStrategy.Authenticate(r); err == nil {
 		// A valid session cookie is not enough — OAuth auto-register
 		// mints sessions for regular accounts too. Re-read the account
-		// on every request so a demotion invalidates access without
+		// via the session's AccountProvider (strategy Provider is the
+		// constant "session") so a demotion invalidates access without
 		// waiting for the cookie to expire.
-		if acc, aerr := s.accounts.Get(id.Provider, id.Username); aerr == nil && acc.Role == accounts.RoleAdmin {
+		if acc, aerr := s.accounts.Get(id.AccountProvider, id.Username); aerr == nil && acc.Role == accounts.RoleAdmin {
 			return id
 		}
 	}
@@ -344,12 +345,13 @@ func (s *Server) handleAdminSession(w http.ResponseWriter, r *http.Request) {
 	if id == nil {
 		return
 	}
-	resp := AdminLoginResponse{Username: id.Username, Provider: id.Provider}
-	// Enrich with display_name / role via the session's own provider —
-	// OAuth sessions resolve under microsoft / github, gateway under
-	// gateway, local under local. A missing row is fine (session is
-	// still valid, the UI just sees the raw identifier).
-	if acc, err := s.accounts.Get(id.Provider, id.Username); err == nil {
+	resp := AdminLoginResponse{Username: id.Username, Provider: id.AccountProvider}
+	// Enrich with display_name / role via the session's own account
+	// provider — OAuth sessions resolve under microsoft / github,
+	// gateway under gateway, local under local. A missing row is
+	// fine (session is still valid, the UI just sees the raw
+	// identifier).
+	if acc, err := s.accounts.Get(id.AccountProvider, id.Username); err == nil {
 		resp.DisplayName = acc.DisplayName
 		resp.Role = acc.Role
 	}

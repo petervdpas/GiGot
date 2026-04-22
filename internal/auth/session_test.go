@@ -28,16 +28,19 @@ func TestSessionCreateAndAuthenticate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id.Username != "alice" || id.Provider != "local" {
-		t.Fatalf("unexpected identity: %+v", id)
+	if id.Username != "alice" || id.Provider != "session" {
+		t.Fatalf("Provider must be the strategy name ('session'), not the account provider — got %+v", id)
+	}
+	if id.AccountProvider != "local" {
+		t.Fatalf("AccountProvider = %q, want local", id.AccountProvider)
 	}
 }
 
 func TestSessionAuthenticate_LegacyMissingProviderFallsBackToLocal(t *testing.T) {
-	// Sessions minted before the Provider field existed were persisted
-	// with an empty "provider" JSON field. They're still valid admin
-	// sessions on the existing install (local-only era), so surface
-	// them as provider="local" rather than breaking the user's day.
+	// Sessions minted before the AccountProvider field existed were
+	// persisted with an empty "provider" JSON field. They're still
+	// valid admin sessions on the existing install (local-only era),
+	// so surface them with AccountProvider="local".
 	s := NewSessionStrategy(time.Hour)
 	sess, _ := s.Create("", "alice")
 
@@ -48,8 +51,8 @@ func TestSessionAuthenticate_LegacyMissingProviderFallsBackToLocal(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id.Provider != "local" {
-		t.Fatalf("legacy session provider = %q, want local", id.Provider)
+	if id.AccountProvider != "local" {
+		t.Fatalf("legacy session AccountProvider = %q, want local", id.AccountProvider)
 	}
 }
 

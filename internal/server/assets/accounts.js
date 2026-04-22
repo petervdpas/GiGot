@@ -40,9 +40,14 @@
           a.subscription_count + ' key' + (a.subscription_count === 1 ? '' : 's') +
         '</a>'
       : '<span class="muted">—</span>';
+    // Identifier rendering: OAuth subs can be 40+ chars of opaque
+    // base64url and wrap the row into an unreadable vertical stack.
+    // Truncate in the cell and expose the full value via `title` so
+    // admins can still copy-read it on hover.
     tr.innerHTML =
       '<td><code>' + escapeHtml(a.provider) + '</code></td>' +
-      '<td><code>' + escapeHtml(a.identifier) + '</code></td>' +
+      '<td><code class="acct-identifier" title="' + escapeHtml(a.identifier) + '">' +
+        escapeHtml(a.identifier) + '</code></td>' +
       '<td>' + escapeHtml(a.display_name || '') + '</td>' +
       '<td><span class="badge ' + (a.role === 'admin' ? 'formidable' : '') + '">' +
         escapeHtml(a.role) + '</span></td>' +
@@ -53,56 +58,38 @@
 
     const actions = tr.querySelector('.row-actions');
 
-    const flipRoleBtn = document.createElement('button');
-    flipRoleBtn.className = 'small secondary';
-    flipRoleBtn.textContent = a.role === 'admin' ? 'Demote to regular' : 'Promote to admin';
-    flipRoleBtn.addEventListener('click', async () => {
+    // Build the action list declaratively, then hand it to row_menu.
+    // Order: safe edits (rename) → state change (promote/demote,
+    // reset password) → destructive (delete). Conditional items use
+    // `hidden: true` so the list remains a flat literal instead of
+    // sprouting branches.
+    async function patchRole() {
       const next = a.role === 'admin' ? 'regular' : 'admin';
       try {
         await api.patchAccount(a.provider, a.identifier, { role: next });
         refresh();
       } catch (e) { GG.dialog.alert('Role change failed', e.message); }
-    });
-    actions.appendChild(flipRoleBtn);
-
-    // Display-name edit is valuable for every provider — OAuth identifiers
-    // are opaque (MSA `sub`, GitHub numeric id) so the friendly label is
-    // the only thing a human reads.
-    const renameBtn = document.createElement('button');
-    renameBtn.className = 'small secondary';
-    renameBtn.textContent = a.display_name ? 'Rename' : 'Set display name';
-    renameBtn.addEventListener('click', async () => {
+    }
+    async function patchDisplayName() {
       const next = prompt('Display name for ' + a.provider + ':' + a.identifier + ':', a.display_name || '');
       if (next === null) return;
       try {
         await api.patchAccount(a.provider, a.identifier, { display_name: next });
         refresh();
       } catch (e) { GG.dialog.alert('Rename failed', e.message); }
-    });
-    actions.appendChild(renameBtn);
-
-    if (a.provider === 'local') {
-      const pwBtn = document.createElement('button');
-      pwBtn.className = 'small secondary';
-      pwBtn.textContent = a.has_password ? 'Reset password' : 'Set password';
-      pwBtn.addEventListener('click', async () => {
-        // GG.dialog.prompt isn't ported yet; native prompt() is
-        // unavoidable here until we do. Acceptable because the value
-        // never reaches the DOM — only the API call.
-        const pw = prompt('New password for ' + a.identifier + ':');
-        if (!pw) return;
-        try {
-          await api.patchAccount(a.provider, a.identifier, { password: pw });
-          refresh();
-        } catch (e) { GG.dialog.alert('Password update failed', e.message); }
-      });
-      actions.appendChild(pwBtn);
     }
-
-    const delBtn = document.createElement('button');
-    delBtn.className = 'small danger';
-    delBtn.textContent = 'Delete';
-    delBtn.addEventListener('click', async () => {
+    async function resetPassword() {
+      // GG.dialog.prompt isn't ported yet; native prompt() is
+      // unavoidable here until we do. Acceptable because the value
+      // never reaches the DOM — only the API call.
+      const pw = prompt('New password for ' + a.identifier + ':');
+      if (!pw) return;
+      try {
+        await api.patchAccount(a.provider, a.identifier, { password: pw });
+        refresh();
+      } catch (e) { GG.dialog.alert('Password update failed', e.message); }
+    }
+    async function deleteAccount() {
       const ok = await GG.dialog.confirm({
         title: 'Delete account',
         message: 'Delete ' + a.provider + ':' + a.identifier + '? This cannot be undone.',
@@ -114,8 +101,15 @@
         await api.deleteAccount(a.provider, a.identifier);
         refresh();
       } catch (e) { GG.dialog.alert('Delete failed', e.message); }
-    });
-    actions.appendChild(delBtn);
+    }
+
+    GG.row_menu.attach(actions, [
+      { label: a.display_name ? 'Rename' : 'Set display name', onClick: patchDisplayName },
+      { label: a.role === 'admin' ? 'Demote to regular' : 'Promote to admin', onClick: patchRole },
+      { label: a.has_password ? 'Reset password' : 'Set password', onClick: resetPassword,
+        hidden: a.provider !== 'local' },
+      { label: 'Delete', onClick: deleteAccount, danger: true },
+    ]);
 
     return tr;
   }
