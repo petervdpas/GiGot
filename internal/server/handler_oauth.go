@@ -178,19 +178,6 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request, p oauth.P
 		return
 	}
 
-	// The admin console is the only thing a session cookie unlocks
-	// today. A verified-but-regular account is useful (subscription
-	// keys bind to it, an admin can promote it later) but it must
-	// NOT receive an admin session — that's how /admin/accounts got
-	// exposed to non-admins before this guard existed. Mirror the
-	// local-login path which returns an opaque "invalid credentials"
-	// rather than leaking role information.
-	if acc.Role != accounts.RoleAdmin {
-		log.Printf("server: oauth: %s: %s:%s signed in but role=%s; no session minted", p.Name(), acc.Provider, acc.Identifier, acc.Role)
-		oauthLoginFailed(w, r, "your account is registered — ask an admin to promote you")
-		return
-	}
-
 	sess, err := s.sessionStrategy.Create(acc.Provider, acc.Identifier)
 	if err != nil {
 		log.Printf("server: oauth: %s: create session: %v", p.Name(), err)
@@ -204,9 +191,15 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request, p oauth.P
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
-	// Landing page: default to /admin/repositories (same as the
-	// local-login redirect).
-	http.Redirect(w, r, "/admin/repositories", http.StatusFound)
+	// Role-based landing: admins go to the admin console, regulars
+	// land on /user (their own profile + subscription keys). The admin
+	// routes still enforce role in requireAdminSession, so a regular
+	// typing /admin/repositories manually just gets a 401 + bounce.
+	dest := "/admin/repositories"
+	if acc.Role != accounts.RoleAdmin {
+		dest = "/user"
+	}
+	http.Redirect(w, r, dest, http.StatusFound)
 }
 
 // oauthRedirectURI builds the callback URL the IdP should send the

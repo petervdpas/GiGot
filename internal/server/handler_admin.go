@@ -75,6 +75,7 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	})
 	writeJSON(w, http.StatusOK, AdminLoginResponse{
 		Username:    a.Identifier,
+		Provider:    a.Provider,
 		DisplayName: a.DisplayName,
 		Role:        a.Role,
 	})
@@ -115,6 +116,18 @@ func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 //
 // Bearer tokens DO NOT reach this gate — they're for API clients, not
 // admin humans; handlers that need token-authed access don't call this.
+// requireSession validates a session cookie and returns the identity
+// WITHOUT enforcing admin role. Use this for routes that belong to
+// any signed-in user (e.g. /api/me) but are not admin-only. A 401
+// is written on failure so callers can early-return.
+func (s *Server) requireSession(w http.ResponseWriter, r *http.Request) *auth.Identity {
+	if id, err := s.sessionStrategy.Authenticate(r); err == nil {
+		return id
+	}
+	writeError(w, http.StatusUnauthorized, "unauthorized")
+	return nil
+}
+
 func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *auth.Identity {
 	if id, err := s.sessionStrategy.Authenticate(r); err == nil {
 		// A valid session cookie is not enough — OAuth auto-register
@@ -331,7 +344,7 @@ func (s *Server) handleAdminSession(w http.ResponseWriter, r *http.Request) {
 	if id == nil {
 		return
 	}
-	resp := AdminLoginResponse{Username: id.Username}
+	resp := AdminLoginResponse{Username: id.Username, Provider: id.Provider}
 	// Enrich with display_name / role via the session's own provider —
 	// OAuth sessions resolve under microsoft / github, gateway under
 	// gateway, local under local. A missing row is fine (session is

@@ -2057,6 +2057,32 @@ const docTemplate = `{
                 }
             }
         },
+        "/me": {
+            "get": {
+                "description": "Returns the signed-in caller's account row plus the\nsubscription keys bound to it. Requires a valid\nsession cookie; NOT admin-gated — any authenticated\nuser reaches their own profile.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "me"
+                ],
+                "summary": "Current user profile and subscription keys",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.MeResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/register": {
             "post": {
                 "description": "Creates a new local-provider account with role=regular\nand sets the bcrypt password. Returns 404 when\nauth.allow_local is false (local path disabled), 409\nwhen the username is already taken. Public: no session\nrequired. See docs/design/accounts.md §7.",
@@ -3900,6 +3926,9 @@ const docTemplate = `{
                 "display_name": {
                     "type": "string"
                 },
+                "provider": {
+                    "type": "string"
+                },
                 "role": {
                     "type": "string"
                 },
@@ -4274,6 +4303,29 @@ const docTemplate = `{
                 "status": {
                     "type": "string",
                     "example": "ok"
+                }
+            }
+        },
+        "server.MeResponse": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "subscriptions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.TokenListItem"
+                    }
+                },
+                "username": {
+                    "type": "string"
                 }
             }
         },

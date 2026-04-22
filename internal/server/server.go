@@ -108,6 +108,8 @@ func New(cfg *config.Config) *Server {
 	ap.MarkPublic("/admin/accounts/")
 	ap.MarkPublic("/admin/auth")
 	ap.MarkPublic("/admin/auth/")
+	ap.MarkPublic("/user")
+	ap.MarkPublic("/user/")
 	ap.MarkPublicPrefix("/swagger/")
 	ap.MarkPublicPrefix("/assets/")
 	// Basic auth is only meaningful for /git/* — git-the-binary can't
@@ -525,6 +527,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/admin/accounts/", s.handleAccountsPage)
 	s.mux.HandleFunc("/admin/auth", s.handleAuthPage)
 	s.mux.HandleFunc("/admin/auth/", s.handleAuthPage)
+	s.mux.HandleFunc("/user", s.handleUserPage)
+	s.mux.HandleFunc("/user/", s.handleUserPage)
+	s.mux.HandleFunc("/api/me", s.handleMe)
 	s.mux.HandleFunc("/api/admin/session", s.handleAdminSession)
 	s.mux.HandleFunc("/api/admin/tokens", s.handleAdminTokens)
 	s.mux.HandleFunc("/api/admin/tokens/bind", s.handleAdminBindToken)

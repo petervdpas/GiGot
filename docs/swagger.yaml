@@ -244,6 +244,8 @@ definitions:
     properties:
       display_name:
         type: string
+      provider:
+        type: string
       role:
         type: string
       username:
@@ -511,6 +513,21 @@ definitions:
     properties:
       status:
         example: ok
+        type: string
+    type: object
+  server.MeResponse:
+    properties:
+      display_name:
+        type: string
+      provider:
+        type: string
+      role:
+        type: string
+      subscriptions:
+        items:
+          $ref: '#/definitions/server.TokenListItem'
+        type: array
+      username:
         type: string
     type: object
   server.MessageResponse:
@@ -2217,6 +2234,27 @@ paths:
       summary: Health check
       tags:
       - system
+  /me:
+    get:
+      description: |-
+        Returns the signed-in caller's account row plus the
+        subscription keys bound to it. Requires a valid
+        session cookie; NOT admin-gated — any authenticated
+        user reaches their own profile.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.MeResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Current user profile and subscription keys
+      tags:
+      - me
   /register:
     post:
       consumes:

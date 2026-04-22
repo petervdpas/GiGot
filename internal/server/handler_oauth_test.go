@@ -109,14 +109,13 @@ func TestOAuth_UnknownProviderIs404(t *testing.T) {
 	}
 }
 
-// TestOAuth_CallbackAutoRegistersRegularButDoesNotMintSession proves
-// the guard that stops a fresh OAuth user from reaching the admin
-// console: auto-register still creates the account (so an admin can
-// promote them later), but NO session cookie is minted because the
-// role is regular. Before this guard existed, auto-registered users
-// landed on /admin/repositories and could self-promote via the
-// under-gated /admin/accounts handler.
-func TestOAuth_CallbackAutoRegistersRegularButDoesNotMintSession(t *testing.T) {
+// TestOAuth_CallbackAutoRegistersRegularAndLandsOnUser is the
+// load-bearing regular-user path: first-time OAuth login → account
+// auto-registered → session cookie minted → redirect to /user (not
+// /admin/repositories, which requireAdminSession would 401 them out
+// of). The role guard for the admin console lives in
+// requireAdminSession; the landing page is the visible half.
+func TestOAuth_CallbackAutoRegistersRegularAndLandsOnUser(t *testing.T) {
 	srv := testServer(t)
 	installStubProviders(srv, &stubProvider{
 		name:     "entra",
@@ -138,17 +137,23 @@ func TestOAuth_CallbackAutoRegistersRegularButDoesNotMintSession(t *testing.T) {
 	cbRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(cbRec, cbReq)
 
-	if cbRec.Code != http.StatusUnauthorized {
-		t.Fatalf("callback want 401 (regular blocked), got %d body=%s", cbRec.Code, cbRec.Body.String())
+	if cbRec.Code != http.StatusFound {
+		t.Fatalf("callback want 302, got %d body=%s", cbRec.Code, cbRec.Body.String())
 	}
+	if got := cbRec.Header().Get("Location"); got != "/user" {
+		t.Fatalf("regular user must land on /user, got %q", got)
+	}
+	var gotCookie *http.Cookie
 	for _, c := range cbRec.Result().Cookies() {
 		if c.Name == auth.SessionCookieName {
-			t.Fatal("session cookie must NOT be minted for a regular OAuth login")
+			gotCookie = c
+			break
 		}
 	}
+	if gotCookie == nil {
+		t.Fatal("session cookie MUST be minted for regular OAuth users (used by /user)")
+	}
 
-	// Account auto-registration still happened — the guard is on the
-	// session, not the account. An admin can now promote them.
 	acc, err := srv.accounts.Get("entra", "peter-at-work")
 	if err != nil {
 		t.Fatalf("auto-register missed: %v", err)
@@ -158,6 +163,38 @@ func TestOAuth_CallbackAutoRegistersRegularButDoesNotMintSession(t *testing.T) {
 	}
 	if acc.DisplayName != "Peter (work)" {
 		t.Fatalf("display name not propagated: %q", acc.DisplayName)
+	}
+}
+
+// TestOAuth_RegularSessionCannotReachAdminPages covers the guard
+// side: a regular user HAS a valid session cookie (they reached
+// /user legitimately), but admin routes still return 401. This is
+// the security invariant — the /user landing doesn't weaken the
+// admin gate.
+func TestOAuth_RegularSessionCannotReachAdminPages(t *testing.T) {
+	srv := testServer(t)
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider: "entra", Identifier: "peter-at-work", Role: accounts.RoleRegular,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sessObj, _ := srv.sessionStrategy.Create("entra", "peter-at-work")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/accounts", nil)
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: sessObj.ID})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("admin endpoint must reject regular session cookie; got %d", rec.Code)
+	}
+
+	// But /api/me accepts the same cookie (role-agnostic).
+	meReq := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+	meReq.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: sessObj.ID})
+	meRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(meRec, meReq)
+	if meRec.Code != http.StatusOK {
+		t.Fatalf("/api/me must accept regular session; got %d", meRec.Code)
 	}
 }
 

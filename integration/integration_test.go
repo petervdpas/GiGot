@@ -124,7 +124,7 @@ func (tc *testContext) iRequest(path string) error {
 
 func (tc *testContext) theResponseStatusShouldBe(code int) error {
 	if tc.resp.StatusCode != code {
-		return fmt.Errorf("expected status %d, got %d", code, tc.resp.StatusCode)
+		return fmt.Errorf("expected status %d, got %d (body=%s)", code, tc.resp.StatusCode, tc.respBody)
 	}
 	return nil
 }

@@ -20,4 +20,5 @@ var (
 	credentialsPageTmpl = template.Must(template.ParseFS(templatesFS, "templates/credentials.html"))
 	accountsPageTmpl    = template.Must(template.ParseFS(templatesFS, "templates/accounts.html"))
 	authPageTmpl        = template.Must(template.ParseFS(templatesFS, "templates/auth.html"))
+	userPageTmpl        = template.Must(template.ParseFS(templatesFS, "templates/user.html"))
 )

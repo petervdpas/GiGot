@@ -7,10 +7,13 @@ type AdminLoginRequest struct {
 }
 
 // AdminLoginResponse confirms a successful admin login (or reports the
-// current session). Username is the account identifier; DisplayName
+// current session). Username is the account identifier; Provider names
+// the account provider (local, microsoft, github, ...) so the UI can
+// disambiguate identical identifiers across providers. DisplayName
 // and Role are enrichments used by the admin UI.
 type AdminLoginResponse struct {
 	Username    string `json:"username"`
+	Provider    string `json:"provider,omitempty"`
 	DisplayName string `json:"display_name,omitempty"`
 	Role        string `json:"role,omitempty"`
 }

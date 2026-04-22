@@ -56,6 +56,18 @@ func (s *Server) handleAuthPage(w http.ResponseWriter, r *http.Request) {
 	s.adminPageHandler(authPageTmpl, "/admin/auth", "/admin/auth/")(w, r)
 }
 
+// handleUserPage serves the /user self-serve account page. Public
+// path (no server-side session gate) — user.js calls /api/me and
+// bounces to /admin on a 401. Same pattern as the admin pages.
+func (s *Server) handleUserPage(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/user" && r.URL.Path != "/user/" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = userPageTmpl.Execute(w, nil)
+}
+
 // handleRegisterPage serves the self-service register card. When
 // auth.allow_local is false, the backing /api/register endpoint
 // 404s, so the page can't do anything useful — we render a small
