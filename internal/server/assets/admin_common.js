@@ -238,6 +238,27 @@
     return obj.display_name || obj.identifier || obj.username || '';
   }
 
+  // resolveAccount takes a token's stored Username (either
+  // "provider:identifier" or a bare local-shorthand string) and
+  // returns the matching account row from a supplied list, or null.
+  // Centralised so the same (provider, identifier) parsing rules
+  // apply everywhere a UI needs to turn a token into a display
+  // name — subscriptions grid, /user, repositories sub-chips.
+  function resolveAccount(username, accountsList) {
+    if (!username || !accountsList) return null;
+    let prov = 'local';
+    let ident = username;
+    const idx = username.indexOf(':');
+    if (idx > 0) {
+      const head = username.slice(0, idx).toLowerCase();
+      if (['local', 'github', 'entra', 'microsoft', 'gateway'].includes(head)) {
+        prov = head;
+        ident = username.slice(idx + 1);
+      }
+    }
+    return accountsList.find(a => a.provider === prov && a.identifier === ident) || null;
+  }
+
   // accountOption shapes an account row for a GG.select dropdown.
   // Value is the scoped "provider:identifier" the server accepts
   // for token binding; label is human, with provider and (if admin)
@@ -536,7 +557,7 @@
   window.Admin = {
     api,
     escapeHtml, shortSha,
-    accountLabel, accountOption,
+    accountLabel, accountOption, resolveAccount,
     renderTokenCard,
     initSidebar, guardSession,
     copyToClipboard,

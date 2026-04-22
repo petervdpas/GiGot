@@ -5,15 +5,25 @@
 // keys page with ?repo=<name> so it pre-selects there.
 
 (function () {
-  const { api, escapeHtml, shortSha, initSidebar, guardSession } = window.Admin;
+  const Admin = window.Admin;
+  const { api, escapeHtml, shortSha, initSidebar, guardSession } = Admin;
 
   let repoInfoCache = [];
   let tokensCache = [];
   let credentialsCache = [];
   let destinationsByRepo = {};
+  let accountsCache = [];
+
+  // subsOpenState: same pattern as destOpenState — preserves
+  // expand/collapse per repo across refreshes so re-rendering the
+  // repo grid doesn't fold every section the user opened.
+  const subsOpenState = Object.create(null);
 
   function subscriptionsForRepo(name) {
-    return tokensCache.filter(t => (t.repos || []).includes(name));
+    // Subscription keys bind to exactly one repo. The old multi-repo
+    // shape is gone (§ one-repo-per-key migration), so this is a
+    // direct equality check on t.repo.
+    return tokensCache.filter(t => t.repo === name);
   }
 
   function renderRepoCard(r) {
@@ -103,26 +113,59 @@
     return card;
   }
 
+  // labelForSubscription resolves the token's stored username to an
+  // account's display name when possible — OAuth `sub` identifiers
+  // are opaque 40-char strings, so "Peter van de Pas" beats
+  // "microsoft:aaaa…6waw" in a chip. Falls back to the raw username
+  // for legacy tokens whose account was deleted or never created.
+  function labelForSubscription(t) {
+    const acc = Admin.resolveAccount(t.username, accountsCache);
+    return acc ? Admin.accountLabel(acc) : t.username;
+  }
+
   function renderSubscriptionsSection(container, repoName) {
     const subs = subscriptionsForRepo(repoName);
-    const header = '<div class="ic-section-head">' +
-      '<span class="ic-section-title">Subscriptions</span>' +
-      '<span class="muted">(' + subs.length + ')</span>' +
-      '<button type="button" class="small secondary issue-key-btn">+ Issue key</button>' +
+    const open = subsOpenState[repoName] ? ' open' : '';
+
+    // No summary hint: the expanded body already renders each
+    // account as a chip, and duplicating names in the summary felt
+    // redundant (per user feedback). Count alone is enough for the
+    // collapsed row.
+    container.innerHTML =
+      '<details class="ic-collapse subs-details"' + open + '>' +
+        '<summary class="ic-section-head">' +
+          '<span class="ic-section-title">Subscriptions</span>' +
+          '<span class="muted">(' + subs.length + ')</span>' +
+        '</summary>' +
+        '<div class="ic-collapse-body subs-body"></div>' +
+      '</details>';
+
+    const details = container.querySelector('.subs-details');
+    details.addEventListener('toggle', () => { subsOpenState[repoName] = details.open; });
+
+    const body = container.querySelector('.subs-body');
+    body.innerHTML =
+      (subs.length === 0
+        ? '<div class="muted ic-section-empty">No subscription keys grant access to this repo.</div>'
+        : '<div class="sub-chips">' +
+            subs.map(s => {
+              const label = labelForSubscription(s);
+              return '<span class="sub-chip" title="' + escapeHtml(s.username) + '">' +
+                escapeHtml(label) + '</span>';
+            }).join('') +
+          '</div>') +
+      '<div class="subs-actions">' +
+        '<button type="button" class="small secondary issue-key-btn">+ Issue key</button>' +
       '</div>';
-    const body = subs.length === 0
-      ? '<div class="muted ic-section-empty">No subscription keys grant access to this repo.</div>'
-      : '<div class="sub-chips">' +
-          subs.map(s => '<span class="sub-chip">' + escapeHtml(s.username) + '</span>').join('') +
-        '</div>';
-    container.innerHTML = header + body;
-    container.querySelector('.issue-key-btn').addEventListener('click', () => {
+
+    body.querySelector('.issue-key-btn').addEventListener('click', () => {
       // Cross-page nav: carry the repo through as a query param so the
       // Subscription keys page pre-selects it in the issue form. Used to
       // be pendingKeysRepo + panel switch; the URL is the seam now.
       location.href = '/admin/subscriptions?repo=' + encodeURIComponent(repoName);
     });
   }
+
 
   // destOpenState tracks per-repo open/closed state across a refresh.
   // Without it, refreshRepos() collapses any section the user had
@@ -138,17 +181,17 @@
     // Actions and the editor live in the body; the summary itself is
     // noise-free.
     const statusHint = dest
-      ? '<span class="dest-summary-hint">' + escapeHtml(shortenUrl(dest.url)) + '</span>'
-      : '<span class="dest-summary-hint muted">not mirrored</span>';
+      ? '<span class="ic-summary-hint mono">' + escapeHtml(shortenUrl(dest.url)) + '</span>'
+      : '<span class="ic-summary-hint muted">not mirrored</span>';
     const open = destOpenState[repoName] ? ' open' : '';
 
     container.innerHTML =
-      '<details class="dest-details"' + open + '>' +
+      '<details class="ic-collapse dest-details"' + open + '>' +
         '<summary class="ic-section-head">' +
           '<span class="ic-section-title">Mirror destination</span>' +
           statusHint +
         '</summary>' +
-        '<div class="dest-body"></div>' +
+        '<div class="ic-collapse-body dest-body"></div>' +
       '</details>';
 
     const details = container.querySelector('.dest-details');
@@ -361,14 +404,16 @@
 
   async function refreshRepos() {
     try {
-      const [repoData, tokenData, credData] = await Promise.all([
+      const [repoData, tokenData, credData, acctData] = await Promise.all([
         api.listRepos(),
         api.listTokens().catch(() => ({ tokens: [], count: 0 })),
         api.listCredentials().catch(() => ({ credentials: [], count: 0 })),
+        api.listAccounts().catch(() => ({ accounts: [] })),
       ]);
       repoInfoCache = repoData.repos || [];
       tokensCache = tokenData.tokens || [];
       credentialsCache = credData.credentials || [];
+      accountsCache = acctData.accounts || [];
 
       // Destinations are admin-scoped per-repo — one fetch per repo is
       // fine at admin workloads, and keeps the public /api/repos

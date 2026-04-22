@@ -24,24 +24,11 @@
     return regulars.concat(admins);
   }
 
-  // resolveAccountForToken takes a token's stored Username (either
-  // "provider:identifier" or bare = local) and returns the matching
-  // account row from accountsCache, or null if none matches. Used
-  // by the token card to render a display name instead of the raw
-  // compound string — OAuth identifiers are opaque, so "Peter van
-  // de Pas" beats "microsoft:aaaa…6waw" for at-a-glance reading.
+  // resolveAccountForToken is a thin binding over Admin.resolveAccount
+  // that closes over the page's accountsCache. Kept as a local alias
+  // so the call sites stay short; parsing rules live in one place.
   function resolveAccountForToken(username) {
-    if (!username) return null;
-    const idx = username.indexOf(':');
-    let prov = 'local', ident = username;
-    if (idx > 0) {
-      const head = username.slice(0, idx).toLowerCase();
-      if (['local', 'github', 'entra', 'microsoft', 'gateway'].includes(head)) {
-        prov = head;
-        ident = username.slice(idx + 1);
-      }
-    }
-    return accountsCache.find(a => a.provider === prov && a.identifier === ident) || null;
+    return Admin.resolveAccount(username, accountsCache);
   }
 
   // ──────────────────────────────────────────────────────────────── pickers

@@ -372,7 +372,10 @@ a:hover { text-decoration: underline; }
 .create-repo-scaffold { display: flex; align-items: center; gap: 0.5rem; }
 .create-repo-scaffold .control-label { color: var(--muted); font-size: 0.85rem; }
 .create-repo-hint { margin-top: 0.5rem; font-size: 0.8rem; }
-.issue-form-row { align-items: flex-start; }
+/* Align children to the bottom of the row so the submit button —
+ * which has no "label" on top — lines up with the inputs underneath
+ * the labels, not with the labels themselves. */
+.issue-form-row { align-items: flex-end; }
 .issue-repos-label { margin-bottom: 0.25rem; }
 .repo-list-ul { list-style: none; }
 .repo-list-ul li { padding: 0.3rem 0; }
@@ -409,10 +412,16 @@ a:hover { text-decoration: underline; }
   justify-content: space-between;
   gap: 0.5rem;
 }
+/* Title row: display name on the left, provider:identifier as a
+ * muted in-line subtitle on the right. Flex row with baseline
+ * alignment keeps the two reading like one sentence; min-width:0 +
+ * overflow on each half lets long values ellipsize independently
+ * instead of one squashing the other. */
 .info-card .ic-title-wrap {
   display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.5rem;
   min-width: 0;
   flex: 1;
 }
@@ -423,11 +432,17 @@ a:hover { text-decoration: underline; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 50%;
 }
 .info-card .ic-subtitle {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--muted);
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
 }
 .info-card .ic-stats {
   display: flex;
@@ -537,6 +552,27 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
  * field and not as a solid bar. */
 .token-field .token-masked { letter-spacing: 0.1em; }
 
+/* /user page: labelled copy rows above the token field so a
+ * regular pastes Server URL → Repository → Subscription key into
+ * Formidable in top-to-bottom order. The label is a small caps
+ * prefix, the row uses the same chrome as the secret token field. */
+.copy-row-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  margin: 0.3rem 0 0.2rem;
+}
+.copy-row + .copy-row { margin-top: 0.2rem; }
+
+/* Each subscription card on /user is a <details> disclosure. The
+ * info-card chrome stays as the outer shell; inside, the summary
+ * carries the title + ability badges. The shared `.ic-collapse`
+ * rules already provide a ::before chevron and the flex summary
+ * layout, so this block is just for summary-specific tuning. */
+.sub-card-summary > .ic-chips { margin-left: auto; }
+
 /* Inline icon button used next to the copy button for the show/hide
  * eye toggle. Sized to match the Copy pill height. */
 .icon-btn {
@@ -589,6 +625,15 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
   font-size: 0.8rem;
 }
 
+/* Issue-key button lives in the collapsed-body of the Subscriptions
+ * section so it's hidden with the section. Right-aligned so it
+ * doesn't compete with the chip list. */
+.subs-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.4rem;
+}
+
 .dest-row {
   display: flex;
   flex-direction: column;
@@ -617,13 +662,15 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
   gap: 0.3rem;
 }
 
-/* --- Mirror destination disclosure -----------------------------
- * Section collapses behind a <summary> row so a repo list with
- * many mirrors doesn't eat half the screen. Summary is clickable;
- * a CSS chevron indicates state. The <details>/<summary> primitive
- * handles keyboard + a11y for free. */
-.dest-details { border-radius: var(--radius-sm); }
-.dest-details > summary {
+/* --- Collapsible repo-card sections ----------------------------
+ * Both the Subscriptions and Mirror-destination sections on a repo
+ * card collapse behind a <summary> row so a long repo list doesn't
+ * eat half the screen. Single shared disclosure affordance: CSS
+ * chevron that rotates on [open], a right-aligned muted hint that
+ * summarises the contents without forcing a click. The
+ * <details>/<summary> primitive handles keyboard + a11y for free. */
+.ic-collapse { border-radius: var(--radius-sm); }
+.ic-collapse > summary {
   list-style: none;
   cursor: pointer;
   user-select: none;
@@ -631,20 +678,17 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
   align-items: center;
   gap: 0.5rem;
 }
-.dest-details > summary::-webkit-details-marker { display: none; }
-.dest-details > summary::before {
+.ic-collapse > summary::-webkit-details-marker { display: none; }
+.ic-collapse > summary::before {
   content: "▸";
   display: inline-block;
   color: var(--muted);
   font-size: 0.8rem;
   transition: transform 120ms ease;
 }
-.dest-details[open] > summary::before { transform: rotate(90deg); }
+.ic-collapse[open] > summary::before { transform: rotate(90deg); }
 
-/* Compact URL-or-"not mirrored" hint next to the title so the
- * user can decide whether to expand without opening every repo. */
-.dest-summary-hint {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+.ic-summary-hint {
   font-size: 0.8rem;
   color: var(--muted);
   margin-left: auto;
@@ -653,8 +697,11 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
   white-space: nowrap;
   max-width: 30ch;
 }
+.ic-summary-hint.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
 
-.dest-body { padding-top: 0.5rem; }
+.ic-collapse-body { padding-top: 0.5rem; }
 
 /* Empty-state row: muted message + right-aligned Add button. */
 .dest-empty-row {
@@ -891,6 +938,24 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
   color: var(--muted);
   font-size: 0.9rem;
   white-space: pre-wrap;
+}
+/* Prompt input: themed text box that matches the form inputs
+ * elsewhere in the admin. Explicit color + background because
+ * user agent defaults otherwise leak through as white-on-white
+ * in dark mode. */
+.ed-dlg-input {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  color: var(--text);
+  font-size: 0.95rem;
+  box-sizing: border-box;
+}
+.ed-dlg-input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 .ed-dlg-foot {
   padding: 12px 14px;

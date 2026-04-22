@@ -71,7 +71,13 @@
       } catch (e) { GG.dialog.alert('Role change failed', e.message); }
     }
     async function patchDisplayName() {
-      const next = prompt('Display name for ' + a.provider + ':' + a.identifier + ':', a.display_name || '');
+      const next = await GG.dialog.prompt({
+        title: 'Rename ' + a.provider + ':' + a.identifier,
+        message: 'Shown in the sidebar and subscription cards. Leave blank to clear.',
+        defaultValue: a.display_name || '',
+        placeholder: 'e.g. Peter van de Pas',
+        okText: 'Save',
+      });
       if (next === null) return;
       try {
         await api.patchAccount(a.provider, a.identifier, { display_name: next });
@@ -79,11 +85,14 @@
       } catch (e) { GG.dialog.alert('Rename failed', e.message); }
     }
     async function resetPassword() {
-      // GG.dialog.prompt isn't ported yet; native prompt() is
-      // unavoidable here until we do. Acceptable because the value
-      // never reaches the DOM — only the API call.
-      const pw = prompt('New password for ' + a.identifier + ':');
-      if (!pw) return;
+      const pw = await GG.dialog.prompt({
+        title: 'New password for ' + a.identifier,
+        message: 'This replaces the current password. The account stays local.',
+        placeholder: 'New password',
+        okText: 'Set password',
+        password: true,
+      });
+      if (pw === null || pw === '') return;
       try {
         await api.patchAccount(a.provider, a.identifier, { password: pw });
         refresh();
