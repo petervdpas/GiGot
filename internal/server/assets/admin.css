@@ -634,6 +634,29 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
   margin-top: 0.4rem;
 }
 
+/* Abilities collapsible inside a subscription-key card. Small-caps
+ * "ABILITIES (N)" summary that matches the Subscriptions + Mirror
+ * destination sections on repo cards, so the disclosure vocabulary
+ * reads consistently across the admin. */
+.abilities-collapse > summary {
+  padding: 0.2rem 0;
+}
+.abilities-collapse > .abilities-body {
+  padding-top: 0.4rem;
+  padding-left: 1.1rem;
+}
+/* Foot: Save button first (left), then the status message right
+ * next to it — "saved" reads as confirmation of the button you
+ * just clicked, not something floating on the other side of the
+ * row. Save is always present; status text is empty until
+ * something happens. */
+.abilities-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
 .dest-row {
   display: flex;
   flex-direction: column;

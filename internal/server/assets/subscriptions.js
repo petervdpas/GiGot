@@ -38,7 +38,11 @@
   // disabled placeholder so the dropdown still looks intentional.
   // Subscription keys bind to exactly one repo; the multi-toggle
   // picker that used to live here is gone with the data model.
-  function renderRepoSelect(host, value) {
+  // `onChange(repoName)` fires whenever the user picks a new value —
+  // used by the issue and edit flows to re-sync the abilities row
+  // (mirror is only relevant when the selected repo has a
+  // destination).
+  function renderRepoSelect(host, value, onChange) {
     const names = repoNames();
     if (names.length === 0) {
       host.innerHTML = GG.select.html({
@@ -56,6 +60,10 @@
       options: names.map(n => ({ value: n, label: n })),
     });
     GG.select.initAll(host);
+    if (onChange) {
+      const sel = host.querySelector('.gsel');
+      if (sel) GG.select.init(sel, onChange);
+    }
   }
 
   function selectedRepoFromHost(host) {
@@ -63,39 +71,52 @@
     return hidden ? hidden.value : '';
   }
 
+  // repoHasMirror returns true when the named repo has at least
+  // one mirror destination configured. Reads from repoInfoCache —
+  // RepoInfo.DestinationCount is populated by the /api/repos
+  // listing, so no extra fetch is needed.
+  function repoHasMirror(repoName) {
+    if (!repoName) return false;
+    const r = repoInfoCache.find(x => x.name === repoName);
+    return !!(r && r.destination_count > 0);
+  }
+
   // KNOWN_ABILITIES mirrors internal/auth.KnownAbilities(). Each
-  // entry has a `relevant` predicate: an ability is only offered in
-  // the UI when its precondition holds, otherwise granting it would
-  // be inert (e.g. `mirror` with no credentials in the vault means
-  // the holder has nothing to reference when creating a destination).
-  // The server-side allowlist still rejects anything not named here
-  // via 400, so this list must stay in lockstep with Go's list.
+  // entry has a `relevant(repoName)` predicate: an ability is only
+  // offered in the UI when BOTH the global precondition (e.g. at
+  // least one credential exists) AND the per-repo precondition
+  // (e.g. the repo has a mirror destination to manage) hold.
+  // Granting an ability that can't be acted on would mislead the
+  // admin. The server-side allowlist still rejects anything not
+  // named here via 400, so this list must stay in lockstep with
+  // Go's list.
   const KNOWN_ABILITIES = [
     {
       name: 'mirror',
-      hint: 'self-manage remote destinations (remote-sync.md §2.6)',
-      relevant: () => credentialsCache.length > 0,
-      inertHint: 'add a credential first — a mirror destination needs one to reference',
+      hint: 'self-manage remote destinations',
+      relevant: (repoName) =>
+        credentialsCache.length > 0 && repoHasMirror(repoName),
     },
   ];
 
-  function relevantAbilities() {
-    return KNOWN_ABILITIES.filter(a => a.relevant());
+  function relevantAbilities(repoName) {
+    return KNOWN_ABILITIES.filter(a => a.relevant(repoName));
   }
 
-  function renderAbilityPicker(container, selected) {
+  function renderAbilityPicker(container, selected, repoName) {
     container.replaceChildren();
     const set = new Set(selected);
-    const relevant = relevantAbilities();
+    const relevant = relevantAbilities(repoName);
     const names = new Set(relevant.map(a => a.name));
     for (const a of relevant) {
       container.append(makeAbilityChip(a, set.has(a.name), false));
     }
-    // Held but no longer relevant — render as muted so the admin can revoke.
+    // Held but no longer relevant for THIS repo — render muted so
+    // the admin can revoke it on the current key without rebinding.
     for (const name of set) {
       if (!names.has(name)) {
         container.append(makeAbilityChip(
-          { name, hint: 'granted but not currently actionable', inertHint: '' },
+          { name, hint: 'granted but not applicable to this repo' },
           true, true,
         ));
       }
@@ -124,9 +145,11 @@
   function syncIssueAbilities() {
     const wrap = document.getElementById('issue-abilities-wrap');
     const picker = document.getElementById('issue-abilities');
-    const any = relevantAbilities().length > 0;
+    const repoHost = document.getElementById('issue-repo-host');
+    const repoName = repoHost ? selectedRepoFromHost(repoHost) : '';
+    const any = relevantAbilities(repoName).length > 0;
     wrap.classList.toggle('hidden', !any);
-    if (any) renderAbilityPicker(picker, []);
+    if (any) renderAbilityPicker(picker, [], repoName);
   }
 
   // ─────────────────────────────────────────────────────────── token card
@@ -158,11 +181,11 @@
         },
       });
     }
-    actions.push({
-      label: 'Edit access',
-      className: 'secondary',
-      onClick: (card) => enterEditMode(card, t),
-    });
+    // No "Edit access" button — the abilities collapsible is the
+    // edit gesture for what admins change day-to-day. Rebinding a
+    // key to a different repo is rare and better modelled as
+    // revoke + re-issue (clean audit trail, no stale abilities
+    // carried over), so it's not a primary action on the card.
     actions.push({
       label: 'Revoke',
       className: 'danger',
@@ -179,56 +202,116 @@
       },
     });
 
-    return Admin.renderTokenCard(t, { title, subtitle, leftChips, actions });
+    const card = Admin.renderTokenCard(t, { title, subtitle, leftChips, actions });
+    installAbilitiesSection(card, t);
+    return card;
   }
 
-  function enterEditMode(card, t) {
-    const cellRepos = card.querySelector('.cell-repos');
-    const cellActions = card.querySelector('.cell-actions');
+  // installAbilitiesSection drops the flat chip row that
+  // Admin.renderTokenCard inserts and replaces it with a
+  // collapsible section whose body contains editable toggles + a
+  // right-aligned Save button. Toggles DON'T save on flip — they
+  // just mark the section dirty. Save commits, then the section
+  // snaps back to its pristine state WITHOUT re-rendering the
+  // card grid (that was causing collapsibles to snap shut and
+  // cards to reorder on every flip).
+  function installAbilitiesSection(card, t) {
+    const flatChips = card.querySelector(':scope > .ic-chips.cell-abilities');
+    if (flatChips) flatChips.remove();
+    const tokenField = card.querySelector('.token-field');
+    if (!tokenField) return null;
 
-    const repoHost = document.createElement('span');
-    repoHost.className = 'edit-repo-host';
-    renderRepoSelect(repoHost, t.repo || '');
-    cellRepos.replaceChildren(repoHost);
+    const details = document.createElement('details');
+    details.className = 'ic-collapse abilities-collapse';
 
-    const abilityEditor = document.createElement('div');
-    abilityEditor.className = 'ability-picker';
-    renderAbilityPicker(abilityEditor, t.abilities || []);
-    cellRepos.after(abilityEditor);
+    const summary = document.createElement('summary');
+    summary.className = 'ic-section-head';
+    summary.innerHTML =
+      '<span class="ic-section-title">Abilities</span>' +
+      '<span class="muted abilities-count"></span>';
 
-    const save = document.createElement('button');
-    save.className = 'small';
-    save.textContent = 'Save';
-    const cancel = document.createElement('button');
-    cancel.className = 'small secondary';
-    cancel.textContent = 'Cancel';
+    const body = document.createElement('div');
+    body.className = 'ic-collapse-body abilities-body';
+
+    const picker = document.createElement('div');
+    picker.className = 'ability-picker';
+    body.appendChild(picker);
+
+    const foot = document.createElement('div');
+    foot.className = 'abilities-foot';
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'small ability-save hidden';
+    saveBtn.textContent = 'Save';
     const status = document.createElement('span');
-    status.className = 'muted edit-status';
-    cellActions.replaceChildren(save, cancel, status);
+    status.className = 'muted ability-status';
+    // DOM order = visual order: Save first (left), status follows.
+    foot.appendChild(saveBtn);
+    foot.appendChild(status);
+    body.appendChild(foot);
 
-    save.addEventListener('click', async () => {
-      const repo = selectedRepoFromHost(repoHost);
-      const abilities = selectedAbilitiesFromPicker(abilityEditor);
-      if (!repo) {
-        status.textContent = 'Pick a repo first.';
-        status.className = 'error';
-        return;
-      }
-      save.disabled = true;
+    tokenField.parentNode.insertBefore(details, tokenField);
+    details.appendChild(summary);
+    details.appendChild(body);
+
+    function currentSelection() {
+      return selectedAbilitiesFromPicker(picker);
+    }
+    function setCount(n) {
+      const el = card.querySelector('.abilities-count');
+      if (el) el.textContent = '(' + n + ')';
+    }
+    function sameSet(a, b) {
+      if (a.length !== b.length) return false;
+      const s = new Set(a);
+      for (const x of b) if (!s.has(x)) return false;
+      return true;
+    }
+    function onDirty() {
+      const next = currentSelection();
+      const pristine = t.abilities || [];
+      const clean = sameSet(next, pristine);
+      saveBtn.classList.toggle('hidden', clean);
+      // Re-enable every time the button reappears — the click handler
+      // disables it during the PATCH to prevent double-submit, and
+      // without this the second flip shows a ghost button.
+      if (!clean) saveBtn.disabled = false;
+      status.textContent = '';
+      status.className = 'muted ability-status';
+    }
+    function repaint() {
+      renderAbilityPicker(picker, t.abilities || [], t.repo || '');
+      setCount((t.abilities || []).length);
+      saveBtn.classList.add('hidden');
+      picker.querySelectorAll('.switch input[name="ability"]').forEach(cb => {
+        cb.addEventListener('change', onDirty);
+      });
+    }
+    saveBtn.addEventListener('click', async () => {
+      const next = currentSelection();
+      saveBtn.disabled = true;
+      status.textContent = 'saving…';
+      status.className = 'muted ability-status';
       try {
-        await api.updateToken(t.token, { repo, abilities });
-        refreshTokens();
+        await api.updateToken(t.token, { abilities: next });
+        // Mutate the in-memory snapshot instead of calling
+        // refreshTokens() — that re-fetches + re-renders the whole
+        // grid, which closes every collapsible and reorders cards.
+        // tokensCache holds the same `t` reference so downstream
+        // reads (renderTokensGrid filter) see the new abilities.
+        t.abilities = next;
+        setCount(next.length);
+        saveBtn.classList.add('hidden');
+        status.textContent = 'saved';
       } catch (e) {
-        save.disabled = false;
         status.textContent = e.message;
-        status.className = 'error';
+        status.className = 'error ability-status';
+        saveBtn.disabled = false;
       }
     });
 
-    cancel.addEventListener('click', () => {
-      const fresh = renderTokenCard(t);
-      card.replaceWith(fresh);
-    });
+    repaint();
+    return details;
   }
 
   // userFilter pulls ?user=<scoped> off the URL. When set, the token
@@ -297,7 +380,6 @@
       credentialsCache = credData.credentials || [];
       accountsCache = acctData.accounts || [];
       renderTokensGrid();
-      syncIssueAbilities();
 
       // ?user= pre-selects the account picker. ?repo= pre-selects the
       // repo in the single-select picker. Both live behind the same
@@ -307,7 +389,14 @@
       renderAccountPicker(preUser || '');
       const preRepo = params.get('repo');
       const repoHost = document.getElementById('issue-repo-host');
-      renderRepoSelect(repoHost, preRepo && repoNames().includes(preRepo) ? preRepo : '');
+      renderRepoSelect(
+        repoHost,
+        preRepo && repoNames().includes(preRepo) ? preRepo : '',
+        () => syncIssueAbilities(),
+      );
+      // Run once after the picker is rendered — the onChange hook
+      // only fires on user interaction, not the initial value.
+      syncIssueAbilities();
     } catch (e) {
       console.error(e);
     }
