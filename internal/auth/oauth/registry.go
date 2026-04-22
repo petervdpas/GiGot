@@ -7,8 +7,17 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/petervdpas/GiGot/internal/config"
 )
+
+// msaTenantIssuer is the issuer Microsoft returns from the
+// /consumers discovery doc: a concrete tenant GUID that represents
+// "home tenant of every personal Microsoft account." The URL you
+// discover against ("/consumers/v2.0") and the issuer on the resulting
+// id_token differ — a well-documented quirk of MSA — so we pin the
+// expected issuer via InsecureIssuerURLContext to keep go-oidc happy.
+const msaTenantIssuer = "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0"
 
 // SecretResolver looks up a credential secret by its name in the
 // credential vault. The OAuth layer doesn't import
@@ -157,6 +166,7 @@ func buildMicrosoft(ctx context.Context, cfg config.OAuthProviderConfig, resolve
 	if display == "" {
 		display = "Microsoft (personal)"
 	}
+	ctx = oidc.InsecureIssuerURLContext(ctx, msaTenantIssuer)
 	return NewOIDCProvider(ctx, "microsoft",
 		"https://login.microsoftonline.com/consumers/v2.0",
 		cfg.ClientID, secret, display, "sub", cfg.AllowRegister)

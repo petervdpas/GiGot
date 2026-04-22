@@ -58,7 +58,7 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sess, err := s.sessionStrategy.Create(a.Identifier)
+	sess, err := s.sessionStrategy.Create(a.Provider, a.Identifier)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -117,7 +117,13 @@ func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 // admin humans; handlers that need token-authed access don't call this.
 func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *auth.Identity {
 	if id, err := s.sessionStrategy.Authenticate(r); err == nil {
-		return id
+		// A valid session cookie is not enough — OAuth auto-register
+		// mints sessions for regular accounts too. Re-read the account
+		// on every request so a demotion invalidates access without
+		// waiting for the cookie to expire.
+		if acc, aerr := s.accounts.Get(id.Provider, id.Username); aerr == nil && acc.Role == accounts.RoleAdmin {
+			return id
+		}
 	}
 	if s.gatewayStrategy != nil {
 		if id, err := s.gatewayStrategy.Authenticate(r); err == nil && id != nil {
@@ -326,11 +332,11 @@ func (s *Server) handleAdminSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := AdminLoginResponse{Username: id.Username}
-	// Enrich with display_name / role if the session's identifier
-	// resolves to a local account. Sessions today are only minted for
-	// local logins, so this is the common path; a missing row is fine
-	// (session is still valid, the UI just sees plain username).
-	if acc, err := s.accounts.Get(accounts.ProviderLocal, id.Username); err == nil {
+	// Enrich with display_name / role via the session's own provider —
+	// OAuth sessions resolve under microsoft / github, gateway under
+	// gateway, local under local. A missing row is fine (session is
+	// still valid, the UI just sees the raw identifier).
+	if acc, err := s.accounts.Get(id.Provider, id.Username); err == nil {
 		resp.DisplayName = acc.DisplayName
 		resp.Role = acc.Role
 	}

@@ -17,6 +17,7 @@ const SessionCookieName = "gigot_session"
 // let the sealed persister round-trip these without a shadow DTO.
 type Session struct {
 	ID        string    `json:"id"`
+	Provider  string    `json:"provider"`
 	Username  string    `json:"username"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
@@ -110,21 +111,33 @@ func (s *SessionStrategy) Authenticate(r *http.Request) (*Identity, error) {
 		return nil, ErrInvalidToken
 	}
 
+	// Provider on the Identity is the upstream account provider (local,
+	// microsoft, github, …) so handlers can look the account back up
+	// and re-check its role on every request. A legacy session minted
+	// before this field existed falls back to "local" — which was the
+	// only login path at the time and matches the on-disk invariant.
+	prov := sess.Provider
+	if prov == "" {
+		prov = "local"
+	}
 	return &Identity{
 		ID:       sess.Username,
 		Username: sess.Username,
-		Provider: s.Name(),
+		Provider: prov,
 	}, nil
 }
 
-// Create mints a new session for the given username and returns it.
-func (s *SessionStrategy) Create(username string) (*Session, error) {
+// Create mints a new session for the given (provider, username) and
+// returns it. Provider is the originating account provider so admin
+// role checks can walk back to the account record on every request.
+func (s *SessionStrategy) Create(provider, username string) (*Session, error) {
 	id, err := generateSessionID()
 	if err != nil {
 		return nil, err
 	}
 	sess := &Session{
 		ID:        id,
+		Provider:  provider,
 		Username:  username,
 		ExpiresAt: time.Now().Add(s.ttl),
 	}

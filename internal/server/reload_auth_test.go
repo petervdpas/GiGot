@@ -240,7 +240,7 @@ func TestGetAuth_SnapshotContract(t *testing.T) {
 	if err := srv.accounts.SetPassword("alice", "pw"); err != nil {
 		t.Fatal(err)
 	}
-	sess, err := srv.sessionStrategy.Create("alice")
+	sess, err := srv.sessionStrategy.Create("local", "alice")
 	if err != nil {
 		t.Fatal(err)
 	}

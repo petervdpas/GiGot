@@ -348,7 +348,7 @@
   (async function boot() {
     const who = await guardSession();
     if (!who) return;
-    initSidebar('repositories', who.username);
+    initSidebar('repositories', who);
 
     // Render the Formidable-scaffold toggle into its placeholder on the
     // create form. Consistent with the other "toggle markup lives in

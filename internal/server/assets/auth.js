@@ -31,7 +31,7 @@
   GG.core.onReady(async () => {
     const who = await guardSession();
     if (!who) return;
-    initSidebar('auth', who.username);
+    initSidebar('auth', who);
 
     const state = await api.getAuth();
     document.getElementById('cfg-path').textContent = state.config_path || '(unset — changes not persisted)';

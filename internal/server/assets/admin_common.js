@@ -230,10 +230,15 @@
   // Every authenticated admin page carries the same sidebar. Instead
   // of duplicating ~30 lines of HTML in three templates, each page
   // drops an empty `<aside id="admin-sidebar"></aside>` host and
-  // calls initSidebar(activeKey, username) on boot. activeKey picks
-  // which nav link gets `.active`. Nav links are plain <a href>s now
-  // (no JS panel-switching) since each section lives on its own page.
-  function initSidebar(activeKey, username) {
+  // calls initSidebar(activeKey, who) on boot. `who` is the session
+  // response ({ username, display_name, role }) — display_name is
+  // preferred when set so OAuth sessions don't surface raw `sub`
+  // claims. activeKey picks which nav link gets `.active`.
+  function initSidebar(activeKey, who) {
+    // Back-compat: older call sites passed a plain username string.
+    const label = (typeof who === 'string')
+      ? who
+      : (who && (who.display_name || who.username)) || '';
     const aside = document.getElementById('admin-sidebar');
     if (!aside) return;
     const navItems = [
@@ -261,7 +266,7 @@
         '<a id="logout">Sign out</a>' +
       '</nav>' +
       '<div class="me">' +
-        'signed in as<strong id="me-name">' + escapeHtml(username || '') + '</strong>' +
+        'signed in as<strong id="me-name">' + escapeHtml(label) + '</strong>' +
       '</div>' +
       '<div class="theme-row">' +
         '<span class="theme-label">Light theme</span>' +

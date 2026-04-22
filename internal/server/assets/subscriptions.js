@@ -321,7 +321,7 @@
   (async function boot() {
     const who = await guardSession();
     if (!who) return;
-    initSidebar('subscriptions', who.username);
+    initSidebar('subscriptions', who);
 
     document.getElementById('issue-form').addEventListener('submit', async e => {
       e.preventDefault();

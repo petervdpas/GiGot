@@ -87,7 +87,7 @@
   (async function boot() {
     const who = await guardSession();
     if (!who) return;
-    initSidebar('credentials', who.username);
+    initSidebar('credentials', who);
 
     // Render the Kind dropdown (.gsel) into its placeholder so it
     // matches the rest of the form chrome.

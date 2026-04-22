@@ -65,6 +65,22 @@
     });
     actions.appendChild(flipRoleBtn);
 
+    // Display-name edit is valuable for every provider — OAuth identifiers
+    // are opaque (MSA `sub`, GitHub numeric id) so the friendly label is
+    // the only thing a human reads.
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'small secondary';
+    renameBtn.textContent = a.display_name ? 'Rename' : 'Set display name';
+    renameBtn.addEventListener('click', async () => {
+      const next = prompt('Display name for ' + a.provider + ':' + a.identifier + ':', a.display_name || '');
+      if (next === null) return;
+      try {
+        await api.patchAccount(a.provider, a.identifier, { display_name: next });
+        refresh();
+      } catch (e) { GG.dialog.alert('Rename failed', e.message); }
+    });
+    actions.appendChild(renameBtn);
+
     if (a.provider === 'local') {
       const pwBtn = document.createElement('button');
       pwBtn.className = 'small secondary';
@@ -107,7 +123,7 @@
   (async function boot() {
     const who = await guardSession();
     if (!who) return;
-    initSidebar('accounts', who.username);
+    initSidebar('accounts', who);
 
     // Render the Provider + Role dropdowns with the shared .gsel chrome
     // so they match the Kind dropdown on the credentials page. The

@@ -16,7 +16,7 @@ func TestSessionStrategyName(t *testing.T) {
 
 func TestSessionCreateAndAuthenticate(t *testing.T) {
 	s := NewSessionStrategy(time.Hour)
-	sess, err := s.Create("alice")
+	sess, err := s.Create("local", "alice")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,8 +28,28 @@ func TestSessionCreateAndAuthenticate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id.Username != "alice" || id.Provider != "session" {
+	if id.Username != "alice" || id.Provider != "local" {
 		t.Fatalf("unexpected identity: %+v", id)
+	}
+}
+
+func TestSessionAuthenticate_LegacyMissingProviderFallsBackToLocal(t *testing.T) {
+	// Sessions minted before the Provider field existed were persisted
+	// with an empty "provider" JSON field. They're still valid admin
+	// sessions on the existing install (local-only era), so surface
+	// them as provider="local" rather than breaking the user's day.
+	s := NewSessionStrategy(time.Hour)
+	sess, _ := s.Create("", "alice")
+
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: sess.ID})
+
+	id, err := s.Authenticate(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.Provider != "local" {
+		t.Fatalf("legacy session provider = %q, want local", id.Provider)
 	}
 }
 
@@ -52,7 +72,7 @@ func TestSessionAuthenticate_BadCookie(t *testing.T) {
 
 func TestSessionExpiry(t *testing.T) {
 	s := NewSessionStrategy(10 * time.Millisecond)
-	sess, _ := s.Create("alice")
+	sess, _ := s.Create("local", "alice")
 
 	time.Sleep(20 * time.Millisecond)
 
@@ -65,7 +85,7 @@ func TestSessionExpiry(t *testing.T) {
 
 func TestSessionDestroy(t *testing.T) {
 	s := NewSessionStrategy(time.Hour)
-	sess, _ := s.Create("alice")
+	sess, _ := s.Create("local", "alice")
 	if !s.Destroy(sess.ID) {
 		t.Fatal("expected Destroy to return true")
 	}
@@ -78,7 +98,7 @@ func TestSessionIDUniqueness(t *testing.T) {
 	s := NewSessionStrategy(time.Hour)
 	seen := make(map[string]bool)
 	for i := 0; i < 100; i++ {
-		sess, err := s.Create("u")
+		sess, err := s.Create("local", "u")
 		if err != nil {
 			t.Fatal(err)
 		}

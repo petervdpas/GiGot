@@ -109,11 +109,14 @@ func TestOAuth_UnknownProviderIs404(t *testing.T) {
 	}
 }
 
-// TestOAuth_CallbackAutoRegistersAndMintsSession is the load-bearing
-// end-to-end path: start → extract state → fake a callback → expect
-// a session cookie AND a freshly-created regular account for the
-// claimed identifier.
-func TestOAuth_CallbackAutoRegistersAndMintsSession(t *testing.T) {
+// TestOAuth_CallbackAutoRegistersRegularButDoesNotMintSession proves
+// the guard that stops a fresh OAuth user from reaching the admin
+// console: auto-register still creates the account (so an admin can
+// promote them later), but NO session cookie is minted because the
+// role is regular. Before this guard existed, auto-registered users
+// landed on /admin/repositories and could self-promote via the
+// under-gated /admin/accounts handler.
+func TestOAuth_CallbackAutoRegistersRegularButDoesNotMintSession(t *testing.T) {
 	srv := testServer(t)
 	installStubProviders(srv, &stubProvider{
 		name:     "entra",
@@ -125,13 +128,65 @@ func TestOAuth_CallbackAutoRegistersAndMintsSession(t *testing.T) {
 		},
 	})
 
-	// Start.
 	startReq := httptest.NewRequest(http.MethodGet, "/admin/login/entra", nil)
 	startRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(startRec, startReq)
 	state := extractState(t, startRec.Header().Get("Location"))
 
-	// Callback with the freshly issued state.
+	cbReq := httptest.NewRequest(http.MethodGet,
+		"/admin/login/entra/callback?state="+state+"&code=code-abc", nil)
+	cbRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(cbRec, cbReq)
+
+	if cbRec.Code != http.StatusUnauthorized {
+		t.Fatalf("callback want 401 (regular blocked), got %d body=%s", cbRec.Code, cbRec.Body.String())
+	}
+	for _, c := range cbRec.Result().Cookies() {
+		if c.Name == auth.SessionCookieName {
+			t.Fatal("session cookie must NOT be minted for a regular OAuth login")
+		}
+	}
+
+	// Account auto-registration still happened — the guard is on the
+	// session, not the account. An admin can now promote them.
+	acc, err := srv.accounts.Get("entra", "peter-at-work")
+	if err != nil {
+		t.Fatalf("auto-register missed: %v", err)
+	}
+	if acc.Role != accounts.RoleRegular {
+		t.Fatalf("role=%q, want regular", acc.Role)
+	}
+	if acc.DisplayName != "Peter (work)" {
+		t.Fatalf("display name not propagated: %q", acc.DisplayName)
+	}
+}
+
+// TestOAuth_CallbackAdminLoginMintsSession is the happy path: an
+// OAuth identity that already resolves to a pre-existing admin
+// account DOES get a session cookie and the redirect to
+// /admin/repositories. This covers the case where an admin pre-creates
+// the row (or an existing regular was promoted) and then logs in.
+func TestOAuth_CallbackAdminLoginMintsSession(t *testing.T) {
+	srv := testServer(t)
+	installStubProviders(srv, &stubProvider{
+		name: "entra", display: "Entra", register: true,
+		claim: oauth.Claim{Identifier: "boss", DisplayName: "The Boss"},
+	})
+	// Pre-create the account as admin so OAuth resolves to an admin row.
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider:    "entra",
+		Identifier:  "boss",
+		Role:        accounts.RoleAdmin,
+		DisplayName: "The Boss",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	startReq := httptest.NewRequest(http.MethodGet, "/admin/login/entra", nil)
+	startRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(startRec, startReq)
+	state := extractState(t, startRec.Header().Get("Location"))
+
 	cbReq := httptest.NewRequest(http.MethodGet,
 		"/admin/login/entra/callback?state="+state+"&code=code-abc", nil)
 	cbRec := httptest.NewRecorder()
@@ -151,20 +206,7 @@ func TestOAuth_CallbackAutoRegistersAndMintsSession(t *testing.T) {
 		}
 	}
 	if gotCookie == nil {
-		t.Fatal("no session cookie set on callback")
-	}
-
-	// Account must have been auto-registered as a regular under the
-	// provider name (not local).
-	acc, err := srv.accounts.Get("entra", "peter-at-work")
-	if err != nil {
-		t.Fatalf("auto-register missed: %v", err)
-	}
-	if acc.Role != accounts.RoleRegular {
-		t.Fatalf("role=%q, want regular", acc.Role)
-	}
-	if acc.DisplayName != "Peter (work)" {
-		t.Fatalf("display name not propagated: %q", acc.DisplayName)
+		t.Fatal("admin OAuth must mint a session cookie")
 	}
 }
 
@@ -201,6 +243,14 @@ func TestOAuth_CallbackReplayIsRejected(t *testing.T) {
 		name: "entra", display: "Entra", register: true,
 		claim: oauth.Claim{Identifier: "peter"},
 	})
+	// Pre-create as admin so the first callback gets past the
+	// "regular accounts can't mint a session" guard; this test's
+	// assertion is about state one-shot semantics, not role gating.
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider: "entra", Identifier: "peter", Role: accounts.RoleAdmin,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	startReq := httptest.NewRequest(http.MethodGet, "/admin/login/entra", nil)
 	startRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(startRec, startReq)

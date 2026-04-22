@@ -67,7 +67,7 @@ func TestSessionStrategy_PersistsAcrossRestart(t *testing.T) {
 	if err := s1.SetPersister(store1); err != nil {
 		t.Fatal(err)
 	}
-	sess, err := s1.Create("alice")
+	sess, err := s1.Create("local", "alice")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestSessionStrategy_DestroySurvivesRestart(t *testing.T) {
 	store, _ := NewSealedSessionStore(path, enc)
 	s := NewSessionStrategy(time.Hour)
 	_ = s.SetPersister(store)
-	sess, _ := s.Create("alice")
+	sess, _ := s.Create("local", "alice")
 	if !s.Destroy(sess.ID) {
 		t.Fatal("destroy returned false")
 	}
