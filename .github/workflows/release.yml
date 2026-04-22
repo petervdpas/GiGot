@@ -27,10 +27,14 @@ jobs:
           cache: true
 
       - name: Configure git identity (integration tests)
+        # GiGot's scaffold code pushes to the "master" branch by default, and
+        # InitBare relies on git's HEAD default. Do NOT set init.defaultBranch
+        # here — forcing "main" leaves the bare HEAD pointing at an empty
+        # branch while scaffold commits land on "master", and every /head
+        # request comes back 409 ErrRepoEmpty.
         run: |
           git config --global user.email "ci@gigot.local"
           git config --global user.name  "GiGot CI"
-          git config --global init.defaultBranch main
 
       - name: Unit + integration tests
         run: go test ./... -v
