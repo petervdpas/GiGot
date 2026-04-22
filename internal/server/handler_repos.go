@@ -104,24 +104,20 @@ func (s *Server) repoInfo(name string) RepoInfo {
 	return info
 }
 
-// filterReposForToken narrows a repo-name list to just the entries the token
-// on the request is allowed to see. Empty allowlist → empty result.
+// filterReposForToken narrows a repo-name list to just the single
+// repo the token is bound to. Subscription keys are one-repo-per-key,
+// so this is effectively a membership filter for one string.
 func (s *Server) filterReposForToken(r *http.Request, names []string) []string {
 	entry := s.tokenStrategy.EntryFromRequest(r)
-	if entry == nil || len(entry.Repos) == 0 {
+	if entry == nil || entry.Repo == "" {
 		return nil
 	}
-	allowed := make(map[string]struct{}, len(entry.Repos))
-	for _, repo := range entry.Repos {
-		allowed[repo] = struct{}{}
-	}
-	out := make([]string, 0, len(names))
 	for _, n := range names {
-		if _, ok := allowed[n]; ok {
-			out = append(out, n)
+		if n == entry.Repo {
+			return []string{n}
 		}
 	}
-	return out
+	return nil
 }
 
 func (s *Server) createRepo(w http.ResponseWriter, r *http.Request) {

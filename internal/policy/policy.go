@@ -120,18 +120,16 @@ func decideTokenAccess(ctx context.Context, action Action, resource string) Deci
 		if entry == nil {
 			return Deny("token entry missing from context")
 		}
+		if entry.Repo == "" {
+			return Deny("no repo bound to this token")
+		}
 		if resource == "" {
-			// Listing: allow when at least one repo is assigned. Handler
-			// filters the returned set to those repos.
-			if len(entry.Repos) == 0 {
-				return Deny("no repos assigned to this token")
-			}
+			// Listing: allow. Handler filters the returned set to
+			// the single bound repo via filterReposForToken.
 			return Allow()
 		}
-		for _, r := range entry.Repos {
-			if r == resource {
-				return Allow()
-			}
+		if entry.Repo == resource {
+			return Allow()
 		}
 		return Deny("token not permitted for repo " + resource)
 	default:

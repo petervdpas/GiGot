@@ -12,25 +12,31 @@ import (
 
 func TestIssueToken(t *testing.T) {
 	srv := testServer(t)
+	if err := srv.git.InitBare("repo-a"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := srv.accounts.Put(accounts.Account{
 		Provider: accounts.ProviderLocal, Identifier: "alice", Role: accounts.RoleRegular,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	payload := `{"username":"alice"}`
+	payload := `{"username":"alice","repo":"repo-a"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
 
 	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusCreated {
-		t.Errorf("expected 201, got %d", rec.Code)
+		t.Errorf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
 	}
 
 	var body TokenResponse
 	json.Unmarshal(rec.Body.Bytes(), &body)
 	if body.Username != "alice" {
 		t.Errorf("expected username alice, got %s", body.Username)
+	}
+	if body.Repo != "repo-a" {
+		t.Errorf("expected repo repo-a, got %q", body.Repo)
 	}
 	if body.Token == "" {
 		t.Error("expected non-empty token")
@@ -113,12 +119,15 @@ func TestParseTokenUsername(t *testing.T) {
 
 func TestIssueToken_ScopedProvider(t *testing.T) {
 	srv := testServer(t)
+	if err := srv.git.InitBare("repo-a"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := srv.accounts.Put(accounts.Account{
 		Provider: accounts.ProviderGitHub, Identifier: "peter", Role: accounts.RoleRegular,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	payload := `{"username":"github:peter"}`
+	payload := `{"username":"github:peter","repo":"repo-a"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(payload))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -172,6 +181,9 @@ func TestIssueToken_RejectsUnknownAccount(t *testing.T) {
 
 func TestIssueToken_UsesExistingAccountRoleUnchanged(t *testing.T) {
 	srv := testServer(t)
+	if err := srv.git.InitBare("repo-a"); err != nil {
+		t.Fatal(err)
+	}
 	// Seed alice as admin; issuing a token for alice must not demote her.
 	if _, err := srv.accounts.Put(accounts.Account{
 		Provider:   accounts.ProviderLocal,
@@ -180,11 +192,12 @@ func TestIssueToken_UsesExistingAccountRoleUnchanged(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(`{"username":"alice"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/token",
+		bytes.NewBufferString(`{"username":"alice","repo":"repo-a"}`))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d", rec.Code)
+		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
 	}
 	acc, _ := srv.accounts.Get(accounts.ProviderLocal, "alice")
 	if acc.Role != accounts.RoleAdmin {
@@ -196,7 +209,7 @@ func TestRevokeToken(t *testing.T) {
 	srv := testServer(t)
 
 	// Issue a token first.
-	token, _ := srv.tokenStrategy.Issue("bob", nil, nil)
+	token, _ := srv.tokenStrategy.Issue("bob", "repo-a", nil)
 
 	payload := `{"token":"` + token + `"}`
 	req := httptest.NewRequest(http.MethodDelete, "/api/auth/token", bytes.NewBufferString(payload))

@@ -48,6 +48,16 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring
   padding: 1.5rem;
   margin-bottom: 1rem;
 }
+/* A card's H2 is usually the "Subscription keys" / "Create account"
+ * style heading. Browsers give <h2> a generous default top margin
+ * that the card padding doesn't fully account for — sections can
+ * read cramped. Lock the first child's top margin to 0 so the card
+ * padding alone controls the head space, then use margin-bottom on
+ * the heading for breathing room before the grid. */
+.card > :first-child { margin-top: 0; }
+.card > h2 { margin-bottom: 0.75rem; }
+.card > p.muted + .card-grid,
+.card > h2 + .card-grid { margin-top: 0.25rem; }
 
 .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 .muted { color: var(--muted); font-size: 0.85rem; }
@@ -376,9 +386,12 @@ a:hover { text-decoration: underline; }
 
 /* Both the repo and tokens grids render one full-width row per card so
    cards read top-to-bottom as a list. Auto-fill is kept on the base
-   .card-grid rule in case another panel wants a denser layout. */
+   .card-grid rule in case another panel wants a denser layout.
+   .sub-grid is the read-only variant on /user — same full-width
+   layout so the key doesn't look orphaned in a half-width card. */
 #repo-grid,
-#token-grid { grid-template-columns: 1fr; }
+#token-grid,
+.sub-grid { grid-template-columns: 1fr; }
 .info-card .ic-actions { justify-content: flex-end; }
 
 .info-card {
@@ -518,6 +531,29 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
 }
 .token-field .copy-btn:hover { background: var(--line); }
 .token-field .copy-btn.ok { color: #3fb950; border-color: #238636; }
+
+/* Masked token renders bullets; when revealed, the real hex shows.
+ * Letter-spacing adds breathing room so the dots read as a password
+ * field and not as a solid bar. */
+.token-field .token-masked { letter-spacing: 0.1em; }
+
+/* Inline icon button used next to the copy button for the show/hide
+ * eye toggle. Sized to match the Copy pill height. */
+.icon-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  padding: 0.2rem 0.35rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  line-height: 0;
+  flex-shrink: 0;
+}
+.icon-btn:hover {
+  background: var(--chip);
+  border-color: var(--line);
+  color: var(--text);
+}
 
 /* Relational sections on a repo card (subscriptions + mirror destination). */
 .info-card .ic-section {

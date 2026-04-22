@@ -67,7 +67,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		resp.Subscriptions = append(resp.Subscriptions, TokenListItem{
 			Token:      tok.Token,
 			Username:   tok.Username,
-			Repos:      tok.Repos,
+			Repo:       tok.Repo,
 			Abilities:  tok.Abilities,
 			HasAccount: s.accounts.Has(prov, ident),
 		})

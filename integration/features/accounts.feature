@@ -72,8 +72,9 @@ Feature: Accounts (admins + regulars)
     Given the server is running
     And an admin "alice" exists with password "hunter2"
     And a regular account "petervdpas" exists on provider "github"
+    And a repository "addresses" exists
     When I log in as admin "alice" with password "hunter2"
-    And I POST "/api/admin/tokens" with body '{"username":"github:petervdpas"}'
+    And I POST "/api/admin/tokens" with body '{"username":"github:petervdpas","repo":"addresses"}'
     Then the response status should be 201
     And the JSON response "username" should be "github:petervdpas"
 
@@ -81,8 +82,9 @@ Feature: Accounts (admins + regulars)
     Given the server is running
     And an admin "alice" exists with password "hunter2"
     And a regular account "petervdpas" exists
+    And a repository "addresses" exists
     When I log in as admin "alice" with password "hunter2"
-    And I POST "/api/admin/tokens" with body '{"username":"github:petervdpas"}'
+    And I POST "/api/admin/tokens" with body '{"username":"github:petervdpas","repo":"addresses"}'
     Then the response status should be 400
     And the response body should contain "no github account"
 
@@ -118,8 +120,9 @@ Feature: Accounts (admins + regulars)
     Given the server is running
     And an admin "alice" exists with password "hunter2"
     And a regular account "bob" exists
+    And a repository "addresses" exists
     When I log in as admin "alice" with password "hunter2"
-    And I POST "/api/admin/tokens" with body '{"username":"bob"}'
+    And I POST "/api/admin/tokens" with body '{"username":"bob","repo":"addresses"}'
     Then the response status should be 201
     When I GET "/api/admin/accounts"
     Then the response status should be 200

@@ -146,7 +146,7 @@ func TestSyncDestination_AdminFailurePopulatesError(t *testing.T) {
 // TokenAbilityPolicy instead of the admin session.
 func TestSyncDestination_SubscriberSuccess(t *testing.T) {
 	srv := subscriberTestServer(t)
-	token, err := srv.tokenStrategy.Issue("alice", []string{"addresses"}, []string{"mirror"})
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", []string{"mirror"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestSyncDestination_SubscriberWithoutMirrorDenied(t *testing.T) {
 	}
 
 	srv.auth.SetEnabled(true)
-	token, err := srv.tokenStrategy.Issue("bob", []string{"addresses"}, nil) // no abilities
+	token, err := srv.tokenStrategy.Issue("bob", "addresses", nil) // no abilities
 	if err != nil {
 		t.Fatal(err)
 	}

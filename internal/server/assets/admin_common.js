@@ -70,12 +70,12 @@
       if (!r.ok) throw new Error('list failed');
       return r.json();
     },
-    async issueToken(username, repos, abilities) {
+    async issueToken(username, repo, abilities) {
       const r = await fetch('/api/admin/tokens', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ username, repos, abilities }),
+        body: JSON.stringify({ username, repo, abilities }),
       });
       if (!r.ok) throw new Error((await r.json()).error || 'issue failed');
       return r.json();
@@ -251,6 +251,125 @@
     };
   }
 
+  // ------------------------------------------------------ token card
+  // Shared renderer for a "subscription key" card. Used by the admin
+  // /admin/subscriptions page (full header with holder name, bind/
+  // edit/revoke actions) AND the user /user landing (read-only, own
+  // keys). Callers customise the title/subtitle/actions; the body
+  // (repos, abilities, token value, copy button) is fixed so the
+  // two pages stay visually aligned.
+  //
+  // opts: {
+  //   title: string                          // required
+  //   subtitle: string (HTML) | null         // small muted line under title
+  //   leftChips: string (HTML) | null        // extra chips before the repo-count badge (e.g. legacy marker)
+  //   actions: [{label, className?, onClick}] | null   // footer buttons; no footer if empty
+  // }
+  function renderTokenCard(t, opts) {
+    opts = opts || {};
+    const card = document.createElement('div');
+    card.className = 'info-card';
+    card.dataset.token = t.token;
+
+    // Subscription keys bind to exactly one repo. Older cards used
+    // to render a chip list; now it's a single chip (or a muted
+    // "(unbound)" fallback if the server somehow returned an empty
+    // string, which should not happen with the post-migration
+    // invariant). Legacy tokens without a bound repo fall through
+    // to the muted variant instead of crashing the card.
+    const repos = t.repo
+      ? '<span class="repo-chip">' + escapeHtml(t.repo) + '</span>'
+      : '<span class="repo-chip none">(unbound)</span>';
+    const abilities = (t.abilities && t.abilities.length)
+      ? t.abilities.map(a => '<span class="ability-badge">' + escapeHtml(a) + '</span>').join('')
+      : '';
+
+    const subtitleHTML = opts.subtitle ? '<div class="ic-subtitle">' + opts.subtitle + '</div>' : '';
+    const leftChipsHTML = opts.leftChips || '';
+    // Right-side header chips show only context (legacy badge when
+    // applicable) — the repo chip lives in the body row below, so we
+    // don't duplicate the repo name in two places. An empty chips
+    // container still renders so the flex header preserves spacing.
+    const headerChipsHTML = leftChipsHTML;
+
+    const actions = opts.actions || [];
+    const actionsHTML = actions.length
+      ? '<div class="ic-actions cell-actions">' +
+          actions.map((_, i) =>
+            '<button type="button" class="small ' + escapeHtml(actions[i].className || '') + '" data-idx="' + i + '">' +
+              escapeHtml(actions[i].label) +
+            '</button>'
+          ).join('') +
+        '</div>'
+      : '';
+
+    // Token is a password-equivalent secret, so we render it masked
+     // by default and expose an eye toggle to reveal it for the
+     // seconds it takes to copy. Copy always uses the real value —
+     // it ignores the mask state so accidental over-sharing (paste
+     // the bullets) can't happen.
+    const masked = '•'.repeat(Math.min(48, Math.max(16, t.token.length)));
+    card.innerHTML =
+      '<div class="ic-header">' +
+        '<div class="ic-title-wrap">' +
+          '<div class="ic-title" title="' + escapeHtml(t.username || '') + '">' + escapeHtml(opts.title || '') + '</div>' +
+          subtitleHTML +
+        '</div>' +
+        (headerChipsHTML ? '<div class="ic-chips">' + headerChipsHTML + '</div>' : '') +
+      '</div>' +
+      '<div class="ic-chips cell-repos">' + repos + '</div>' +
+      (abilities ? '<div class="ic-chips cell-abilities">' + abilities + '</div>' : '') +
+      '<div class="token-field" data-revealed="0">' +
+        '<code class="token-value token-masked">' + masked + '</code>' +
+        '<button type="button" class="icon-btn eye-btn" aria-label="Show key" title="Show key">' +
+          eyeIconSVG(false) +
+        '</button>' +
+        '<button type="button" class="copy-btn">Copy</button>' +
+      '</div>' +
+      actionsHTML;
+
+    const field = card.querySelector('.token-field');
+    const valueEl = field.querySelector('.token-value');
+    const eyeBtn = field.querySelector('.eye-btn');
+    eyeBtn.addEventListener('click', () => {
+      const revealed = field.dataset.revealed === '1';
+      const next = !revealed;
+      field.dataset.revealed = next ? '1' : '0';
+      valueEl.textContent = next ? t.token : masked;
+      valueEl.classList.toggle('token-masked', !next);
+      eyeBtn.setAttribute('aria-label', next ? 'Hide key' : 'Show key');
+      eyeBtn.setAttribute('title', next ? 'Hide key' : 'Show key');
+      eyeBtn.innerHTML = eyeIconSVG(next);
+    });
+
+    card.querySelector('.copy-btn').addEventListener('click', e => copyToClipboard(t.token, e.currentTarget));
+    for (const btn of card.querySelectorAll('.ic-actions button[data-idx]')) {
+      const idx = Number(btn.dataset.idx);
+      btn.addEventListener('click', () => actions[idx].onClick(card));
+    }
+
+    return card;
+  }
+
+  // eyeIconSVG returns the inline SVG for a show/hide toggle. Open
+  // eye = content currently visible (so click hides); crossed-out
+  // eye = content currently hidden (so click reveals). The crossed
+  // state is the open eye with a diagonal slash — standard password
+  // field affordance.
+  function eyeIconSVG(revealed) {
+    if (revealed) {
+      return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
+        '<circle cx="12" cy="12" r="3"/>' +
+        '<line x1="3" y1="3" x2="21" y2="21"/>' +
+      '</svg>';
+    }
+    return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
+      '<circle cx="12" cy="12" r="3"/>' +
+    '</svg>';
+  }
+
   // ---------------------------------------------------------- sidebar
   // Every authenticated admin page carries the same sidebar. Instead
   // of duplicating ~30 lines of HTML in three templates, each page
@@ -259,25 +378,67 @@
   // response ({ username, display_name, role }) — display_name is
   // preferred when set so OAuth sessions don't surface raw `sub`
   // claims. activeKey picks which nav link gets `.active`.
+  // One nav declaration, each entry carries its own role gate. The
+  // sidebar renders only the entries the current user qualifies
+  // for — a regular can NEVER be shown an admin destination, even
+  // if one gets added later and someone forgets to update the
+  // filter. That's the invariant: role lives on the item, not on
+  // a parallel array.
+  const NAV_ITEMS = [
+    { key: 'me',            label: 'My subscriptions',  href: '/user' },
+    { key: 'repositories',  label: 'Repositories',      href: '/admin/repositories',  adminOnly: true },
+    { key: 'subscriptions', label: 'Subscription keys', href: '/admin/subscriptions', adminOnly: true },
+    { key: 'credentials',   label: 'Credentials',       href: '/admin/credentials',   adminOnly: true },
+    { key: 'accounts',      label: 'Accounts',          href: '/admin/accounts',      adminOnly: true },
+    { key: 'auth',          label: 'Authentication',    href: '/admin/auth',          adminOnly: true },
+  ];
+
+  function visibleFor(role, item) {
+    return role === 'admin' || !item.adminOnly;
+  }
+
+  // View-mode is an admin-only affordance: an admin can browse as if
+  // they were a regular user to preview what their teammates see. It
+  // never grants or revokes privilege — admin routes still work if the
+  // admin navigates there directly — it only controls what the nav
+  // and role-gated UI render. Stored per-browser under a local key so
+  // the mode outlasts a reload and lets admins keep "regular view"
+  // pinned while debugging.
+  const VIEW_MODE_KEY = 'gigot.view_mode';
+  function getViewMode() {
+    const v = GG.core.safeLocalStorageGet(VIEW_MODE_KEY);
+    return v === 'regular' ? 'regular' : 'admin';
+  }
+  function setViewMode(mode) {
+    GG.core.safeLocalStorageSet(VIEW_MODE_KEY, mode === 'regular' ? 'regular' : 'admin');
+  }
+
+  // effectiveRole applies the view-mode override. A real admin who
+  // has flipped to regular view is treated as a regular for all
+  // UI-rendering decisions (sidebar nav, brand subtitle, role-gated
+  // cards). Non-admins are unaffected — the toggle isn't even shown.
+  function effectiveRole(who) {
+    const real = (who && typeof who === 'object') ? who.role : '';
+    if (real === 'admin' && getViewMode() === 'regular') return 'regular';
+    return real;
+  }
+
   function initSidebar(activeKey, who) {
     // Back-compat: older call sites passed a plain username string.
     const label = (typeof who === 'string') ? who : accountLabel(who);
+    const realRole = (who && typeof who === 'object') ? who.role : '';
+    const viewRole = effectiveRole(who);
     const aside = document.getElementById('admin-sidebar');
     if (!aside) return;
-    const navItems = [
-      { key: 'repositories', label: 'Repositories',     href: '/admin/repositories' },
-      { key: 'subscriptions', label: 'Subscription keys', href: '/admin/subscriptions' },
-      { key: 'credentials', label: 'Credentials',      href: '/admin/credentials' },
-      { key: 'accounts',    label: 'Accounts',         href: '/admin/accounts' },
-      { key: 'auth',        label: 'Authentication',   href: '/admin/auth' },
-    ];
+    const navItems = NAV_ITEMS.filter(it => visibleFor(viewRole, it));
+    const consoleLabel = viewRole === 'admin' ? 'Admin console' : 'My subscriptions';
     aside.className = 'sidebar';
     aside.innerHTML =
       '<div class="brand">' +
         '<img class="logo" src="/assets/gigot.png" alt="GiGot">' +
         '<div class="brand-text">' +
           '<h1>GiGot</h1>' +
-          '<div class="muted">Admin console</div>' +
+          '<div class="muted">' + escapeHtml(consoleLabel) + '</div>' +
         '</div>' +
       '</div>' +
       '<nav>' +
@@ -285,7 +446,7 @@
           '<a href="' + n.href + '"' + (n.key === activeKey ? ' class="active"' : '') + '>' + escapeHtml(n.label) + '</a>'
         ).join('') +
         '<div class="spacer"></div>' +
-        '<a href="/swagger/index.html" target="_blank" rel="noopener">API documentation</a>' +
+        (viewRole === 'admin' ? '<a href="/swagger/index.html" target="_blank" rel="noopener">API documentation</a>' : '') +
       '</nav>' +
       // Sign out belongs with the identity strip, not with the nav —
       // it's a session verb about WHO you are, not a destination you
@@ -306,7 +467,27 @@
     });
     GG.theme.initToggle('theme-toggle');
 
+    // View-mode toggle only exists for real admins. Flipping TO
+    // regular view while on an admin-only path (e.g. /admin/accounts)
+    // would leave the page's content visible with a regular sidebar —
+    // confusing and inconsistent, so we bounce to /user. Flipping
+    // BACK TO admin view just re-renders the sidebar; the admin
+    // usually wants to stay where they are.
+    const viewToggle = realRole === 'admin' ? [{
+      label: viewRole === 'admin' ? 'Switch to regular view' : 'Switch to admin mode',
+      onClick: () => {
+        const next = viewRole === 'admin' ? 'regular' : 'admin';
+        setViewMode(next);
+        if (next === 'regular' && location.pathname.startsWith('/admin/')) {
+          location.href = '/user';
+        } else {
+          location.reload();
+        }
+      },
+    }] : [];
+
     GG.row_menu.attach(aside.querySelector('.me-actions'), [
+      ...viewToggle,
       { label: 'Sign out', onClick: async () => {
         await api.logout();
         location.href = '/admin';
@@ -356,6 +537,7 @@
     api,
     escapeHtml, shortSha,
     accountLabel, accountOption,
+    renderTokenCard,
     initSidebar, guardSession,
     copyToClipboard,
   };

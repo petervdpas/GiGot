@@ -794,8 +794,13 @@ func (tc *testContext) thePolicyIsDenyAll() error {
 	return nil
 }
 
+// aTokenIsIssuedForUser mints a token bound to a dummy repo. Use for
+// scenarios that only care about authentication (token present =
+// identified caller), not authorisation scope. The repo is hard-coded
+// to a per-scenario name so each call is independently valid under
+// the (user, repo) uniqueness rule.
 func (tc *testContext) aTokenIsIssuedForUser(username string) error {
-	token, err := tc.tokenStrategy.Issue(username, nil, nil)
+	token, err := tc.tokenStrategy.Issue(username, "aux-repo-"+username, nil)
 	if err != nil {
 		return err
 	}
@@ -803,15 +808,11 @@ func (tc *testContext) aTokenIsIssuedForUser(username string) error {
 	return nil
 }
 
-func (tc *testContext) aTokenIsIssuedForUserWithRepos(username, reposCSV string) error {
-	var repos []string
-	for _, r := range strings.Split(reposCSV, ",") {
-		r = strings.TrimSpace(r)
-		if r != "" {
-			repos = append(repos, r)
-		}
-	}
-	token, err := tc.tokenStrategy.Issue(username, repos, nil)
+// aTokenIsIssuedForUserOnRepo mints a key bound to the named repo.
+// Replaces the old multi-repo helper — subscription keys are now one
+// per (user, repo), so the feature wording is single-repo too.
+func (tc *testContext) aTokenIsIssuedForUserOnRepo(username, repo string) error {
+	token, err := tc.tokenStrategy.Issue(username, repo, nil)
 	if err != nil {
 		return err
 	}
@@ -826,15 +827,16 @@ func (tc *testContext) thatTokenHasAbility(ability string) error {
 	return tc.tokenStrategy.UpdateAbilities(tc.currentToken, []string{ability})
 }
 
-func (tc *testContext) adminRescopesThatTokenTo(reposCSV string) error {
-	var repos []string
-	for _, r := range strings.Split(reposCSV, ",") {
-		r = strings.TrimSpace(r)
-		if r != "" {
-			repos = append(repos, r)
-		}
-	}
-	return tc.tokenStrategy.UpdateRepos(tc.currentToken, repos)
+func (tc *testContext) adminRebindsThatTokenTo(repo string) error {
+	return tc.tokenStrategy.UpdateRepo(tc.currentToken, repo)
+}
+
+// adminIssuesAnotherKeyFor drives the HTTP path (not the strategy
+// direct) so the duplicate-subscription 409 is asserted at the API
+// boundary where real clients hit it.
+func (tc *testContext) adminIssuesAnotherKeyFor(username, repo string) error {
+	body := fmt.Sprintf(`{"username":%q,"repo":%q}`, username, repo)
+	return tc.doRequest(http.MethodPost, "/api/auth/token", body)
 }
 
 func (tc *testContext) iRequestWithoutAToken(path string) error {
@@ -1399,8 +1401,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the server is running with auth disabled$`, tc.theServerIsRunningWithAuthDisabled)
 	ctx.Step(`^the server is running with auth enabled$`, tc.theServerIsRunningWithAuthEnabled)
 	ctx.Step(`^a token is issued for user "([^"]*)"$`, tc.aTokenIsIssuedForUser)
-	ctx.Step(`^a token is issued for user "([^"]*)" with repos "([^"]*)"$`, tc.aTokenIsIssuedForUserWithRepos)
-	ctx.Step(`^the admin rescopes that token to "([^"]*)"$`, tc.adminRescopesThatTokenTo)
+	ctx.Step(`^a token is issued for user "([^"]*)" on repo "([^"]*)"$`, tc.aTokenIsIssuedForUserOnRepo)
+	ctx.Step(`^the admin rebinds that token to "([^"]*)"$`, tc.adminRebindsThatTokenTo)
+	ctx.Step(`^the admin issues another key for "([^"]*)" on repo "([^"]*)"$`, tc.adminIssuesAnotherKeyFor)
 	ctx.Step(`^that token has ability "([^"]*)"$`, tc.thatTokenHasAbility)
 	ctx.Step(`^the policy is deny-all$`, tc.thePolicyIsDenyAll)
 	ctx.Step(`^the server keypair is rotated$`, tc.theServerKeypairIsRotated)

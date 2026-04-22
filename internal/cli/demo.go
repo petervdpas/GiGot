@@ -171,14 +171,38 @@ func runAddDemoSetup(cfg *config.Config, stdout io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "  credential %-16s (kind: %s)\n", DemoCredentialName, DemoCredentialKind)
 
-	token, err := stores.tokens.Issue(demoTokenUsername, []string{DemoRepoName, DemoPlainRepoName}, nil)
+	// Subscription keys are one-repo-per-key, so demo setup mints one
+	// token per demo repo. Idempotent: a re-run of -add-demo-setup
+	// that finds an existing token for the same (user, repo) prints
+	// the existing one instead of failing with ErrDuplicate, matching
+	// the admin/repo "already present" pattern above.
+	tokFormidable, err := issueOrExisting(stores.tokens, demoTokenUsername, DemoRepoName, []string{auth.AbilityMirror})
 	if err != nil {
-		return fmt.Errorf("issue token: %w", err)
+		return fmt.Errorf("issue token (%s): %w", DemoRepoName, err)
 	}
-	fmt.Fprintf(stdout, "  token      %s\n", token)
-	fmt.Fprintf(stdout, "\nPaste the token above into the Postman environment's `subscriptionToken`.\n")
+	tokPlain, err := issueOrExisting(stores.tokens, demoTokenUsername, DemoPlainRepoName, nil)
+	if err != nil {
+		return fmt.Errorf("issue token (%s): %w", DemoPlainRepoName, err)
+	}
+	fmt.Fprintf(stdout, "  token %-24s %s\n", DemoRepoName, tokFormidable)
+	fmt.Fprintf(stdout, "  token %-24s %s\n", DemoPlainRepoName, tokPlain)
+	fmt.Fprintf(stdout, "\nPaste one of the tokens above into the Postman environment's `subscriptionToken`.\n")
 	fmt.Fprintf(stdout, "Admin user/password are already the defaults in GiGot.local.postman_environment.json.\n")
 	return nil
+}
+
+// issueOrExisting is the demo-setup helper that makes Issue idempotent:
+// if a token already binds (username, repo), return its string instead
+// of surfacing ErrDuplicateSubscription. Abilities on an existing
+// entry are NOT reconciled — demo setup is best-effort provisioning,
+// not a migration tool.
+func issueOrExisting(ts *auth.TokenStrategy, username, repo string, abilities []string) (string, error) {
+	for _, e := range ts.List() {
+		if e.Username == username && e.Repo == repo {
+			return e.Token, nil
+		}
+	}
+	return ts.Issue(username, repo, abilities)
 }
 
 // runRemoveDemoSetup reverses -add-demo-setup. Missing artefacts are

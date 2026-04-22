@@ -6,26 +6,29 @@ Feature: Token API
   Scenario: Issue a token via API
     Given the server is running
     And a regular account "alice" exists
-    When I POST "/api/auth/token" with body '{"username":"alice"}'
+    And a repository "addresses" exists
+    When I POST "/api/auth/token" with body '{"username":"alice","repo":"addresses"}'
     Then the response status should be 201
     And the JSON response "username" should be "alice"
     And the JSON response "token" should not be empty
 
   Scenario: Issue token with empty username is rejected
     Given the server is running
-    When I POST "/api/auth/token" with body '{"username":""}'
+    When I POST "/api/auth/token" with body '{"username":"","repo":"anything"}'
     Then the response status should be 400
 
   Scenario: Issue token for an unknown account is rejected
     Given the server is running
-    When I POST "/api/auth/token" with body '{"username":"nobody-registered"}'
+    And a repository "addresses" exists
+    When I POST "/api/auth/token" with body '{"username":"nobody-registered","repo":"addresses"}'
     Then the response status should be 400
     And the response body should contain "no local account"
 
   Scenario: Revoke a token via API
     Given the server is running
     And a regular account "bob" exists
-    And I POST "/api/auth/token" with body '{"username":"bob"}'
+    And a repository "addresses" exists
+    And I POST "/api/auth/token" with body '{"username":"bob","repo":"addresses"}'
     And I save the JSON response "token" as "issued_token"
     When I DELETE "/api/auth/token" with saved token "issued_token"
     Then the response status should be 200

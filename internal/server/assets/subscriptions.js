@@ -46,29 +46,34 @@
 
   // ──────────────────────────────────────────────────────────────── pickers
 
-  function renderRepoPicker(container, selected) {
-    const sel = new Set(selected || []);
-    container.innerHTML = '';
+  // renderRepoSelect renders a GG.select picker for a single repo into
+  // `host`, replacing any existing markup. Empty repos list → a
+  // disabled placeholder so the dropdown still looks intentional.
+  // Subscription keys bind to exactly one repo; the multi-toggle
+  // picker that used to live here is gone with the data model.
+  function renderRepoSelect(host, value) {
     const names = repoNames();
     if (names.length === 0) {
-      container.innerHTML = '<span class="muted">No repos exist yet — create one on the Repositories page.</span>';
+      host.innerHTML = GG.select.html({
+        name: 'repo',
+        value: '',
+        options: [{ value: '', label: 'No repos exist yet — create one on the Repositories page.', disabled: true }],
+      });
+      GG.select.initAll(host);
       return;
     }
-    for (const name of names) {
-      const row = document.createElement('div');
-      row.className = 'switch-row';
-      row.innerHTML = GG.toggle_switch.html({
-        value: name,
-        checked: sel.has(name),
-        ariaLabel: 'Allow access to ' + name,
-      }) + '<span class="control-label">' + escapeHtml(name) + '</span>';
-      container.appendChild(row);
-    }
+    host.innerHTML = GG.select.html({
+      name: 'repo',
+      value: value || '',
+      placeholder: 'Pick a repo…',
+      options: names.map(n => ({ value: n, label: n })),
+    });
+    GG.select.initAll(host);
   }
 
-  function selectedReposFromPicker(container) {
-    return Array.from(container.querySelectorAll('.switch input[type=checkbox]:checked'))
-      .map(cb => cb.value);
+  function selectedRepoFromHost(host) {
+    const hidden = host.querySelector('input[name="repo"]');
+    return hidden ? hidden.value : '';
   }
 
   // KNOWN_ABILITIES mirrors internal/auth.KnownAbilities(). Each
@@ -139,93 +144,65 @@
 
   // ─────────────────────────────────────────────────────────── token card
 
+  // Wraps Admin.renderTokenCard with the admin-specific extras:
+  // display-name-resolving title, legacy-account badge, and the
+  // bind/edit/revoke actions. The card body (repos, abilities,
+  // token + copy) is shared across /admin/subscriptions and /user,
+  // so changes to that visual stay in one place.
   function renderTokenCard(t) {
-    const card = document.createElement('div');
-    card.className = 'info-card';
-    card.dataset.token = t.token;
-
-    const repos = (t.repos && t.repos.length)
-      ? t.repos.map(r => '<span class="repo-chip">' + escapeHtml(r) + '</span>').join('')
-      : '<span class="repo-chip none">no repos</span>';
-
-    const abilities = (t.abilities && t.abilities.length)
-      ? t.abilities.map(a => '<span class="ability-badge">' + escapeHtml(a) + '</span>').join('')
-      : '';
-
-    // Legacy badge: the token predates the accounts model and has no
-    // account row to bind to. The Bind action on the card creates a
-    // role=regular account for this username so the token is no longer
-    // dangling. See accounts.md §6.
-    const legacyBadge = t.has_account ? '' :
+    const resolved = resolveAccountForToken(t.username);
+    const title = resolved ? Admin.accountLabel(resolved) : t.username;
+    const subtitle = resolved
+      ? '<code class="acct-identifier" title="' + escapeHtml(t.username) + '">' +
+          escapeHtml(resolved.provider) + ':' + escapeHtml(resolved.identifier) + '</code>'
+      : null;
+    const leftChips = t.has_account ? null :
       '<span class="badge" title="This key was issued before the accounts model shipped. Click Bind to create a regular account for it.">legacy — no account</span>';
 
-    // Title: prefer the account's display name when we can resolve
-    // it — OAuth `sub` identifiers are 40+ chars of opaque base64
-    // and make the card header unreadable. Fall back to the raw
-    // compound string for legacy tokens whose account was deleted
-    // or never existed. The `title` attribute always carries the
-    // exact token.username for disambiguation on hover.
-    const resolved = resolveAccountForToken(t.username);
-    const titleText = resolved ? Admin.accountLabel(resolved) : t.username;
-    const titleSub = resolved
-      ? '<div class="ic-subtitle"><code class="acct-identifier" title="' + escapeHtml(t.username) + '">' +
-          escapeHtml(resolved.provider) + ':' + escapeHtml(resolved.identifier) + '</code></div>'
-      : '';
-
-    card.innerHTML =
-      '<div class="ic-header">' +
-        '<div class="ic-title-wrap">' +
-          '<div class="ic-title" title="' + escapeHtml(t.username) + '">' + escapeHtml(titleText) + '</div>' +
-          titleSub +
-        '</div>' +
-        '<div class="ic-chips">' + legacyBadge + '<span class="badge formidable">' + (t.repos ? t.repos.length : 0) + ' ' +
-          ((t.repos && t.repos.length === 1) ? 'repo' : 'repos') + '</span></div>' +
-      '</div>' +
-      '<div class="ic-chips cell-repos">' + repos + '</div>' +
-      (abilities ? '<div class="ic-chips cell-abilities">' + abilities + '</div>' : '') +
-      '<div class="token-field">' +
-        '<code class="token-value">' + escapeHtml(t.token) + '</code>' +
-        '<button type="button" class="copy-btn">Copy</button>' +
-      '</div>' +
-      '<div class="ic-actions cell-actions">' +
-        (t.has_account ? '' : '<button class="small bind-btn">Bind to account</button>') +
-        '<button class="small secondary edit-btn">Edit access</button>' +
-        '<button class="small danger revoke-btn">Revoke</button>' +
-      '</div>';
-
-    card.querySelector('.copy-btn').addEventListener('click', e => copyToClipboard(t.token, e.currentTarget));
-    card.querySelector('.revoke-btn').addEventListener('click', async () => {
-      const ok = await GG.dialog.confirm({
-        title: 'Revoke subscription key',
-        message: 'Revoke this key? Holder loses access immediately and the key can\'t be restored.',
-        okText: 'Revoke',
-        dangerOk: true,
-      });
-      if (!ok) return;
-      await api.revokeToken(t.token);
-      refreshTokens();
-    });
-    card.querySelector('.edit-btn').addEventListener('click', () => enterEditMode(card, t));
-    const bind = card.querySelector('.bind-btn');
-    if (bind) {
-      bind.addEventListener('click', async () => {
-        try {
-          await api.bindToken(t.token);
-          refreshTokens();
-        } catch (e) { GG.dialog.alert('Bind failed', e.message); }
+    const actions = [];
+    if (!t.has_account) {
+      actions.push({
+        label: 'Bind to account',
+        onClick: async () => {
+          try {
+            await api.bindToken(t.token);
+            refreshTokens();
+          } catch (e) { GG.dialog.alert('Bind failed', e.message); }
+        },
       });
     }
-    return card;
+    actions.push({
+      label: 'Edit access',
+      className: 'secondary',
+      onClick: (card) => enterEditMode(card, t),
+    });
+    actions.push({
+      label: 'Revoke',
+      className: 'danger',
+      onClick: async () => {
+        const ok = await GG.dialog.confirm({
+          title: 'Revoke subscription key',
+          message: 'Revoke this key? Holder loses access immediately and the key can\'t be restored.',
+          okText: 'Revoke',
+          dangerOk: true,
+        });
+        if (!ok) return;
+        await api.revokeToken(t.token);
+        refreshTokens();
+      },
+    });
+
+    return Admin.renderTokenCard(t, { title, subtitle, leftChips, actions });
   }
 
   function enterEditMode(card, t) {
     const cellRepos = card.querySelector('.cell-repos');
     const cellActions = card.querySelector('.cell-actions');
 
-    const picker = document.createElement('div');
-    picker.className = 'repo-picker';
-    renderRepoPicker(picker, t.repos || []);
-    cellRepos.replaceChildren(picker);
+    const repoHost = document.createElement('span');
+    repoHost.className = 'edit-repo-host';
+    renderRepoSelect(repoHost, t.repo || '');
+    cellRepos.replaceChildren(repoHost);
 
     const abilityEditor = document.createElement('div');
     abilityEditor.className = 'ability-picker';
@@ -243,11 +220,16 @@
     cellActions.replaceChildren(save, cancel, status);
 
     save.addEventListener('click', async () => {
-      const repos = selectedReposFromPicker(picker);
+      const repo = selectedRepoFromHost(repoHost);
       const abilities = selectedAbilitiesFromPicker(abilityEditor);
+      if (!repo) {
+        status.textContent = 'Pick a repo first.';
+        status.className = 'error';
+        return;
+      }
       save.disabled = true;
       try {
-        await api.updateToken(t.token, { repos, abilities });
+        await api.updateToken(t.token, { repo, abilities });
         refreshTokens();
       } catch (e) {
         save.disabled = false;
@@ -328,19 +310,17 @@
       credentialsCache = credData.credentials || [];
       accountsCache = acctData.accounts || [];
       renderTokensGrid();
-      renderRepoPicker(document.getElementById('issue-repos'), []);
       syncIssueAbilities();
 
-      // ?user= pre-selects the account picker. ?repo= pre-ticks the
-      // repo picker. Both live behind the same "I arrived via a link
-      // on another page" pattern, so they coexist cleanly.
+      // ?user= pre-selects the account picker. ?repo= pre-selects the
+      // repo in the single-select picker. Both live behind the same
+      // "I arrived via a link on another page" pattern.
       const params = new URLSearchParams(location.search);
       const preUser = params.get('user');
       renderAccountPicker(preUser || '');
       const preRepo = params.get('repo');
-      if (preRepo && repoNames().includes(preRepo)) {
-        renderRepoPicker(document.getElementById('issue-repos'), [preRepo]);
-      }
+      const repoHost = document.getElementById('issue-repo-host');
+      renderRepoSelect(repoHost, preRepo && repoNames().includes(preRepo) ? preRepo : '');
     } catch (e) {
       console.error(e);
     }
@@ -353,10 +333,10 @@
 
     document.getElementById('issue-form').addEventListener('submit', async e => {
       e.preventDefault();
-      const f = e.target;
       const msg = document.getElementById('issue-msg');
       msg.textContent = '';
-      const repos = selectedReposFromPicker(document.getElementById('issue-repos'));
+      const repoHost = document.getElementById('issue-repo-host');
+      const repo = selectedRepoFromHost(repoHost);
       const abilities = selectedAbilitiesFromPicker(document.getElementById('issue-abilities'));
       // Read the picker's hidden input — GG.select projects its value
       // onto an <input name="username"> inside the host span.
@@ -367,13 +347,18 @@
         msg.className = 'error';
         return;
       }
+      if (!repo) {
+        msg.textContent = 'Pick a repo the key should bind to.';
+        msg.className = 'error';
+        return;
+      }
       try {
-        const t = await api.issueToken(scoped, repos, abilities);
+        const t = await api.issueToken(scoped, repo, abilities);
         msg.textContent = 'Issued: ' + t.token;
         // Reset the repo + ability pickers but leave the account
         // picker alone — issuing several keys for the same holder is
         // a common pattern and retyping would be annoying.
-        renderRepoPicker(document.getElementById('issue-repos'), []);
+        renderRepoSelect(repoHost, '');
         refreshAll();
       } catch (ex) {
         msg.textContent = ex.message;

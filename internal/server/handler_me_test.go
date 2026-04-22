@@ -42,11 +42,11 @@ func TestMe_RegularUserSeesOwnProfileOnly(t *testing.T) {
 
 	// Two tokens: one for Alice, one for Bob. Alice's /me must only
 	// surface hers.
-	aliceTok, err := srv.tokenStrategy.Issue("microsoft:alice-msa", []string{"repo-a"}, nil)
+	aliceTok, err := srv.tokenStrategy.Issue("microsoft:alice-msa", "repo-a", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := srv.tokenStrategy.Issue("bob", []string{"repo-b"}, nil); err != nil {
+	if _, err := srv.tokenStrategy.Issue("bob", "repo-b", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -79,8 +79,8 @@ func TestMe_RegularUserSeesOwnProfileOnly(t *testing.T) {
 	if got.Subscriptions[0].Token != aliceTok {
 		t.Fatal("surfaced the wrong token")
 	}
-	if got.Subscriptions[0].Repos[0] != "repo-a" {
-		t.Fatalf("repos = %v", got.Subscriptions[0].Repos)
+	if got.Subscriptions[0].Repo != "repo-a" {
+		t.Fatalf("repo = %q, want %q", got.Subscriptions[0].Repo, "repo-a")
 	}
 }
 
@@ -117,7 +117,7 @@ func TestMe_LegacyBareTokenMatchesLocalCaller(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := srv.tokenStrategy.Issue("alice", []string{"repo-a"}, nil); err != nil {
+	if _, err := srv.tokenStrategy.Issue("alice", "repo-a", nil); err != nil {
 		t.Fatal(err)
 	}
 	sessObj, _ := srv.sessionStrategy.Create("local", "alice")

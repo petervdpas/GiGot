@@ -170,7 +170,7 @@ func TestGitCloneBasicAuthWithToken(t *testing.T) {
 	run(t, "git", "-C", tmpWork+"/seed", "commit", "--allow-empty", "-m", "seed")
 	run(t, "git", "-C", tmpWork+"/seed", "push", "origin", "master")
 
-	token, err := srv.TokenStrategy().Issue("client-1", []string{"basic-clone"}, nil)
+	token, err := srv.TokenStrategy().Issue("client-1", "basic-clone", nil)
 	if err != nil {
 		t.Fatalf("Issue token: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestGitCloneBasicAuthWithUnscopedToken(t *testing.T) {
 	srv.auth.SetEnabled(true)
 	srv.git.InitBare("scope-test")
 
-	token, err := srv.TokenStrategy().Issue("client-2", []string{"some-other-repo"}, nil)
+	token, err := srv.TokenStrategy().Issue("client-2", "some-other-repo", nil)
 	if err != nil {
 		t.Fatalf("Issue token: %v", err)
 	}

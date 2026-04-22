@@ -101,33 +101,40 @@ func TestAddDemoSetup_ProvisionsEverything(t *testing.T) {
 		t.Errorf("credential kind = %q, want %q", cred.Kind, DemoCredentialKind)
 	}
 
-	// Token: printed to stdout, issued in the sealed store.
-	tokenPattern := regexp.MustCompile(`token\s+([a-f0-9]{32,})`)
-	match := tokenPattern.FindStringSubmatch(out.String())
-	if match == nil {
-		t.Fatalf("output missing a token line:\n%s", out.String())
+	// Tokens: one per demo repo, each printed to stdout and present in
+	// the sealed store. Subscription keys are one-repo-per-key, so we
+	// expect exactly two entries for the demo user.
+	tokenPattern := regexp.MustCompile(`token\s+\S+\s+([a-f0-9]{32,})`)
+	matches := tokenPattern.FindAllStringSubmatch(out.String(), -1)
+	if len(matches) != 2 {
+		t.Fatalf("expected 2 token lines, got %d:\n%s", len(matches), out.String())
 	}
-	issued := match[1]
-	var foundInStore bool
+	printed := map[string]bool{matches[0][1]: true, matches[1][1]: true}
+
+	reposByToken := map[string]string{}
 	for _, entry := range stores.tokens.List() {
-		if entry.Token == issued && entry.Username == demoTokenUsername {
-			foundInStore = true
-			wantRepos := map[string]bool{DemoRepoName: false, DemoPlainRepoName: false}
-			for _, r := range entry.Repos {
-				if _, ok := wantRepos[r]; ok {
-					wantRepos[r] = true
-				}
-			}
-			for r, seen := range wantRepos {
-				if !seen {
-					t.Errorf("token repos missing %q (got %v)", r, entry.Repos)
-				}
-			}
-			break
+		if entry.Username == demoTokenUsername {
+			reposByToken[entry.Token] = entry.Repo
 		}
 	}
-	if !foundInStore {
-		t.Errorf("token %q not in the sealed store", issued)
+	if len(reposByToken) != 2 {
+		t.Fatalf("demo user should have 2 tokens in the store, got %d: %+v", len(reposByToken), reposByToken)
+	}
+	wantRepos := map[string]bool{DemoRepoName: false, DemoPlainRepoName: false}
+	for tok, repo := range reposByToken {
+		if !printed[tok] {
+			t.Errorf("store token %q was not printed to stdout", tok)
+		}
+		if _, ok := wantRepos[repo]; !ok {
+			t.Errorf("unexpected repo on demo token: %q", repo)
+			continue
+		}
+		wantRepos[repo] = true
+	}
+	for r, seen := range wantRepos {
+		if !seen {
+			t.Errorf("no demo token for repo %q", r)
+		}
 	}
 }
 
@@ -152,8 +159,11 @@ func TestAddDemoSetup_IdempotentRepeat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen stores: %v", err)
 	}
+	// With idempotent Issue-or-existing, re-running -add-demo-setup
+	// should NOT duplicate tokens — each run reconciles the same
+	// (user, repo) pairs. So two runs still yield two tokens total.
 	if len(stores.tokens.List()) != 2 {
-		t.Errorf("expected 2 tokens after two add-demo-setup runs, got %d", len(stores.tokens.List()))
+		t.Errorf("expected 2 tokens (one per demo repo) after two runs, got %d", len(stores.tokens.List()))
 	}
 }
 
@@ -180,7 +190,7 @@ func TestRemoveDemoSetup_UndoesEverything(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen stores to seed legacy token: %v", err)
 	}
-	staleLegacy, err := stores.tokens.Issue(legacyTokenUsername, nil, nil)
+	staleLegacy, err := stores.tokens.Issue(legacyTokenUsername, "legacy-repo", nil)
 	if err != nil {
 		t.Fatalf("seed legacy token: %v", err)
 	}

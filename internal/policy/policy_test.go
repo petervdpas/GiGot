@@ -81,7 +81,7 @@ func TestTokenRepoPolicy_AuthDisabledAllowsEverything(t *testing.T) {
 func TestTokenRepoPolicy_TokenAllowsAssignedRepo(t *testing.T) {
 	p := TokenRepoPolicy{}
 	id := &auth.Identity{Username: "alice", Provider: ProviderToken}
-	ctx := withToken(&auth.TokenEntry{Token: "t", Username: "alice", Repos: []string{"my-templates"}})
+	ctx := withToken(&auth.TokenEntry{Token: "t", Username: "alice", Repo: "my-templates"})
 
 	if !p.Decide(ctx, id, ActionReadRepo, "my-templates").Allowed {
 		t.Fatal("token should be allowed on its assigned repo")
@@ -94,7 +94,7 @@ func TestTokenRepoPolicy_TokenAllowsAssignedRepo(t *testing.T) {
 func TestTokenRepoPolicy_TokenDeniesUnassignedRepo(t *testing.T) {
 	p := TokenRepoPolicy{}
 	id := &auth.Identity{Username: "alice", Provider: ProviderToken}
-	ctx := withToken(&auth.TokenEntry{Token: "t", Username: "alice", Repos: []string{"my-templates"}})
+	ctx := withToken(&auth.TokenEntry{Token: "t", Username: "alice", Repo: "my-templates"})
 
 	if p.Decide(ctx, id, ActionReadRepo, "someone-elses-repo").Allowed {
 		t.Fatal("token should be denied on an unassigned repo")
@@ -104,7 +104,7 @@ func TestTokenRepoPolicy_TokenDeniesUnassignedRepo(t *testing.T) {
 func TestTokenRepoPolicy_TokenDeniesManagementActions(t *testing.T) {
 	p := TokenRepoPolicy{}
 	id := &auth.Identity{Username: "alice", Provider: ProviderToken}
-	ctx := withToken(&auth.TokenEntry{Token: "t", Username: "alice", Repos: []string{"r"}})
+	ctx := withToken(&auth.TokenEntry{Token: "t", Username: "alice", Repo: "r"})
 
 	for _, a := range []Action{ActionManageRepos, ActionManageTokens, ActionManageAdmins} {
 		if p.Decide(ctx, id, a, "").Allowed {
@@ -113,18 +113,18 @@ func TestTokenRepoPolicy_TokenDeniesManagementActions(t *testing.T) {
 	}
 }
 
-func TestTokenRepoPolicy_TokenListingRequiresRepos(t *testing.T) {
+func TestTokenRepoPolicy_TokenListingRequiresRepo(t *testing.T) {
 	p := TokenRepoPolicy{}
 	id := &auth.Identity{Username: "alice", Provider: ProviderToken}
 
 	withNone := withToken(&auth.TokenEntry{Token: "t", Username: "alice"})
 	if p.Decide(withNone, id, ActionReadRepo, "").Allowed {
-		t.Fatal("listing should be denied when token has no repos assigned")
+		t.Fatal("listing should be denied when token has no repo bound")
 	}
 
-	withOne := withToken(&auth.TokenEntry{Token: "t", Username: "alice", Repos: []string{"r"}})
+	withOne := withToken(&auth.TokenEntry{Token: "t", Username: "alice", Repo: "r"})
 	if !p.Decide(withOne, id, ActionReadRepo, "").Allowed {
-		t.Fatal("listing should be allowed when token has any repo assigned")
+		t.Fatal("listing should be allowed when token has its repo bound")
 	}
 }
 

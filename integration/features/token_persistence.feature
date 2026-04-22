@@ -6,7 +6,8 @@ Feature: Subscription token persistence
   Scenario: Issued tokens survive a restart
     Given the server is running with auth disabled
     And a regular account "alice" exists
-    When I POST "/api/auth/token" with body '{"username":"alice"}'
+    And a repository "addresses" exists
+    When I POST "/api/auth/token" with body '{"username":"alice","repo":"addresses"}'
     And I save the JSON response "token" as "alice_token"
     And the server restarts with auth enabled
     And I request "/api/health" with saved token "alice_token"
@@ -15,7 +16,8 @@ Feature: Subscription token persistence
   Scenario: Revoked tokens stay revoked across a restart
     Given the server is running with auth disabled
     And a regular account "bob" exists
-    When I POST "/api/auth/token" with body '{"username":"bob"}'
+    And a repository "addresses" exists
+    When I POST "/api/auth/token" with body '{"username":"bob","repo":"addresses"}'
     And I save the JSON response "token" as "bob_token"
     And I DELETE "/api/auth/token" with saved token "bob_token"
     And the server restarts with auth enabled

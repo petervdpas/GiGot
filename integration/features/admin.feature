@@ -26,11 +26,12 @@ Feature: Admin subscription-key management
     Given the server is running
     And an admin "alice" exists with password "hunter2"
     And a regular account "client-1" exists
+    And a repository "addresses" exists
     When I log in as admin "alice" with password "hunter2"
     And I GET "/api/admin/tokens"
     Then the JSON response "count" should be 0
 
-    When I POST "/api/admin/tokens" with body '{"username":"client-1"}'
+    When I POST "/api/admin/tokens" with body '{"username":"client-1","repo":"addresses"}'
     Then the response status should be 201
 
     When I GET "/api/admin/tokens"
@@ -41,42 +42,63 @@ Feature: Admin subscription-key management
     And an admin "alice" exists with password "hunter2"
     And a regular account "client-1" exists
     When I log in as admin "alice" with password "hunter2"
-    And I POST "/api/admin/tokens" with body '{"username":"client-1","repos":["ghost-repo"]}'
+    And I POST "/api/admin/tokens" with body '{"username":"client-1","repo":"ghost-repo"}'
     Then the response status should be 400
     And the response body should contain "ghost-repo"
+
+  Scenario: Issuing a token without a repo is rejected
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a regular account "client-1" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/tokens" with body '{"username":"client-1"}'
+    Then the response status should be 400
+    And the response body should contain "repo is required"
 
   Scenario: Issuing a token for an unknown account is rejected
     Given the server is running
     And an admin "alice" exists with password "hunter2"
+    And a repository "addresses" exists
     When I log in as admin "alice" with password "hunter2"
-    And I POST "/api/admin/tokens" with body '{"username":"not-registered"}'
+    And I POST "/api/admin/tokens" with body '{"username":"not-registered","repo":"addresses"}'
     Then the response status should be 400
     And the response body should contain "no local account"
 
-  Scenario: Issuing a token bound to an existing repo succeeds and echoes the allowlist
+  Scenario: Issuing a token bound to an existing repo succeeds and echoes the repo
     Given the server is running
     And an admin "alice" exists with password "hunter2"
     And a regular account "client-1" exists
     And a repository "addresses" exists
     When I log in as admin "alice" with password "hunter2"
-    And I POST "/api/admin/tokens" with body '{"username":"client-1","repos":["addresses"]}'
+    And I POST "/api/admin/tokens" with body '{"username":"client-1","repo":"addresses"}'
     Then the response status should be 201
     And the response body should contain "addresses"
 
-  Scenario: PATCH rescopes an existing token
+  Scenario: Issuing a second key for the same (user, repo) pair returns 409
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a regular account "client-1" exists
+    And a repository "addresses" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/tokens" with body '{"username":"client-1","repo":"addresses"}'
+    Then the response status should be 201
+    When I POST "/api/admin/tokens" with body '{"username":"client-1","repo":"addresses"}'
+    Then the response status should be 409
+
+  Scenario: PATCH rebinds an existing token to a different repo
     Given the server is running
     And an admin "alice" exists with password "hunter2"
     And a regular account "client-1" exists
     And a repository "addresses" exists
     And a repository "projects" exists
     When I log in as admin "alice" with password "hunter2"
-    And I POST "/api/admin/tokens" with body '{"username":"client-1","repos":["addresses"]}'
+    And I POST "/api/admin/tokens" with body '{"username":"client-1","repo":"addresses"}'
     And I save the JSON response "token" as "tok"
-    And I PATCH "/api/admin/tokens" with body '{"token":"${tok}","repos":["projects"]}'
+    And I PATCH "/api/admin/tokens" with body '{"token":"${tok}","repo":"projects"}'
     Then the response status should be 200
     When I GET "/api/admin/tokens"
     Then the response body should contain "projects"
-    And the response body should not contain "addresses"
+    And the response body should not contain "\"repo\":\"addresses\""
 
   Scenario: GET /api/admin/session echoes the logged-in username
     Given the server is running
@@ -92,7 +114,7 @@ Feature: Admin subscription-key management
     And a regular account "client-1" exists
     And a repository "addresses" exists
     When I log in as admin "alice" with password "hunter2"
-    And I POST "/api/admin/tokens" with body '{"username":"client-1","repos":["addresses"]}'
+    And I POST "/api/admin/tokens" with body '{"username":"client-1","repo":"addresses"}'
     And I save the JSON response "token" as "bearer"
     And I POST "/admin/logout" with body ''
     And I request "/api/admin/tokens" with saved token "bearer"

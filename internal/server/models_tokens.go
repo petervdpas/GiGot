@@ -1,7 +1,7 @@
 package server
 
-// TokenRequest is the body for issuing a token. Username binds the
-// key to an existing Account and accepts two shapes:
+// TokenRequest is the body for issuing a subscription key. Username
+// binds the key to an existing Account and accepts two shapes:
 //
 //   - Scoped   "provider:identifier"   — e.g. "github:petervdpas",
 //     "entra:<oid>", "local:alice". Matches the account exactly.
@@ -11,16 +11,15 @@ package server
 //     collection). Any known provider prefix is always interpreted
 //     as scoped.
 //
-// Repos is the allowlist of repository names the subscription key
-// may access; Abilities is the orthogonal capability list (e.g.
-// "mirror" to manage the subscriber-facing destinations API — see
-// remote-sync.md §2.6). Omit or pass an empty array for either to
-// issue a key without that scope.
+// Repo is the single repository this key grants access to —
+// subscription keys are one-repo-per-key by design, so a teammate
+// who needs access to multiple repos receives one key per repo.
+// Abilities is the orthogonal capability list (e.g. "mirror" to
+// manage the subscriber-facing destinations API — see
+// remote-sync.md §2.6).
 type TokenRequest struct {
-	// Username is "provider:identifier" (preferred) or "identifier"
-	// (shorthand for local:identifier). See type docs.
 	Username  string   `json:"username"            example:"github:petervdpas"`
-	Repos     []string `json:"repos,omitempty"     example:"my-templates,shared-context"`
+	Repo      string   `json:"repo"                example:"my-templates"`
 	Abilities []string `json:"abilities,omitempty" example:"mirror"`
 }
 
@@ -28,7 +27,7 @@ type TokenRequest struct {
 type TokenResponse struct {
 	Token     string   `json:"token"               example:"a1b2c3d4..."`
 	Username  string   `json:"username"            example:"alice"`
-	Repos     []string `json:"repos,omitempty"`
+	Repo      string   `json:"repo"                example:"my-templates"`
 	Abilities []string `json:"abilities,omitempty"`
 }
 
@@ -37,14 +36,13 @@ type RevokeTokenRequest struct {
 	Token string `json:"token" example:"a1b2c3d4..."`
 }
 
-// UpdateTokenRequest is the body for PATCH /api/admin/tokens. Any field
-// left nil (i.e. absent from the JSON) is not touched; a non-nil field
-// replaces the corresponding allowlist wholesale (pass an empty array to
-// clear it). Pointer-to-slice is deliberate — a plain slice can't
-// distinguish "omitted" from "set to empty", which would make partial
-// updates ambiguous.
+// UpdateTokenRequest is the body for PATCH /api/admin/tokens. Repo,
+// when non-nil and non-empty, rebinds the key to a different repo
+// (subject to the "one key per (account, repo)" uniqueness rule).
+// Abilities, when non-nil, replaces the list wholesale (pass an
+// empty array to clear). A nil field is not touched.
 type UpdateTokenRequest struct {
 	Token     string    `json:"token"`
-	Repos     *[]string `json:"repos,omitempty"`
+	Repo      *string   `json:"repo,omitempty"`
 	Abilities *[]string `json:"abilities,omitempty"`
 }

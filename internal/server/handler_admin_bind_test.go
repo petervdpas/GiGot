@@ -18,7 +18,7 @@ func TestBindToken_CreatesRegularAccountForLegacyUsername(t *testing.T) {
 	// Bypass the handler (which would reject the unknown account) and
 	// drop a legacy token directly on the strategy — this models the
 	// pre-Phase-1 boot state.
-	tok, err := srv.tokenStrategy.Issue("legacy-user", nil, nil)
+	tok, err := srv.tokenStrategy.Issue("legacy-user", "repo-a", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestBindToken_IdempotentWhenAlreadyBound(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	tok, err := srv.tokenStrategy.Issue("already-bound", nil, nil)
+	tok, err := srv.tokenStrategy.Issue("already-bound", "repo-a", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestBindToken_IdempotentWhenAlreadyBound(t *testing.T) {
 func TestBindToken_RejectsNonLocalScopedToken(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	// Scoped github username, no matching github account.
-	tok, err := srv.tokenStrategy.Issue("github:ghost", nil, nil)
+	tok, err := srv.tokenStrategy.Issue("github:ghost", "repo-a", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,11 +105,11 @@ func TestListTokens_HasAccountFlag(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := srv.tokenStrategy.Issue("bound-user", nil, nil); err != nil {
+	if _, err := srv.tokenStrategy.Issue("bound-user", "repo-a", nil); err != nil {
 		t.Fatal(err)
 	}
 	// Unbound (legacy-shaped): issue without an account.
-	if _, err := srv.tokenStrategy.Issue("orphan-user", nil, nil); err != nil {
+	if _, err := srv.tokenStrategy.Issue("orphan-user", "repo-a", nil); err != nil {
 		t.Fatal(err)
 	}
 

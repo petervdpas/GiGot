@@ -4526,11 +4526,8 @@ const docTemplate = `{
                 "has_account": {
                     "type": "boolean"
                 },
-                "repos": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "repo": {
+                    "type": "string"
                 },
                 "token": {
                     "type": "string"
@@ -4566,18 +4563,11 @@ const docTemplate = `{
                         "mirror"
                     ]
                 },
-                "repos": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "my-templates",
-                        "shared-context"
-                    ]
+                "repo": {
+                    "type": "string",
+                    "example": "my-templates"
                 },
                 "username": {
-                    "description": "Username is \"provider:identifier\" (preferred) or \"identifier\"\n(shorthand for local:identifier). See type docs.",
                     "type": "string",
                     "example": "github:petervdpas"
                 }
@@ -4592,11 +4582,9 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "repos": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "repo": {
+                    "type": "string",
+                    "example": "my-templates"
                 },
                 "token": {
                     "type": "string",
@@ -4662,11 +4650,8 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "repos": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "repo": {
+                    "type": "string"
                 },
                 "token": {
                     "type": "string"

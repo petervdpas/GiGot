@@ -2,9 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>GiGot — My account</title>
+<title>GiGot — My subscriptions</title>
 <link rel="stylesheet" href="/assets/admin.css">
-<link rel="stylesheet" href="/assets/user.css">
 <script>
   /* Apply stored theme before the body paints to avoid a flash on page
      load. Same one-liner every other page uses. */
@@ -17,27 +16,18 @@
 <body>
 
 <div id="app">
-  <div class="shell user-shell">
+  <div class="shell">
+    <aside id="admin-sidebar"></aside>
     <main class="main">
       <div class="panel active">
-        <div class="page-header user-header">
-          <div class="user-brand">
-            <img class="logo" src="/assets/gigot.png" alt="GiGot">
-            <div>
-              <h1>My account</h1>
-              <div class="muted" id="me-strip"></div>
-            </div>
-          </div>
-          <div class="user-actions">
-            <a id="admin-link" href="/admin/repositories" class="hidden">Admin console</a>
-            <a id="logout" class="small">Sign out</a>
-          </div>
+        <div class="page-header">
+          <h1>My subscriptions</h1>
         </div>
 
         <div class="card">
           <h2>Subscription keys</h2>
           <p class="muted">Paste these into a Formidable profile to sync against this server. Treat them like passwords.</p>
-          <div id="sub-grid" class="card-grid"></div>
+          <div id="sub-grid" class="card-grid sub-grid"></div>
           <div id="sub-empty" class="muted hidden">
             No subscription keys yet. Ask an administrator to issue one for your account.
           </div>

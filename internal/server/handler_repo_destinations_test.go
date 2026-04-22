@@ -59,7 +59,7 @@ func bearer(t *testing.T, method, path string, body any, token string) *http.Req
 // with the admin path rather than silently diverging.
 func TestRepoDestinations_TokenWithMirrorAllowed(t *testing.T) {
 	srv := subscriberTestServer(t)
-	token, err := srv.tokenStrategy.Issue("alice", []string{"addresses"}, []string{"mirror"})
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", []string{"mirror"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestRepoDestinations_TokenWithMirrorAllowed(t *testing.T) {
 // any subscription would implicitly grant remote-sync configuration.
 func TestRepoDestinations_TokenWithoutMirrorDenied(t *testing.T) {
 	srv := subscriberTestServer(t)
-	token, err := srv.tokenStrategy.Issue("alice", []string{"addresses"}, nil) // no abilities
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", nil) // no abilities
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestRepoDestinations_TokenWithoutMirrorDenied(t *testing.T) {
 // Ability and scope are AND'd — one without the other must fail.
 func TestRepoDestinations_UnscopedRepoDenied(t *testing.T) {
 	srv := subscriberTestServer(t)
-	token, err := srv.tokenStrategy.Issue("alice", []string{"some-other-repo"}, []string{"mirror"})
+	token, err := srv.tokenStrategy.Issue("alice", "some-other-repo", []string{"mirror"})
 	if err != nil {
 		t.Fatal(err)
 	}

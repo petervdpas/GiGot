@@ -16,7 +16,7 @@ func TestAdminTokens_IssueWithAbilities(t *testing.T) {
 	rec := do(t, srv, http.MethodPost, "/api/admin/tokens",
 		map[string]any{
 			"username":  "alice",
-			"repos":     []string{"addresses"},
+			"repo":      "addresses",
 			"abilities": []string{"mirror"},
 		}, sess)
 	if rec.Code != http.StatusCreated {
@@ -49,14 +49,44 @@ func TestAdminTokens_IssueWithAbilities(t *testing.T) {
 // persisted no-op.
 func TestAdminTokens_IssueRejectsUnknownAbility(t *testing.T) {
 	srv, sess := adminTestServer(t)
+	srv.git.InitBare("addresses")
 
 	rec := do(t, srv, http.MethodPost, "/api/admin/tokens",
 		map[string]any{
 			"username":  "alice",
+			"repo":      "addresses",
 			"abilities": []string{"notarealability"},
 		}, sess)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestAdminTokens_IssueRejectsMissingRepo locks in the one-repo-per-
+// key invariant at the HTTP boundary: a body with no "repo" field is
+// a 400, not a token bound to an empty string.
+func TestAdminTokens_IssueRejectsMissingRepo(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	rec := do(t, srv, http.MethodPost, "/api/admin/tokens",
+		map[string]any{"username": "alice"}, sess)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 for missing repo, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestAdminTokens_IssueRejectsDuplicate covers the (user, repo)
+// uniqueness constraint — a second key for the same pair is a 409.
+func TestAdminTokens_IssueRejectsDuplicate(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	srv.git.InitBare("addresses")
+	body := map[string]any{"username": "alice", "repo": "addresses"}
+
+	if rec := do(t, srv, http.MethodPost, "/api/admin/tokens", body, sess); rec.Code != http.StatusCreated {
+		t.Fatalf("first issue want 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	rec := do(t, srv, http.MethodPost, "/api/admin/tokens", body, sess)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("duplicate issue want 409, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -67,7 +97,7 @@ func TestAdminTokens_PatchAddsAbility(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	srv.git.InitBare("addresses")
 
-	token, err := srv.tokenStrategy.Issue("alice", []string{"addresses"}, nil)
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,9 +118,9 @@ func TestAdminTokens_PatchAddsAbility(t *testing.T) {
 	if !entry.HasAbility("mirror") {
 		t.Fatalf("expected mirror ability, got %+v", entry.Abilities)
 	}
-	// Repos must be untouched.
-	if len(entry.Repos) != 1 || entry.Repos[0] != "addresses" {
-		t.Fatalf("PATCH abilities-only clobbered repos: %+v", entry.Repos)
+	// Repo must be untouched.
+	if entry.Repo != "addresses" {
+		t.Fatalf("PATCH abilities-only clobbered repo: %q", entry.Repo)
 	}
 }
 
@@ -99,7 +129,7 @@ func TestAdminTokens_PatchAddsAbility(t *testing.T) {
 func TestAdminTokens_PatchClearsAbilities(t *testing.T) {
 	srv, sess := adminTestServer(t)
 
-	token, err := srv.tokenStrategy.Issue("alice", nil, []string{"mirror"})
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", []string{"mirror"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +154,7 @@ func TestAdminTokens_PatchClearsAbilities(t *testing.T) {
 func TestAdminTokens_PatchRejectsUnknownAbility(t *testing.T) {
 	srv, sess := adminTestServer(t)
 
-	token, err := srv.tokenStrategy.Issue("alice", nil, nil)
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +175,7 @@ func TestAdminTokens_PatchRejectsUnknownAbility(t *testing.T) {
 func TestAdminTokens_PatchEmptyBody(t *testing.T) {
 	srv, sess := adminTestServer(t)
 
-	token, err := srv.tokenStrategy.Issue("alice", nil, nil)
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

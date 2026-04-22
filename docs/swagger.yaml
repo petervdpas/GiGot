@@ -663,10 +663,8 @@ definitions:
         type: array
       has_account:
         type: boolean
-      repos:
-        items:
-          type: string
-        type: array
+      repo:
+        type: string
       token:
         type: string
       username:
@@ -689,17 +687,10 @@ definitions:
         items:
           type: string
         type: array
-      repos:
-        example:
-        - my-templates
-        - shared-context
-        items:
-          type: string
-        type: array
+      repo:
+        example: my-templates
+        type: string
       username:
-        description: |-
-          Username is "provider:identifier" (preferred) or "identifier"
-          (shorthand for local:identifier). See type docs.
         example: github:petervdpas
         type: string
     type: object
@@ -709,10 +700,9 @@ definitions:
         items:
           type: string
         type: array
-      repos:
-        items:
-          type: string
-        type: array
+      repo:
+        example: my-templates
+        type: string
       token:
         example: a1b2c3d4...
         type: string
@@ -755,10 +745,8 @@ definitions:
         items:
           type: string
         type: array
-      repos:
-        items:
-          type: string
-        type: array
+      repo:
+        type: string
       token:
         type: string
     type: object

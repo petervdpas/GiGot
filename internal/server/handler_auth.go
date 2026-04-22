@@ -2,12 +2,14 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/petervdpas/GiGot/internal/accounts"
+	"github.com/petervdpas/GiGot/internal/auth"
 )
 
 // handleToken godoc
@@ -49,8 +51,8 @@ func (s *Server) issueToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repos := normalizeRepos(req.Repos)
-	if err := s.validateRepos(repos); err != nil {
+	repo := strings.TrimSpace(req.Repo)
+	if err := s.validateRepo(repo); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -66,8 +68,16 @@ func (s *Server) issueToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := s.tokenStrategy.Issue(req.Username, repos, abilities)
+	token, err := s.tokenStrategy.Issue(req.Username, repo, abilities)
 	if err != nil {
+		if errors.Is(err, auth.ErrDuplicateSubscription) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		if errors.Is(err, auth.ErrRepoRequired) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -75,7 +85,7 @@ func (s *Server) issueToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, TokenResponse{
 		Token:     token,
 		Username:  req.Username,
-		Repos:     repos,
+		Repo:      repo,
 		Abilities: abilities,
 	})
 }

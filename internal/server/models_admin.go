@@ -18,15 +18,17 @@ type AdminLoginResponse struct {
 	Role        string `json:"role,omitempty"`
 }
 
-// TokenListItem describes one issued token in an admin listing.
-// HasAccount reports whether the stored Username resolves to a
-// (provider=local) account in the store. False for tokens issued before
-// the accounts model shipped — the subscriptions UI surfaces a
-// "Bind to account" action on those rows. See accounts.md §6.
+// TokenListItem describes one issued subscription key in a listing.
+// Repo is the single repository this key grants access to — keys
+// are one-repo-per-key by design. HasAccount reports whether the
+// stored Username resolves to an account in the store. False for
+// tokens issued before the accounts model shipped — the
+// subscriptions UI surfaces a "Bind to account" action on those
+// rows. See accounts.md §6.
 type TokenListItem struct {
 	Token      string   `json:"token"`
 	Username   string   `json:"username"`
-	Repos      []string `json:"repos"`
+	Repo       string   `json:"repo"`
 	Abilities  []string `json:"abilities,omitempty"`
 	HasAccount bool     `json:"has_account"`
 }

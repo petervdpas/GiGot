@@ -95,7 +95,7 @@ func TestMiddlewareEnabledAllowsAuthenticated(t *testing.T) {
 	p.SetEnabled(true)
 
 	ts := NewTokenStrategy()
-	token, _ := ts.Issue("alice", nil, nil)
+	token, _ := ts.Issue("alice", "repo-a", nil)
 	p.Register(ts)
 
 	var gotIdentity *Identity
@@ -137,7 +137,7 @@ func TestMiddlewareBasicOnWhitelistedPrefixAllowed(t *testing.T) {
 	p.MarkBasicPrefix("/git/")
 
 	ts := NewTokenStrategy()
-	token, _ := ts.Issue("alice", nil, nil)
+	token, _ := ts.Issue("alice", "repo-a", nil)
 	p.Register(ts)
 
 	called := false
@@ -166,7 +166,7 @@ func TestMiddlewareBasicOutsideWhitelistRejected(t *testing.T) {
 	p.MarkBasicPrefix("/git/")
 
 	ts := NewTokenStrategy()
-	token, _ := ts.Issue("alice", nil, nil)
+	token, _ := ts.Issue("alice", "repo-a", nil)
 	p.Register(ts)
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +195,7 @@ func TestMiddlewareBearerOnBearerOnlyPathAllowed(t *testing.T) {
 	p.MarkBasicPrefix("/git/") // API path is NOT in the whitelist
 
 	ts := NewTokenStrategy()
-	token, _ := ts.Issue("alice", nil, nil)
+	token, _ := ts.Issue("alice", "repo-a", nil)
 	p.Register(ts)
 
 	called := false

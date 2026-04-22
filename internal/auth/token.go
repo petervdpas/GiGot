@@ -9,17 +9,17 @@ import (
 	"sync"
 )
 
-// TokenEntry is a stored API token with its associated identity, the set
-// of repositories the bearer is allowed to access, and the set of named
-// abilities the bearer holds. Repos is an allowlist: an empty slice grants
-// access to no repositories. Abilities is an orthogonal capability
+// TokenEntry is a stored API token bound to exactly one repository and
+// the set of named abilities the bearer holds. Repo is required and
+// scalar: a subscription key exists to grant one teammate access to
+// one GiGot repo — multi-repo access is modeled as multiple rows, one
+// per (account, repo) pair. Abilities is an orthogonal capability
 // allowlist (e.g. "mirror" to manage the subscriber-facing destinations
-// API — see remote-sync.md §2.6). Wildcards are not supported in either
-// list.
+// API — see remote-sync.md §2.6). Wildcards are not supported.
 type TokenEntry struct {
 	Token     string   `json:"token"`
 	Username  string   `json:"username"`
-	Repos     []string `json:"repos,omitempty"`
+	Repo      string   `json:"repo"`
 	Abilities []string `json:"abilities,omitempty"`
 }
 
@@ -178,11 +178,27 @@ func (s *TokenStrategy) Authenticate(r *http.Request) (*Identity, error) {
 	}, nil
 }
 
-// Issue creates and stores a new token for the given username, scoped to the
-// given set of repositories and abilities. Pass nil or an empty slice for
-// either to issue a token without that scope — admins can attach repos or
-// abilities later via UpdateRepos / UpdateAbilities.
-func (s *TokenStrategy) Issue(username string, repos []string, abilities []string) (string, error) {
+// ErrRepoRequired is returned by Issue when the caller passes an empty
+// repo. Subscription keys are one-repo-per-key by design; an empty
+// repo would create an unreachable row.
+var ErrRepoRequired = fmt.Errorf("auth: subscription key requires a repo")
+
+// ErrDuplicateSubscription is returned by Issue when an active token
+// already exists for the same (username, repo) pair. The admin is
+// expected to revoke the old key before issuing a new one, so the
+// invariant "at most one key per (account, repo)" holds and the
+// subscriptions list never shows duplicates.
+var ErrDuplicateSubscription = fmt.Errorf("auth: subscription already exists for this account+repo")
+
+// Issue creates and stores a new token for the given (username, repo)
+// pair with the given abilities. Returns ErrRepoRequired if repo is
+// empty, ErrDuplicateSubscription if one already exists for the pair.
+func (s *TokenStrategy) Issue(username, repo string, abilities []string) (string, error) {
+	repo = strings.TrimSpace(repo)
+	if repo == "" {
+		return "", ErrRepoRequired
+	}
+
 	token, err := generateToken(32)
 	if err != nil {
 		return "", fmt.Errorf("generating token: %w", err)
@@ -191,12 +207,17 @@ func (s *TokenStrategy) Issue(username string, repos []string, abilities []strin
 	entry := &TokenEntry{
 		Token:     token,
 		Username:  username,
-		Repos:     repos,
+		Repo:      repo,
 		Abilities: abilities,
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for _, existing := range s.tokens {
+		if existing.Username == username && existing.Repo == repo {
+			return "", ErrDuplicateSubscription
+		}
+	}
 	s.tokens[token] = entry
 	if err := s.persistLocked(); err != nil {
 		delete(s.tokens, token)
@@ -252,20 +273,37 @@ func (s *TokenStrategy) EntryFromRequest(r *http.Request) *TokenEntry {
 	return s.Get(token)
 }
 
-// UpdateRepos replaces the repo allowlist on an existing token. Returns
-// ErrInvalidToken if the token doesn't exist.
-func (s *TokenStrategy) UpdateRepos(token string, repos []string) error {
+// UpdateRepo replaces the repo binding on an existing token. Returns
+// ErrInvalidToken if the token doesn't exist, ErrRepoRequired if repo
+// is empty, ErrDuplicateSubscription if another active token already
+// binds the same (username, repo) pair.
+func (s *TokenStrategy) UpdateRepo(token, repo string) error {
+	repo = strings.TrimSpace(repo)
+	if repo == "" {
+		return ErrRepoRequired
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry, ok := s.tokens[token]
 	if !ok {
 		return ErrInvalidToken
 	}
-	previous := entry.Repos
-	entry.Repos = repos
+	if entry.Repo == repo {
+		return nil
+	}
+	for _, other := range s.tokens {
+		if other.Token == token {
+			continue
+		}
+		if other.Username == entry.Username && other.Repo == repo {
+			return ErrDuplicateSubscription
+		}
+	}
+	previous := entry.Repo
+	entry.Repo = repo
 	if err := s.persistLocked(); err != nil {
-		entry.Repos = previous
-		return fmt.Errorf("persist token repos: %w", err)
+		entry.Repo = previous
+		return fmt.Errorf("persist token repo: %w", err)
 	}
 	return nil
 }

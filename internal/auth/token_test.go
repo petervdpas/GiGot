@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"net/http/httptest"
 	"testing"
 )
@@ -14,7 +15,7 @@ func TestTokenStrategyName(t *testing.T) {
 
 func TestTokenIssueAndAuthenticate(t *testing.T) {
 	s := NewTokenStrategy()
-	token, err := s.Issue("alice", nil, nil)
+	token, err := s.Issue("alice", "repo-a", nil)
 	if err != nil {
 		t.Fatalf("unexpected error issuing token: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestTokenAuthenticateNoHeader(t *testing.T) {
 // clone flow.
 func TestTokenAuthenticateBasicWithValidToken(t *testing.T) {
 	s := NewTokenStrategy()
-	token, err := s.Issue("alice", nil, nil)
+	token, err := s.Issue("alice", "repo-a", nil)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -127,7 +128,7 @@ func TestTokenAuthenticateInvalidToken(t *testing.T) {
 
 func TestTokenAuthenticateCaseInsensitiveBearer(t *testing.T) {
 	s := NewTokenStrategy()
-	token, _ := s.Issue("bob", nil, nil)
+	token, _ := s.Issue("bob", "repo-a", nil)
 
 	req := httptest.NewRequest("GET", "/", nil)
 	req.Header.Set("Authorization", "bearer "+token)
@@ -143,7 +144,7 @@ func TestTokenAuthenticateCaseInsensitiveBearer(t *testing.T) {
 
 func TestTokenRevoke(t *testing.T) {
 	s := NewTokenStrategy()
-	token, _ := s.Issue("alice", nil, nil)
+	token, _ := s.Issue("alice", "repo-a", nil)
 
 	if !s.Revoke(token) {
 		t.Error("expected revoke to return true for existing token")
@@ -190,18 +191,21 @@ func TestTokenCount(t *testing.T) {
 		t.Errorf("expected 0, got %d", s.Count())
 	}
 
-	s.Issue("a", nil, nil)
-	s.Issue("b", nil, nil)
+	s.Issue("a", "repo-a", nil)
+	s.Issue("b", "repo-a", nil)
 	if s.Count() != 2 {
 		t.Errorf("expected 2, got %d", s.Count())
 	}
 }
 
 func TestTokenUniqueness(t *testing.T) {
+	// Keys are one-per-(user, repo), so 100 unique tokens for the same
+	// user means 100 distinct repo names — repo-0..repo-99 — which is
+	// still a valid stress of the token-string generator.
 	s := NewTokenStrategy()
 	tokens := make(map[string]bool)
 	for i := 0; i < 100; i++ {
-		token, err := s.Issue("user", nil, nil)
+		token, err := s.Issue("user", fmt.Sprintf("repo-%d", i), nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -209,6 +213,38 @@ func TestTokenUniqueness(t *testing.T) {
 			t.Fatalf("duplicate token generated: %s", token)
 		}
 		tokens[token] = true
+	}
+}
+
+// TestTokenIssueRejectsEmptyRepo locks in the one-repo-per-key
+// invariant — there is no "unscoped" token and Issue rejects an
+// empty string directly.
+func TestTokenIssueRejectsEmptyRepo(t *testing.T) {
+	s := NewTokenStrategy()
+	if _, err := s.Issue("alice", "", nil); err != ErrRepoRequired {
+		t.Fatalf("Issue(\"\", ...) = %v, want ErrRepoRequired", err)
+	}
+}
+
+// TestTokenIssueRejectsDuplicate locks in the (username, repo)
+// uniqueness constraint — two active keys for the same person-and-
+// repo would make the subscriptions list ambiguous.
+func TestTokenIssueRejectsDuplicate(t *testing.T) {
+	s := NewTokenStrategy()
+	if _, err := s.Issue("alice", "repo-a", nil); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.Issue("alice", "repo-a", nil)
+	if err != ErrDuplicateSubscription {
+		t.Fatalf("second Issue = %v, want ErrDuplicateSubscription", err)
+	}
+	// A different repo for the same user is fine.
+	if _, err := s.Issue("alice", "repo-b", nil); err != nil {
+		t.Fatalf("second repo for same user should be allowed: %v", err)
+	}
+	// Same repo for a different user is fine.
+	if _, err := s.Issue("bob", "repo-a", nil); err != nil {
+		t.Fatalf("same repo for different user should be allowed: %v", err)
 	}
 }
 

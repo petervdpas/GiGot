@@ -203,14 +203,16 @@ func TestAdminAccounts_SubscriptionCount(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Three tokens: two for bob (one scoped, one legacy), one for peter.
-	if _, err := srv.tokenStrategy.Issue("local:bob", nil, nil); err != nil {
+	// Three tokens: two for bob (scoped via local:bob and legacy bare
+	// "bob") and one for peter. Each key is bound to a distinct repo
+	// so the "one-key-per-(user, repo)" invariant holds.
+	if _, err := srv.tokenStrategy.Issue("local:bob", "repo-a", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := srv.tokenStrategy.Issue("bob", nil, nil); err != nil {
+	if _, err := srv.tokenStrategy.Issue("bob", "repo-b", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := srv.tokenStrategy.Issue("github:peter", nil, nil); err != nil {
+	if _, err := srv.tokenStrategy.Issue("github:peter", "repo-a", nil); err != nil {
 		t.Fatal(err)
 	}
 

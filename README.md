@@ -63,6 +63,30 @@ here. The items below do not overlap with Track B.
 
 Done and shipping:
 
+- [x] **Subscription keys are one-repo-per-key.** `TokenEntry.Repos
+      []string` collapsed to `TokenEntry.Repo string` (required);
+      `Issue(username, repo, abilities)` rejects an empty repo with
+      `ErrRepoRequired` and rejects duplicates with
+      `ErrDuplicateSubscription` — the store now enforces
+      uniqueness on `(username, repo)`. Policy evaluator checks
+      `entry.Repo == resource` directly; `filterReposForToken`
+      reduces to a single-string match. Admin API
+      (`POST/PATCH /api/admin/tokens`) takes a scalar `repo` field
+      and returns 409 on duplicate. UI follows: the issue form
+      uses a `GG.select` single-repo picker (no more multi-toggle
+      cluster), cards render one repo chip and a de-duplicated
+      header. Migration is fail-closed: `SealedTokenStore.LoadTokens`
+      refuses to deserialize pre-migration entries with a "repos"
+      list, naming the offending token so the admin can revoke +
+      re-issue one key per repo before restarting. Demo setup
+      mints two tokens (one per demo repo) and is idempotent
+      across reruns. Tests: uniqueness + empty-repo unit tests on
+      the strategy, fail-closed migration test on the store,
+      409-on-duplicate feature scenarios at the HTTP boundary,
+      updated repo_scope + policy + api_auth + me feature files.
+      OpenAPI regenerated (`repo` on TokenRequest / TokenResponse /
+      TokenListItem / UpdateTokenRequest). 2026-04-23.
+
 - [x] **Auth hot-swap admin surface (design:
       [`accounts.md`](docs/design/accounts.md) §9.5).** `/admin/auth`
       UI + `GET`/`PATCH /api/admin/auth` let an admin inspect and
