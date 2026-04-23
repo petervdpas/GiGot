@@ -202,7 +202,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"{{adminUser}}\",\n  \"repos\": [\"{{repoName}}\"]\n}"
+              "raw": "{\n  \"username\": \"{{adminUser}}\",\n  \"repo\": \"{{repoName}}\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/api/admin/tokens", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tokens"] }
           },
@@ -215,7 +215,7 @@
                   "pm.test('201 Created', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
                   "pm.test('token returned', () => pm.expect(body.token).to.be.a('string').and.not.empty);",
-                  "pm.test('repos echoed', () => pm.expect(body.repos).to.include(pm.variables.get('repoName')));",
+                  "pm.test('repo echoed', () => pm.expect(body.repo).to.eql(pm.variables.get('repoName')));",
                   "pm.environment.set('subscriptionToken', body.token);",
                   "pm.collectionVariables.set('subscriptionToken', body.token);"
                 ]
@@ -249,14 +249,14 @@
           ]
         },
         {
-          "name": "Rescope token (same repo)",
+          "name": "Rebind token (same repo)",
           "request": {
             "auth": { "type": "noauth" },
             "method": "PATCH",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"{{subscriptionToken}}\",\n  \"repos\": [\"{{repoName}}\"]\n}"
+              "raw": "{\n  \"token\": \"{{subscriptionToken}}\",\n  \"repo\": \"{{repoName}}\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/api/admin/tokens", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tokens"] }
           },

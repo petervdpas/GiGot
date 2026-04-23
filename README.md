@@ -1011,8 +1011,8 @@ The account is stored in `data/accounts.enc` (sealed), so it survives restarts.
 | ------ | ----------------------- | ------------------------------------------------------------------------------------- |
 | GET    | `/api/admin/session`              | Returns the current admin identity or 401. The page polls this on load.                |
 | GET    | `/api/admin/tokens`               | Lists every issued subscription key.                                                   |
-| POST   | `/api/admin/tokens`               | Issues a new subscription key. Body: `{ "username", "repos": [...] }`.                 |
-| PATCH  | `/api/admin/tokens`               | Changes the repo allowlist on an existing key. Body: `{ "token", "repos": [...] }`.    |
+| POST   | `/api/admin/tokens`               | Issues a new subscription key. Body: `{ "username", "repo", "abilities?": [...] }`. One key per `(username, repo)` — duplicate returns 409. |
+| PATCH  | `/api/admin/tokens`               | Changes the repo binding or abilities on an existing key. Body: `{ "token", "repo?", "abilities?": [...] }`. |
 | DELETE | `/api/admin/tokens`               | Revokes a subscription key. Body: `{ "token": "<value>" }`.                             |
 | GET    | `/api/admin/credentials`          | Lists credential metadata (secret is never returned).                                   |
 | POST   | `/api/admin/credentials`          | Creates a credential. Body: `{ "name", "kind", "secret", "expires?", "notes?" }`.      |
@@ -1212,11 +1212,12 @@ login when you're already authenticated at the gateway.
   access (see below); management actions (creating repos, issuing keys,
   managing admins) are reserved for admin sessions.
 - **Per-repo scoping is enforced centrally.** `internal/policy.TokenRepoPolicy`
-  gates every `/api/repos/*` and `/git/*` route. A token with an empty
-  `repos` allowlist can authenticate but cannot read or clone anything. An
-  admin assigns the allowlist at issue time (`POST /api/admin/tokens`) or
-  later (`PATCH /api/admin/tokens`). Listing (`GET /api/repos`) returns
-  only the assigned set to token callers; admins see everything.
+  gates every `/api/repos/*` and `/git/*` route. A subscription key is
+  bound to exactly one repo — set at issue time (`POST /api/admin/tokens`)
+  and rebound later (`PATCH /api/admin/tokens`). Listing (`GET /api/repos`)
+  returns only that bound repo to token callers; admins see everything.
+  A user who needs access to several repos receives several keys
+  (one per repo); uniqueness on `(account, repo)` is enforced.
 - **bcrypt cost.** `bcrypt.DefaultCost` (10) is used for admin passwords. Adjust
   in `internal/admins/store.go` if your hardware warrants it.
 - **NaCl box, not OpenPGP.** Despite occasional shorthand, the crypto used is

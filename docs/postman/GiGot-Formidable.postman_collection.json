@@ -153,17 +153,17 @@
     },
     {
       "name": "02 Token",
-      "description": "Issue a bearer token scoped to all three side-repos so the record folders downstream can authenticate. Runs after folder 01 so validateRepos accepts the allowlist.",
+      "description": "Issue a bearer token bound to the Formidable-on side repo. Subscription keys are one-repo-per-key, so the record folders downstream all target {{sideRepoOn}} under this one bearer. The {{sideRepoOff}}, {{sideRepoDefault}}, and {{plainRepo}} cleanup happens via admin/noauth paths and doesn't need a bearer.",
       "item": [
         {
-          "name": "Issue bearer scoped to side-repos (saves {{formidableToken}})",
+          "name": "Issue bearer bound to on-repo (saves {{formidableToken}})",
           "request": {
             "auth": { "type": "noauth" },
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"{{adminUser}}\",\n  \"repos\": [\"{{sideRepoOn}}\", \"{{sideRepoOff}}\", \"{{sideRepoDefault}}\", \"{{plainRepo}}\"]\n}"
+              "raw": "{\n  \"username\": \"{{adminUser}}\",\n  \"repo\": \"{{sideRepoOn}}\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/api/admin/tokens", "host": ["{{baseUrl}}"], "path": ["api", "admin", "tokens"] }
           },
@@ -176,13 +176,7 @@
                   "pm.test('201 Created', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
                   "pm.test('token returned', () => pm.expect(body.token).to.be.a('string').and.not.empty);",
-                  "pm.test('all three side-repos in allowlist', () => {",
-                  "  pm.expect(body.repos).to.include.members([",
-                  "    pm.variables.get('sideRepoOn'),",
-                  "    pm.variables.get('sideRepoOff'),",
-                  "    pm.variables.get('sideRepoDefault'),",
-                  "  ]);",
-                  "});",
+                  "pm.test('repo echoed', () => pm.expect(body.repo).to.eql(pm.variables.get('sideRepoOn')));",
                   "pm.environment.set('formidableToken', body.token);",
                   "pm.collectionVariables.set('formidableToken', body.token);"
                 ]
