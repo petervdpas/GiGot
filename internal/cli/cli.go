@@ -35,6 +35,11 @@ const (
 	ModeAddDemoSetup
 	// ModeRemoveDemoSetup tears down everything ModeAddDemoSetup set up.
 	ModeRemoveDemoSetup
+	// ModeHealthcheck probes the configured server.host:server.port and
+	// exits 0 on a 2xx response, non-zero otherwise. Wired from the
+	// Dockerfile's HEALTHCHECK because distroless images carry no
+	// curl/wget binary.
+	ModeHealthcheck
 )
 
 // WipeTargets is the set of on-disk artefacts a ModeWipe invocation
@@ -118,6 +123,7 @@ func Parse(args []string) (Options, error) {
 		assumeYes        bool
 		addDemoSetup     bool
 		removeDemoSetup  bool
+		healthcheck      bool
 		allowLocal       bool
 	)
 	fs.BoolVar(&help, "help", false, "show this help and exit")
@@ -138,6 +144,7 @@ func Parse(args []string) (Options, error) {
 	fs.BoolVar(&assumeYes, "yes", false, "skip the interactive confirmation prompt for wipe flags")
 	fs.BoolVar(&addDemoSetup, "add-demo-setup", false, "provision the Postman demo admin, repo, credential and subscription token (stop the server first)")
 	fs.BoolVar(&removeDemoSetup, "remove-demo-setup", false, "tear down everything -add-demo-setup provisioned (stop the server first)")
+	fs.BoolVar(&healthcheck, "healthcheck", false, "probe http://<server.host>:<server.port>/ and exit 0/1 (used by Dockerfile HEALTHCHECK)")
 	fs.BoolVar(&allowLocal, "allow-local", true, "override cfg.Auth.AllowLocal for this invocation (-allow-local=false disables local password login; only meaningful with serve)")
 
 	if err := fs.Parse(args); err != nil {
@@ -192,8 +199,11 @@ func Parse(args []string) (Options, error) {
 	if removeDemoSetup {
 		oneShots++
 	}
+	if healthcheck {
+		oneShots++
+	}
 	if oneShots > 1 {
-		return Options{}, fmt.Errorf("only one of -init, -add-admin, -rotate-keys, -add-demo-setup, -remove-demo-setup, or the -wipe-*/-factory-reset family can be used per invocation")
+		return Options{}, fmt.Errorf("only one of -init, -add-admin, -rotate-keys, -add-demo-setup, -remove-demo-setup, -healthcheck, or the -wipe-*/-factory-reset family can be used per invocation")
 	}
 
 	// -formidable-first only makes sense alongside -init. Silently
@@ -257,6 +267,8 @@ func Parse(args []string) (Options, error) {
 		opts.Mode = ModeAddDemoSetup
 	case removeDemoSetup:
 		opts.Mode = ModeRemoveDemoSetup
+	case healthcheck:
+		opts.Mode = ModeHealthcheck
 	default:
 		opts.Mode = ModeServe
 	}
@@ -316,6 +328,12 @@ One-shot commands (each exits after running; mutually exclusive):
                           "postman-pat", and a fresh subscription token
                           (printed). Stop the server first.
   -remove-demo-setup      Tear down everything -add-demo-setup created.
+  -healthcheck            Probe http://<server.host>:<server.port>/ with a
+                          short timeout and exit 0 on a 2xx response, 1
+                          otherwise. Wired from the Dockerfile HEALTHCHECK
+                          because the distroless runtime image carries no
+                          curl or wget. Resolves a 0.0.0.0 / :: bind to
+                          127.0.0.1 so the probe stays loopback-local.
 
   The -wipe-* flags compose (e.g. -wipe-admins -wipe-tokens removes
   both stores in one invocation). -factory-reset is a shorthand that

@@ -27,5 +27,10 @@ USER nonroot:nonroot
 
 EXPOSE 3417
 
+# Distroless carries no curl/wget, so the binary's own -healthcheck flag
+# is what the orchestrator probes. Settings match design doc §7.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD ["/gigot", "-healthcheck", "-config", "/etc/gigot/gigot.json"]
+
 ENTRYPOINT ["/gigot"]
 CMD ["-config", "/etc/gigot/gigot.json"]

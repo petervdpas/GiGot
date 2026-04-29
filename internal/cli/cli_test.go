@@ -112,6 +112,16 @@ func TestParse_Success(t *testing.T) {
 			args: []string{"-remove-demo-setup"},
 			want: Options{Mode: ModeRemoveDemoSetup},
 		},
+		{
+			name: "-healthcheck triggers probe mode",
+			args: []string{"-healthcheck"},
+			want: Options{Mode: ModeHealthcheck},
+		},
+		{
+			name: "-healthcheck honours -config",
+			args: []string{"-healthcheck", "-config", "/etc/gigot/gigot.json"},
+			want: Options{Mode: ModeHealthcheck, ConfigPath: "/etc/gigot/gigot.json"},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -210,6 +220,11 @@ func TestParse_ValidationErrors(t *testing.T) {
 		{
 			name:      "-add-admin and -rotate-keys together is rejected",
 			args:      []string{"-add-admin", "alice", "-rotate-keys"},
+			wantMatch: "only one of",
+		},
+		{
+			name:      "-healthcheck combined with -add-admin is rejected",
+			args:      []string{"-healthcheck", "-add-admin", "alice"},
 			wantMatch: "only one of",
 		},
 		{

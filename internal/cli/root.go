@@ -81,6 +81,12 @@ func Execute() {
 			log.Fatalf("remove-demo-setup: %v", err)
 		}
 		return
+	case ModeHealthcheck:
+		if err := runHealthcheck(cfg); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	case ModeServe:
 		if opts.AllowLocalOverride != nil {
 			cfg.Auth.AllowLocal = *opts.AllowLocalOverride

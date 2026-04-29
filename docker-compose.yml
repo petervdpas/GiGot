@@ -1,0 +1,43 @@
+# GiGot — single-instance container with persistent state on the host.
+# See README §11.2 ("Container image") for the full operator walkthrough,
+# including the one-shot `-add-admin` bootstrap that must run before
+# `docker compose up`.
+#
+# Two host directories are required and must be writable by the
+# distroless-nonroot user (uid 65532):
+#
+#   mkdir -p ./data ./repos
+#   sudo chown -R 65532:65532 ./data ./repos
+#
+# `gigot.json` is mounted read-only from the same directory as this
+# compose file. A starter config that matches these mount points lives
+# in README §11.2.
+
+services:
+  gigot:
+    # Pre-built image on Docker Hub. Slice 3 of the docker rollout will
+    # publish a versioned :latest on every tag push; until then :dev is
+    # what's available.
+    image: petervdpas/gigot:dev
+
+    # Falls back to building from the local checkout when the image tag
+    # isn't pulled — useful while iterating on the Dockerfile itself.
+    # Force a rebuild explicitly with: docker compose build
+    build:
+      context: .
+      args:
+        VERSION: dev
+
+    container_name: gigot
+    restart: unless-stopped
+
+    ports:
+      - "3417:3417"
+
+    volumes:
+      - ./data:/var/lib/gigot/data
+      - ./repos:/var/lib/gigot/repos
+      - ./gigot.json:/etc/gigot/gigot.json:ro
+
+    # The Dockerfile already declares HEALTHCHECK; compose inherits it.
+    # No override here keeps the source of truth in one place.

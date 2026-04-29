@@ -63,6 +63,40 @@ here. The items below do not overlap with Track B.
 
 Done and shipping:
 
+- [x] **Docker image — slice 2 (design:
+      [`docker-image.md`](docs/design/docker-image.md) §7, §11, §12).**
+      `docker-compose.yml` at the repo root captures the
+      port + bind-mount + read-only-config layout so an operator
+      doesn't reassemble it from the README every time.
+      `image: petervdpas/gigot:dev` plus a `build: .` fallback
+      means the same compose file works against the published
+      image *and* against a local checkout. New `-healthcheck`
+      one-shot flag (`internal/cli/healthcheck.go`,
+      `ModeHealthcheck` in `cli.go`) probes
+      `http://<server.host>:<server.port>/` with a 2 s timeout
+      and exits 0/1; a `0.0.0.0` or `::` listen address is
+      rewritten to `127.0.0.1` so the probe stays loopback-local
+      regardless of the bind config. Dockerfile gains a
+      `HEALTHCHECK --interval=30s --timeout=3s --start-period=10s
+      --retries=3` directive that runs `/gigot -healthcheck`,
+      since distroless has no `curl`/`wget` to call. Settings
+      mirror design doc §7. Tests: parse-layer success +
+      mutual-exclusion guard in `cli_test.go`, four
+      `TestProbeHealth` cases in `healthcheck_test.go`
+      (2xx success, 5xx surfacing the HTTP code, `0.0.0.0` →
+      loopback rewrite, connection-refused). End-to-end smoke
+      verified locally — `docker run` flips
+      `.State.Health.Status` from `starting` → `healthy` after
+      the start-period; `docker exec gigot /gigot -healthcheck …`
+      exits 0 on the live listener and 1 with
+      `dial tcp 127.0.0.1:<port>: connect: connection refused`
+      against a dead port. Slice 2 also incidentally answered
+      design doc §11's SIGTERM open question in slice 1: the
+      server already drains cleanly on `docker stop`, so no
+      handler change was needed. Slice 3 (release-workflow
+      auto-publish on tag push) is the only remaining piece of
+      the rollout.
+
 - [x] **Docker image — slice 1 (design:
       [`docker-image.md`](docs/design/docker-image.md) §3, §12).**
       Multi-stage `Dockerfile` at repo root: `golang:1.25-alpine`
@@ -684,6 +718,7 @@ server. `gigot -help` prints the same grouped help shown below.
 | &nbsp;&nbsp;`-formidable-first` | Sub-flag of `-init`: pre-enables `server.formidable_first` in the emitted config, so both init and clone stamp the Formidable context marker by default (design doc §2.5/§2.7). Rejected when used without `-init`. |
 | `-add-admin <username>`    | Creates (or overwrites) an admin account with the given username and exits. Prompts for a password on stdin.                             |
 | `-rotate-keys`             | Generates a fresh server keypair, re-encrypts all sealed stores under it, backs up the previous files as `.bak.{timestamp}`, and exits. **Stop the server first.** |
+| `-healthcheck`             | Probes `http://<server.host>:<server.port>/` with a 2-second timeout; exits 0 on a 2xx response and 1 otherwise. Wired from the Dockerfile `HEALTHCHECK` because the distroless runtime image has no `curl` / `wget`. A `0.0.0.0` / `::` bind in the config is rewritten to `127.0.0.1` so the probe is always loopback-local. |
 
 **Destructive one-shots (compose with each other; mutually exclusive with `-init` / `-add-admin` / `-rotate-keys`):**
 
@@ -1181,9 +1216,11 @@ WantedBy=multi-user.target
 
 ### 2. Container image (Docker / Compose)
 
-Pre-built images are not yet published — that's slice 3 of the docker rollout
-(see [`docs/design/docker-image.md`](docs/design/docker-image.md) §12). For now
-operators build locally:
+A development tag (`petervdpas/gigot:dev`) is published on Docker Hub for
+hands-on testing. Versioned releases (`:v0.x.y`, `:latest`) ship with slice 3
+of the docker rollout — see
+[`docs/design/docker-image.md`](docs/design/docker-image.md) §12. Operators
+who want to run the current source build can also build locally:
 
 ```bash
 docker build -t gigot:dev --build-arg VERSION=dev .
@@ -1250,7 +1287,7 @@ pattern: same volumes, the flag as argv. There's no `GIGOT_ADMIN_PASSWORD`
 env var by design — passwords would otherwise leak into `docker inspect` and
 process listings (see design doc §6.2).
 
-**Run the server:**
+**Run the server (raw Docker):**
 
 ```bash
 docker run -d --name gigot \
@@ -1258,11 +1295,31 @@ docker run -d --name gigot \
   -v /srv/gigot/data:/var/lib/gigot/data \
   -v /srv/gigot/repos:/var/lib/gigot/repos \
   -v $(pwd)/gigot.json:/etc/gigot/gigot.json:ro \
-  gigot:dev
+  petervdpas/gigot:dev
 ```
 
-`docker-compose.yml`, a `-healthcheck` flag, and the GHCR publish job are
-slices 2 and 3 of the rollout — not shipped yet.
+**Run the server (Compose, recommended).** A `docker-compose.yml` lives at
+the repo root. From a directory containing your `gigot.json` and a
+pre-chowned `data/` and `repos/` (same shape as above):
+
+```bash
+docker compose -f /path/to/GiGot/docker-compose.yml up -d
+```
+
+Compose pins the image to `petervdpas/gigot:dev` but also keeps a `build:`
+stanza pointing at the repo, so cloning the source and running `docker
+compose up --build` works without an internet pull.
+
+**Healthcheck.** The image declares a `HEALTHCHECK` directive that runs the
+binary's own `-healthcheck` flag every 30s — distroless has no `curl` or
+`wget`, so the binary probes itself. `docker ps` will show `(healthy)` once
+the listener is up; `docker inspect <container>` exposes the per-probe log
+under `.State.Health` for orchestrators that key off it. The probe hits
+`http://127.0.0.1:<server.port>/`, so a `0.0.0.0` bind is correctly mapped
+to loopback on the way in.
+
+The GHCR/Docker Hub auto-publish job in `release.yml` (slice 3 of the
+rollout) is the last remaining piece.
 
 ### 3. Behind Azure API Management (or similar)
 
