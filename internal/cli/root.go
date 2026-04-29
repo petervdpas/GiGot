@@ -21,7 +21,13 @@ import (
 // handler. All non-trivial logic lives in Parse (pure) or the runXxx
 // helpers (pure aside from filesystem side effects), so this function
 // stays a thin switch that is safe to call and easy to audit.
-func Execute() {
+//
+// version is the build-stamped version string (overridden via
+// `-ldflags "-X main.appVersion=..."`). Threading it through the entry
+// point — rather than reading a package-level cli.Version variable —
+// keeps the cli package free of build-time globals and lets tests
+// drive Execute deterministically if they ever need to.
+func Execute(version string) {
 	opts, err := Parse(os.Args[1:])
 	if err != nil {
 		if errors.Is(err, ErrHelpRequested) {
@@ -36,6 +42,9 @@ func Execute() {
 	switch opts.Mode {
 	case ModeHelp:
 		writeHelpTo(os.Stdout)
+		return
+	case ModeVersion:
+		fmt.Printf("gigot %s\n", version)
 		return
 	case ModeInit:
 		if err := writeInitConfig("gigot.json", opts.InitFormidableFirst); err != nil {

@@ -19,6 +19,16 @@ package main
 
 import "github.com/petervdpas/GiGot/internal/cli"
 
+// appVersion is overridden at build time via
+//
+//	-ldflags "-X main.appVersion=${VERSION}"
+//
+// (see .github/workflows/release.yml and the Dockerfile build stage).
+// The sentinel default makes a plain `go build .` produce a binary
+// whose -version output flags the missing ldflag obviously, instead of
+// a silent empty string.
+var appVersion = "0.0.0-dev"
+
 func main() {
-	cli.Execute()
+	cli.Execute(resolveVersion())
 }

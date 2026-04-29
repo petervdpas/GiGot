@@ -40,6 +40,9 @@ const (
 	// Dockerfile's HEALTHCHECK because distroless images carry no
 	// curl/wget binary.
 	ModeHealthcheck
+	// ModeVersion prints the build-stamped version string (overridden
+	// at link time via `-X main.appVersion=...`) and exits.
+	ModeVersion
 )
 
 // WipeTargets is the set of on-disk artefacts a ModeWipe invocation
@@ -124,6 +127,7 @@ func Parse(args []string) (Options, error) {
 		addDemoSetup     bool
 		removeDemoSetup  bool
 		healthcheck      bool
+		showVersion      bool
 		allowLocal       bool
 	)
 	fs.BoolVar(&help, "help", false, "show this help and exit")
@@ -145,6 +149,7 @@ func Parse(args []string) (Options, error) {
 	fs.BoolVar(&addDemoSetup, "add-demo-setup", false, "provision the Postman demo admin, repo, credential and subscription token (stop the server first)")
 	fs.BoolVar(&removeDemoSetup, "remove-demo-setup", false, "tear down everything -add-demo-setup provisioned (stop the server first)")
 	fs.BoolVar(&healthcheck, "healthcheck", false, "probe http://<server.host>:<server.port>/ and exit 0/1 (used by Dockerfile HEALTHCHECK)")
+	fs.BoolVar(&showVersion, "version", false, "print the binary version and exit")
 	fs.BoolVar(&allowLocal, "allow-local", true, "override cfg.Auth.AllowLocal for this invocation (-allow-local=false disables local password login; only meaningful with serve)")
 
 	if err := fs.Parse(args); err != nil {
@@ -202,8 +207,11 @@ func Parse(args []string) (Options, error) {
 	if healthcheck {
 		oneShots++
 	}
+	if showVersion {
+		oneShots++
+	}
 	if oneShots > 1 {
-		return Options{}, fmt.Errorf("only one of -init, -add-admin, -rotate-keys, -add-demo-setup, -remove-demo-setup, -healthcheck, or the -wipe-*/-factory-reset family can be used per invocation")
+		return Options{}, fmt.Errorf("only one of -init, -add-admin, -rotate-keys, -add-demo-setup, -remove-demo-setup, -healthcheck, -version, or the -wipe-*/-factory-reset family can be used per invocation")
 	}
 
 	// -formidable-first only makes sense alongside -init. Silently
@@ -269,6 +277,8 @@ func Parse(args []string) (Options, error) {
 		opts.Mode = ModeRemoveDemoSetup
 	case healthcheck:
 		opts.Mode = ModeHealthcheck
+	case showVersion:
+		opts.Mode = ModeVersion
 	default:
 		opts.Mode = ModeServe
 	}
@@ -334,6 +344,14 @@ One-shot commands (each exits after running; mutually exclusive):
                           because the distroless runtime image carries no
                           curl or wget. Resolves a 0.0.0.0 / :: bind to
                           127.0.0.1 so the probe stays loopback-local.
+  -version                Print the binary version and exit. The version
+                          string is baked in at build time via
+                          -ldflags "-X main.appVersion=...". A plain
+                          "go build ." with no ldflag falls back to
+                          the 0.0.0-dev sentinel enriched with the
+                          short commit hash + a ".dirty" suffix when
+                          the working tree has uncommitted changes
+                          (read from runtime/debug.BuildInfo).
 
   The -wipe-* flags compose (e.g. -wipe-admins -wipe-tokens removes
   both stores in one invocation). -factory-reset is a shorthand that

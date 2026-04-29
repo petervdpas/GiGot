@@ -122,6 +122,11 @@ func TestParse_Success(t *testing.T) {
 			args: []string{"-healthcheck", "-config", "/etc/gigot/gigot.json"},
 			want: Options{Mode: ModeHealthcheck, ConfigPath: "/etc/gigot/gigot.json"},
 		},
+		{
+			name: "-version triggers version mode",
+			args: []string{"-version"},
+			want: Options{Mode: ModeVersion},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -225,6 +230,11 @@ func TestParse_ValidationErrors(t *testing.T) {
 		{
 			name:      "-healthcheck combined with -add-admin is rejected",
 			args:      []string{"-healthcheck", "-add-admin", "alice"},
+			wantMatch: "only one of",
+		},
+		{
+			name:      "-version combined with -add-admin is rejected",
+			args:      []string{"-version", "-add-admin", "alice"},
 			wantMatch: "only one of",
 		},
 		{

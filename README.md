@@ -754,6 +754,7 @@ server. `gigot -help` prints the same grouped help shown below.
 | `-add-admin <username>`    | Creates (or overwrites) an admin account with the given username and exits. Prompts for a password on stdin.                             |
 | `-rotate-keys`             | Generates a fresh server keypair, re-encrypts all sealed stores under it, backs up the previous files as `.bak.{timestamp}`, and exits. **Stop the server first.** |
 | `-healthcheck`             | Probes `http://<server.host>:<server.port>/` with a 2-second timeout; exits 0 on a 2xx response and 1 otherwise. Wired from the Dockerfile `HEALTHCHECK` because the distroless runtime image has no `curl` / `wget`. A `0.0.0.0` / `::` bind in the config is rewritten to `127.0.0.1` so the probe is always loopback-local. |
+| `-version`                 | Prints the binary version (`gigot <version>`) and exits. The version string is baked in at build time via `-ldflags "-X main.appVersion=<v>"` — both `release.yml` and the `Dockerfile` set it to the git tag (with the leading `v` stripped). A plain `go build .` with no ldflag falls back to `0.0.0-dev+<commit>` (and `+<commit>.dirty` for an uncommitted working tree), pulled from `runtime/debug.BuildInfo` — so a developer rebuild self-describes without needing to remember the ldflag invocation. |
 
 **Destructive one-shots (compose with each other; mutually exclusive with `-init` / `-add-admin` / `-rotate-keys`):**
 
