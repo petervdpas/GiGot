@@ -111,6 +111,64 @@ jobs:
           name: release-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
 
+  publish-image:
+    name: Publish Docker image
+    needs: [test]
+    # Image publishing only happens for tagged releases — manual
+    # workflow_dispatch runs build the binaries but skip the registry
+    # push so we don't accidentally overwrite :latest from a branch.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: petervdpas/gigot
+          # `type=semver,pattern={{version}}` strips the leading `v` so
+          # consumers get `petervdpas/gigot:0.4.0` (the Docker Hub
+          # convention), and `:latest` always points at the most recent
+          # tagged release.
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+
+      - name: Build and push (multi-arch)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          # Bake provenance + SBOM into the manifest so Docker Scout's
+          # supply-chain check goes green on the published image.
+          provenance: true
+          sbom: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.VERSION }}
+
   release:
     name: Publish GitHub Release
     needs: [build]

@@ -63,6 +63,41 @@ here. The items below do not overlap with Track B.
 
 Done and shipping:
 
+- [x] **Docker image — slice 3 (design:
+      [`docker-image.md`](docs/design/docker-image.md) §8, §12).**
+      New `publish-image` job in `.github/workflows/release.yml`
+      gated on `needs: [test]` + `if: startsWith(github.ref,
+      'refs/tags/v')`, so a failing test stops the image push the
+      same way it already stops the binary release. Multi-arch
+      build via `docker/setup-qemu-action@v3` +
+      `docker/setup-buildx-action@v3` covering `linux/amd64`
+      and `linux/arm64` (matches the binary matrix; arm/v7 +
+      Windows containers explicitly out per design §10).
+      `docker/login-action@v3` reads `DOCKERHUB_USERNAME` +
+      `DOCKERHUB_TOKEN` repo secrets — operator-provisioned at
+      `Settings → Secrets and variables → Actions`, never in the
+      workflow file. `docker/metadata-action@v5` emits two tags
+      per release: `petervdpas/gigot:<version>` (semver, leading
+      `v` stripped — Docker Hub convention) and
+      `petervdpas/gigot:latest`. `docker/build-push-action@v6`
+      passes `provenance: true` + `sbom: true` so the published
+      image carries supply-chain attestations — closes the
+      "Missing supply chain attestation(s)" finding Docker Scout
+      raised on the slice 1 / 2 hand-pushes. `VERSION` build-arg
+      stays in lock-step with the tarball job's
+      `-X main.appVersion=${VERSION}` ldflag so a `gigot
+      -version` from the image matches a `gigot -version` from
+      the tarball at the same tag. README §11.2 grows a tag
+      table (`:latest` / `:X.Y.Z` / `:dev`) and the raw-Docker
+      examples now pull `:latest` instead of the local
+      `gigot:dev` build tag. Slice 3 only fires on the *next*
+      tag push — the in-flight v0.4.0 run was triggered before
+      slice 3 landed and produces the existing tarballs only.
+      The full docker-image rollout (design doc §12 slices 1–3)
+      is now shipped end-to-end; only the Kubernetes manifest
+      stub and image-scanning CI integration remain on the
+      "Later" list and neither blocks anything.
+
 - [x] **Docker image — slice 2 (design:
       [`docker-image.md`](docs/design/docker-image.md) §7, §11, §12).**
       `docker-compose.yml` at the repo root captures the
@@ -1216,11 +1251,17 @@ WantedBy=multi-user.target
 
 ### 2. Container image (Docker / Compose)
 
-A development tag (`petervdpas/gigot:dev`) is published on Docker Hub for
-hands-on testing. Versioned releases (`:v0.x.y`, `:latest`) ship with slice 3
-of the docker rollout — see
-[`docs/design/docker-image.md`](docs/design/docker-image.md) §12. Operators
-who want to run the current source build can also build locally:
+Tagged releases publish a multi-arch image
+(`linux/amd64` + `linux/arm64`) to Docker Hub automatically. Operators
+have three pull options:
+
+| Tag                          | Use it for                                              |
+| ---------------------------- | ------------------------------------------------------- |
+| `petervdpas/gigot:latest`    | Always-newest pull. Good for quick demos and homelabs.  |
+| `petervdpas/gigot:X.Y.Z`     | Pinned production deploys (e.g. `petervdpas/gigot:0.4.0`). Survives a future `latest` regression. |
+| `petervdpas/gigot:dev`       | Hand-pushed development tag (no provenance/SBOM). Drifts ahead of releases between tags. |
+
+For source builds — useful while iterating on the Dockerfile itself:
 
 ```bash
 docker build -t gigot:dev --build-arg VERSION=dev .
@@ -1278,7 +1319,7 @@ docker run --rm -it \
   -v /srv/gigot/data:/var/lib/gigot/data \
   -v /srv/gigot/repos:/var/lib/gigot/repos \
   -v $(pwd)/gigot.json:/etc/gigot/gigot.json:ro \
-  gigot:dev \
+  petervdpas/gigot:latest \
   -add-admin alice
 ```
 
@@ -1295,7 +1336,7 @@ docker run -d --name gigot \
   -v /srv/gigot/data:/var/lib/gigot/data \
   -v /srv/gigot/repos:/var/lib/gigot/repos \
   -v $(pwd)/gigot.json:/etc/gigot/gigot.json:ro \
-  petervdpas/gigot:dev
+  petervdpas/gigot:latest
 ```
 
 **Run the server (Compose, recommended).** A `docker-compose.yml` lives at
@@ -1306,9 +1347,11 @@ pre-chowned `data/` and `repos/` (same shape as above):
 docker compose -f /path/to/GiGot/docker-compose.yml up -d
 ```
 
-Compose pins the image to `petervdpas/gigot:dev` but also keeps a `build:`
-stanza pointing at the repo, so cloning the source and running `docker
-compose up --build` works without an internet pull.
+Compose defaults to `petervdpas/gigot:dev` (the rolling development tag)
+but also keeps a `build:` stanza pointing at the repo, so cloning the
+source and running `docker compose up --build` works without an internet
+pull. For pinned production deploys, edit `image:` to a specific
+release like `petervdpas/gigot:0.4.0`.
 
 **Healthcheck.** The image declares a `HEALTHCHECK` directive that runs the
 binary's own `-healthcheck` flag every 30s — distroless has no `curl` or
@@ -1318,8 +1361,14 @@ under `.State.Health` for orchestrators that key off it. The probe hits
 `http://127.0.0.1:<server.port>/`, so a `0.0.0.0` bind is correctly mapped
 to loopback on the way in.
 
-The GHCR/Docker Hub auto-publish job in `release.yml` (slice 3 of the
-rollout) is the last remaining piece.
+**Tagged-release publishing.** The `publish-image` job in
+`.github/workflows/release.yml` fires on every `v*` tag push. It builds
+multi-arch (`linux/amd64` + `linux/arm64`), pushes
+`petervdpas/gigot:<version>` and `:latest` to Docker Hub, and bakes
+provenance + SBOM attestations into the manifest so Docker Scout's
+supply-chain check stays green. Two repo secrets must exist for the job
+to run: `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (a Docker Hub PAT
+with Read & Write scope).
 
 ### 3. Behind Azure API Management (or similar)
 
