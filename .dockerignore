@@ -1,0 +1,29 @@
+# Local binaries
+gigot
+gigot.exe
+
+# Local config (may contain secrets)
+gigot.json
+sync.json
+
+# Server state — keys, sealed stores, tokens
+data/
+
+# Bare repos managed by a local GiGot instance
+repos/
+
+# VCS metadata is not needed for the build
+.git/
+.gitignore
+.gitattributes
+
+# CI / editor / OS noise
+.github/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Release tarballs
+*.tar.gz
+*.zip

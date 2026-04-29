@@ -63,6 +63,34 @@ here. The items below do not overlap with Track B.
 
 Done and shipping:
 
+- [x] **Docker image — slice 1 (design:
+      [`docker-image.md`](docs/design/docker-image.md) §3, §12).**
+      Multi-stage `Dockerfile` at repo root: `golang:1.25-alpine`
+      build stage matching `release.yml`'s `-trimpath -ldflags
+      "-s -w -X main.appVersion=${VERSION}"` flags exactly,
+      `gcr.io/distroless/static-debian12:nonroot` runtime stage
+      (uid 65532, ~23 MB final image). `EXPOSE 3417`,
+      `WORKDIR /var/lib/gigot`, `ENTRYPOINT ["/gigot"]`,
+      `CMD ["-config", "/etc/gigot/gigot.json"]`. `.dockerignore`
+      excludes `data/` (sealed stores), `repos/` (private), local
+      `gigot.json` (secrets), the host `gigot` binary, `.git/`,
+      `.github/`, and editor noise so the build context stays lean
+      and can't leak local secrets. README §11.2 documents the
+      operator path: pre-`chown 65532:65532` the bind-mounted
+      `data/` and `repos/` host dirs, `-add-admin` as a one-shot
+      `-it` container against the same volumes, container-side
+      defaults (`server.host=0.0.0.0`, `auth.enabled=true`)
+      called out as the only deltas from the standalone config.
+      No Go code changed; verified locally end-to-end (build →
+      `-add-admin` via two-line piped stdin → server boot →
+      `GET /` 200 / `GET /api/repos` 401 with auth on → `docker
+      stop` triggers a clean `received terminated, shutting
+      down... stopped cleanly` drain, which incidentally answers
+      design doc §11's SIGTERM open question in the affirmative).
+      `docker-compose.yml` + `-healthcheck` flag (slice 2) and
+      the GHCR publish job in `release.yml` (slice 3) are
+      explicitly deferred.
+
 - [x] **Subscription keys are one-repo-per-key.** `TokenEntry.Repos
       []string` collapsed to `TokenEntry.Repo string` (required);
       `Issue(username, repo, abilities)` rejects an empty repo with
@@ -1151,7 +1179,92 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
-### 2. Behind Azure API Management (or similar)
+### 2. Container image (Docker / Compose)
+
+Pre-built images are not yet published — that's slice 3 of the docker rollout
+(see [`docs/design/docker-image.md`](docs/design/docker-image.md) §12). For now
+operators build locally:
+
+```bash
+docker build -t gigot:dev --build-arg VERSION=dev .
+```
+
+The image is multi-stage (`golang:1.25-alpine` → `gcr.io/distroless/static-debian12:nonroot`)
+and runs as uid `65532`. The binary is the entrypoint; everything else —
+config, keys, tokens, repos — lives on mounted volumes:
+
+| Mount                          | Contents                  | Persistence |
+| ------------------------------ | ------------------------- | ----------- |
+| `/var/lib/gigot/data`          | keypair, sealed stores    | **Required.** Lose this and every encrypted store is unrecoverable. |
+| `/var/lib/gigot/repos`         | bare repos + audit chains | Required. |
+| `/etc/gigot/gigot.json`        | config (read-only mount)  | Required. No default is baked in — the server fails fast if missing. |
+
+Two image-specific defaults differ from the standalone `gigot.json` example
+above and matter for any container deploy:
+
+- `server.host` is `0.0.0.0`. `127.0.0.1` inside a container means
+  "unreachable from the host."
+- `auth.enabled` is `true`. Open `/api/*` is fine for a laptop dev loop, not
+  for a long-lived deploy.
+
+A minimal container-side `gigot.json`:
+
+```json
+{
+  "server":  { "host": "0.0.0.0", "port": 3417 },
+  "storage": { "repo_root": "/var/lib/gigot/repos" },
+  "auth":    { "enabled": true,  "type": "token" },
+  "crypto":  {
+    "private_key_path": "/var/lib/gigot/data/server.key",
+    "public_key_path":  "/var/lib/gigot/data/server.pub",
+    "data_dir":         "/var/lib/gigot/data"
+  }
+}
+```
+
+**First-run prep — host directory ownership.** Distroless-nonroot is
+uid 65532, but host directories created via `mkdir` or `docker volume create`
+land as root, so the process can't write to them. Pre-chown the bind targets
+once before any container starts:
+
+```bash
+mkdir -p /srv/gigot/data /srv/gigot/repos
+sudo chown -R 65532:65532 /srv/gigot/data /srv/gigot/repos
+```
+
+**Bootstrap an admin account.** `-add-admin` reads a password from stdin, so
+run it once as a transient interactive container against the same volumes the
+server will use:
+
+```bash
+docker run --rm -it \
+  -v /srv/gigot/data:/var/lib/gigot/data \
+  -v /srv/gigot/repos:/var/lib/gigot/repos \
+  -v $(pwd)/gigot.json:/etc/gigot/gigot.json:ro \
+  gigot:dev \
+  -add-admin alice
+```
+
+`-rotate-keys`, `-wipe-clients`, and the other one-shot flags follow the same
+pattern: same volumes, the flag as argv. There's no `GIGOT_ADMIN_PASSWORD`
+env var by design — passwords would otherwise leak into `docker inspect` and
+process listings (see design doc §6.2).
+
+**Run the server:**
+
+```bash
+docker run -d --name gigot \
+  -p 3417:3417 \
+  -v /srv/gigot/data:/var/lib/gigot/data \
+  -v /srv/gigot/repos:/var/lib/gigot/repos \
+  -v $(pwd)/gigot.json:/etc/gigot/gigot.json:ro \
+  gigot:dev
+```
+
+`docker-compose.yml`, a `-healthcheck` flag, and the GHCR publish job are
+slices 2 and 3 of the rollout — not shipped yet.
+
+### 3. Behind Azure API Management (or similar)
 
 The gateway takes over TLS termination, caller identity (OAuth, subscription
 keys, etc.), rate limiting, and coarse routing. GiGot's own auth can usually
