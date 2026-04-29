@@ -653,8 +653,9 @@ Done and shipping:
 ## Quick Start
 
 ```bash
-# 1. Build
-go build -o gigot .
+# 1. Build (use `make build` for a version-stamped binary; plain
+#    `go build .` works too but produces 0.0.0-dev+<commit>).
+make build
 
 # 2. Generate a default config next to the binary
 ./gigot -init
