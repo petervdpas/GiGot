@@ -1047,9 +1047,13 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
   color: var(--text);
 }
 .auth-hint { margin-top: 0.75rem; line-height: 1.45; }
+/* auto-fit instead of repeat(2, …) so the grid collapses to 1
+ * column as soon as 2 columns can't both hit the 20rem minimum.
+ * Replaces a hard media-query override and works smoothly across
+ * desktop (2 cols), tablet (~640px → 1 col), and mobile (1 col). */
 .auth-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
   gap: 0.85rem 1.25rem;
   margin-top: 0.85rem;
 }
@@ -1176,12 +1180,6 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
   .login-wrap {
     margin: 1rem;
     max-width: calc(100vw - 2rem);
-  }
-  /* Auth-page two-column grid collapses to single column — 32rem
-   * minimum total width can't fit on a phone, and the field labels
-   * read better one-per-row anyway. */
-  .auth-grid {
-    grid-template-columns: 1fr;
   }
   /* Create-repo "Clone from URL" field has min-width: 320px so the
    * placeholder doesn't truncate; on a phone we relax that and let
