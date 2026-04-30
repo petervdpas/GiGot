@@ -24,7 +24,8 @@ FROM alpine:3.20
 
 RUN apk add --no-cache git ca-certificates \
  && addgroup -g 65532 -S nonroot \
- && adduser  -u 65532 -S -G nonroot nonroot
+ && adduser  -u 65532 -S -G nonroot nonroot \
+ && git config --system --add safe.directory '*'
 
 COPY --from=build /out/gigot /gigot
 
