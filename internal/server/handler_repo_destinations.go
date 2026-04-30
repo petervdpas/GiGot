@@ -75,8 +75,14 @@ func (s *Server) handleRepoDestinations(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	// Gate order matters for informativeness: if the token isn't scoped
-	// to the repo, that's the more specific failure to report.
+	// to the repo, that's the more specific failure to report. The role
+	// gate is the structural fence — a `regular` account holding a stale
+	// `mirror`-bearing key still gets denied here, even though the
+	// ability check below would otherwise pass.
 	if !s.requireAllow(w, r, policy.ActionWriteRepo, repo) {
+		return
+	}
+	if !s.requireMaintainerOrAdmin(w, r) {
 		return
 	}
 	if !s.requireAbility(w, r, auth.AbilityMirror) {

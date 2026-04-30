@@ -40,3 +40,20 @@ type CredentialListResponse struct {
 	Credentials []CredentialView `json:"credentials"`
 	Count       int              `json:"count"`
 }
+
+// CredentialNameRef is a non-sensitive view exposing only the fields a
+// maintainer needs to reference a vault entry when wiring a mirror —
+// the human name and the kind. Returned by GET /api/credentials/names
+// so subscriber-side UIs (Formidable's mirror form) can autocomplete
+// without ever seeing secrets, expiry, or last-used metadata. See
+// accounts.md §1 (maintainer role) and remote-sync.md §2.6.
+type CredentialNameRef struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+}
+
+// CredentialNameListResponse is the body of GET /api/credentials/names.
+type CredentialNameListResponse struct {
+	Credentials []CredentialNameRef `json:"credentials"`
+	Count       int                 `json:"count"`
+}

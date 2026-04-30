@@ -233,6 +233,19 @@ func (s *Server) adminUpdateToken(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		// Resolve the token's account to enforce role-vs-ability rules
+		// (e.g. only admin/maintainer accounts may hold the mirror
+		// ability). Looking up the entry here keeps the rule symmetric
+		// with issueToken's check at issue time.
+		entry := s.tokenStrategy.Get(req.Token)
+		if entry == nil {
+			writeError(w, http.StatusNotFound, "token not found")
+			return
+		}
+		if err := s.ensureAbilitiesAllowedForAccount(entry.Username, abilities); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		if err := s.tokenStrategy.UpdateAbilities(req.Token, abilities); err != nil {
 			writeError(w, http.StatusNotFound, err.Error())
 			return

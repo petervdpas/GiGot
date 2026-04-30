@@ -1,4 +1,4 @@
-# Accounts (admin + regular)
+# Accounts (admin + maintainer + regular)
 
 Status: Phases 1–5 all shipped 2026-04-20 (Phase 5 is a doc-only
 default-flip; see §10). Supersedes the README roadmap item
@@ -25,7 +25,7 @@ server" — which is an account model, below.
 
 ---
 
-## 2. The model: one noun, one role field
+## 2. The model: one noun, three role tiers
 
 GiGot has one kind of human principal:
 
@@ -33,23 +33,40 @@ GiGot has one kind of human principal:
 type Account struct {
     Provider     string  // local | github | microsoft | gateway
     Identifier   string  // lowercased: username, github login, email, ...
-    Role         string  // admin | regular     (closed set)
+    Role         string  // admin | maintainer | regular   (closed set)
     DisplayName  string  // optional, for UI
     PasswordHash string  // bcrypt; only populated for provider=local
     CreatedAt    time.Time
 }
 ```
 
-Keyed by `(Provider, Identifier)`. `Role` is a closed set of two:
+Keyed by `(Provider, Identifier)`. `Role` is a closed set of three:
 
-- **admin** — can log into `/admin`, manage accounts, issue subscription
-  tokens, edit credentials / destinations.
-- **regular** — a registered human who does *not* administer the server.
-  Purpose: subscriptions get issued *to* a regular account (the token's
-  `username` becomes a reference to an Account, not free text).
+- **admin** — can log into `/admin`, manage accounts, create/delete
+  repos, issue any subscription key, write credentials, configure auth.
+  The full server-administration tier.
+- **maintainer** — between admin and regular. Can hold subscription keys
+  carrying the `mirror` ability, manage their own repos' mirror
+  destinations via the subscriber API, fire manual syncs, and read
+  credential **names** (not secrets) so they can reference vault entries
+  when wiring mirrors. Cannot create accounts, repos, other people's
+  keys, or write secrets to the vault.
+- **regular** — Formidable end user. Holds subscription keys for
+  push/pull of templates and records, nothing else. Cannot hold the
+  `mirror` ability — the role is a structural fence on top of the
+  per-token ability bits, so granting `mirror` to a regular's key is
+  rejected at issue time and at request time.
 
-No third role. Every future capability is either "admin does it" or
-"regular does it," not a finer matrix.
+The role is the **capability tier** an account is allowed to operate in.
+Per-token granularity (which repo, which abilities within the tier)
+still lives on subscription tokens. Concretely: the `mirror` ability is
+admin/maintainer-only at the role layer; admins decide *which* of those
+keys actually carry it via the abilities allowlist. Two layers, both
+required for any mirror-related call to succeed.
+
+No fourth role. No per-repo roles. If a future capability needs a
+finer fence than the role layer, it gets a new ability bit (gated by
+the appropriate role), not a new role tier.
 
 ### Providers
 
@@ -72,7 +89,7 @@ No third role. Every future capability is either "admin does it" or
   fronting proxy (APIM etc.), verified on ingress.
 
 Providers are orthogonal to role: a `local` admin, a `github` regular,
-an `entra` admin are all legal combinations.
+a `github` maintainer, an `entra` admin are all legal combinations.
 
 ---
 
@@ -212,6 +229,37 @@ migration — admins bind on their own schedule.
 
 This is the load-bearing change: subscription tokens stop being
 disembodied bearers and start pointing at a real account.
+
+### 6.1 Role-vs-ability fences
+
+Token abilities (e.g. `mirror`) are gated twice:
+
+1. **Issue time** — `POST /api/auth/token` and
+   `PATCH /api/admin/tokens` reject any abilities the issued account's
+   role is not entitled to hold. Today: `mirror` requires admin or
+   maintainer; granting it to a regular returns 400. Keeps stored state
+   honest, gives admins a clear error instead of a silently-dead bit.
+2. **Request time** — every mirror-related endpoint
+   (`/api/repos/{name}/destinations*`) calls
+   `requireMaintainerOrAdmin` *on top of* the existing
+   `TokenAbilityPolicy("mirror")` check. A stale `mirror` bit on a
+   key issued before the role fence existed (or on an account that was
+   later demoted) still fails at request time. No migration of old
+   tokens needed — they go inert without storage churn.
+
+Two layers, both required. Removing either leaves a hole: dropping
+the runtime check means demotions take effect only on next key
+re-issue; dropping the issue-time check means the admin UI silently
+accumulates dead bits.
+
+### 6.2 Credential-name read for maintainers
+
+`GET /api/credentials/names` returns `[{name, kind}]` only — no
+secrets, no expiry, no last-used metadata. Gated to admin and
+maintainer accounts. Lets a maintainer wiring a mirror destination
+through the subscriber API reference vault entries by name without
+needing admin reach. The admin-only `/api/admin/credentials` route
+(full metadata) is unchanged.
 
 ---
 
@@ -458,14 +506,17 @@ in-memory, just don't survive a restart.
 | 4     | **Shipped 2026-04-20** | `internal/auth/gateway/` HMAC-SHA256 signed-header strategy with configurable header names and `max_skew_seconds` replay window, `secret_ref` → credential vault lookup, `allow_register` flag. Registered on `auth.Provider` after session so cookies still win; `requireAdminSession` honours a gateway claim when it resolves to a `role=admin` account. Boot-time lockout-risk warning flags `allow_local=false` + no non-local path or no non-local admin. Aligns with Roadmap #2. |
 | 5     | **Shipped 2026-04-20** | Documentation default flipped to `allow_local=false` for any deploy that has configured OAuth or gateway. Runtime `Defaults()` still ships `allow_local=true` — flipping that in a minor version would silently lock upgraders out; that mechanical flip is held for a separate release cycle with migration notes. |
 | Hot-swap | **Shipped 2026-04-21** | `/admin/auth` UI + `GET`/`PATCH /api/admin/auth`. `Server.ReloadAuth` rebuilds OAuth registry + gateway strategy outside the lock, swaps atomically on success, persists to `gigot.json`. Old state is preserved on any build failure. Covered §9.5. |
+| 6     | **Shipped 2026-04-30** | Three-tier role model: added `maintainer` between `admin` and `regular` (§2). Ability fences moved to two layers: issue-time check (rejects `mirror` on regular accounts) + request-time `requireMaintainerOrAdmin` gate on `/api/repos/{name}/destinations*` so stale bits go inert without migration (§6.1). New `GET /api/credentials/names` returns names + kinds only for admin + maintainer (§6.2) so subscriber-side UIs can wire mirrors without admin reach. Subscription admin UI drops the chicken-and-egg `destination_count > 0` gate; the role IS the gate. Accounts admin UI gains a maintainer option in the role dropdown and a teal `.badge.maintainer` style. |
 
 ---
 
 ## 11. Non-goals
 
-- **More roles.** No `viewer`, no `operator`, no per-repo roles. If a
-  deploy needs finer-grained control, subscription tokens already carry
-  per-repo allowlists and abilities — use those.
+- **More roles.** Three is the cap: admin / maintainer / regular. No
+  `viewer`, no `operator`, no per-repo roles. If a deploy needs
+  finer-grained control, subscription tokens already carry per-repo
+  allowlists and abilities — gate new capabilities by adding ability
+  bits at the appropriate role tier, not new tiers.
 - **Group / tenant membership** ("anyone in Azure AD group X"). Every
   IdP expresses groups differently. Phase 3 stays on explicit
   individual accounts.

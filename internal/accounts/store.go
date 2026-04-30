@@ -19,12 +19,27 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Role values. Closed set of two — no viewer/operator/per-repo roles.
-// Finer-grained control lives on subscription tokens (repos +
-// abilities), not on accounts.
+// Role values. Three-tier model:
+//
+//   - admin       — full server control: accounts, repos, credential
+//                   vault writes, subscription-key issuance.
+//   - maintainer  — can hold and act on the "mirror" ability on their
+//                   own subscription keys (manage destinations, fire
+//                   manual syncs) and read credential names (no
+//                   secrets) to reference vault entries when wiring
+//                   mirrors. No account or repo administration.
+//   - regular     — Formidable end user: push/pull templates and
+//                   records via subscription keys. Cannot hold the
+//                   mirror ability; the role is a structural fence on
+//                   top of the per-token ability bits.
+//
+// No viewer / operator / per-repo roles. Per-repo scoping lives on
+// subscription tokens (repos + abilities). The role decides which
+// capability tiers an account is even allowed to hold.
 const (
-	RoleAdmin   = "admin"
-	RoleRegular = "regular"
+	RoleAdmin      = "admin"
+	RoleMaintainer = "maintainer"
+	RoleRegular    = "regular"
 )
 
 // Provider values. Additions should update docs/design/accounts.md §2.
@@ -37,7 +52,7 @@ const (
 )
 
 var (
-	KnownRoles     = []string{RoleAdmin, RoleRegular}
+	KnownRoles     = []string{RoleAdmin, RoleMaintainer, RoleRegular}
 	KnownProviders = []string{
 		ProviderLocal, ProviderGitHub, ProviderEntra, ProviderMicrosoft, ProviderGateway,
 	}

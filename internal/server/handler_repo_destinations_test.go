@@ -7,13 +7,17 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/petervdpas/GiGot/internal/accounts"
 	"github.com/petervdpas/GiGot/internal/credentials"
 )
 
 // subscriberTestServer spins up a fresh server with auth enabled, one
-// credential in the vault, and one bare repo named "addresses". Returns
-// the server and the repo name so tests can issue tokens with whatever
-// mix of scopes/abilities they need.
+// credential in the vault, one bare repo named "addresses", and a
+// local maintainer account "alice" so subscriber tokens issued for
+// "alice" pass both the runtime role gate (maintainer can hold mirror)
+// and the issue-time ability check. Returns the server and the repo
+// name so tests can issue tokens with whatever mix of scopes/abilities
+// they need.
 func subscriberTestServer(t *testing.T) *Server {
 	t.Helper()
 	srv := testServer(t)
@@ -24,6 +28,13 @@ func subscriberTestServer(t *testing.T) *Server {
 		t.Fatal(err)
 	}
 	if err := srv.git.InitBare("addresses"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: "alice",
+		Role:       accounts.RoleMaintainer,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	return srv
@@ -124,6 +135,44 @@ func TestRepoDestinations_TokenWithoutMirrorDenied(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("POST without mirror ability want 403, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestRepoDestinations_RegularRoleDenied is the role-gate negative:
+// even a token with the mirror ability AND the right repo scope is
+// rejected if the issuing account's role is `regular`. Mirroring is
+// fenced to admin + maintainer roles regardless of stale ability bits
+// on previously-issued keys (see accounts.md §1).
+func TestRepoDestinations_RegularRoleDenied(t *testing.T) {
+	srv := subscriberTestServer(t)
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: "bob",
+		Role:       accounts.RoleRegular,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Issue directly through the strategy to bypass the issue-time
+	// ability check — simulates a stale key from before the role
+	// fence existed. The runtime gate must still deny.
+	token, err := srv.tokenStrategy.Issue("bob", "addresses", []string{"mirror"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := bearer(t, http.MethodGet, "/api/repos/addresses/destinations", nil, token)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("GET as regular want 403, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = bearer(t, http.MethodPost, "/api/repos/addresses/destinations",
+		map[string]any{"url": "https://x.com/r.git", "credential_name": "github-personal"}, token)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("POST as regular want 403, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

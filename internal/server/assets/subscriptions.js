@@ -14,14 +14,16 @@
 
   function repoNames() { return repoInfoCache.map(r => r.name); }
 
-  // Regulars first, admins last — admins can hold subscription
-  // keys but they're the rarer case, so we surface them at the
-  // bottom of the dropdown. accountOption comes from Admin so the
-  // label format stays consistent with the sidebar / user strip.
+  // Order: regulars (most common) → maintainers → admins (rarest).
+  // accountOption comes from Admin so the label format stays
+  // consistent with the sidebar / user strip. Any unknown future
+  // role would silently drop out — keep this in sync with
+  // internal/accounts/store.go KnownRoles.
   function accountOptionsSorted() {
-    const regulars = accountsCache.filter(a => a.role === 'regular').map(Admin.accountOption);
-    const admins   = accountsCache.filter(a => a.role === 'admin').map(Admin.accountOption);
-    return regulars.concat(admins);
+    const regulars    = accountsCache.filter(a => a.role === 'regular').map(Admin.accountOption);
+    const maintainers = accountsCache.filter(a => a.role === 'maintainer').map(Admin.accountOption);
+    const admins      = accountsCache.filter(a => a.role === 'admin').map(Admin.accountOption);
+    return regulars.concat(maintainers, admins);
   }
 
   // resolveAccountForToken is a thin binding over Admin.resolveAccount
@@ -71,52 +73,64 @@
     return hidden ? hidden.value : '';
   }
 
-  // repoHasMirror returns true when the named repo has at least
-  // one mirror destination configured. Reads from repoInfoCache —
-  // RepoInfo.DestinationCount is populated by the /api/repos
-  // listing, so no extra fetch is needed.
-  function repoHasMirror(repoName) {
-    if (!repoName) return false;
-    const r = repoInfoCache.find(x => x.name === repoName);
-    return !!(r && r.destination_count > 0);
+  // accountRoleFor resolves a scoped username ("provider:identifier")
+  // to the role on the matching Account, or null if no account exists
+  // (legacy bare "alice" tokens from before the accounts model). Used
+  // to decide which abilities are even legal to offer for this key —
+  // the server fences `mirror` to admin + maintainer, so the UI must
+  // match (see accounts.md §1).
+  function accountRoleFor(scopedUsername) {
+    if (!scopedUsername) return null;
+    const acc = resolveAccountForToken(scopedUsername);
+    return acc ? acc.role : null;
   }
 
   // KNOWN_ABILITIES mirrors internal/auth.KnownAbilities(). Each
-  // entry has a `relevant(repoName)` predicate: an ability is only
-  // offered in the UI when BOTH the global precondition (e.g. at
-  // least one credential exists) AND the per-repo precondition
-  // (e.g. the repo has a mirror destination to manage) hold.
-  // Granting an ability that can't be acted on would mislead the
-  // admin. The server-side allowlist still rejects anything not
-  // named here via 400, so this list must stay in lockstep with
-  // Go's list.
+  // entry has a `relevant({ accountRole })` predicate. An ability is
+  // offered in the UI iff:
+  //   - the global precondition holds (e.g. at least one credential
+  //     in the vault to reference), AND
+  //   - the issued account's role is allowed to hold the ability.
+  //
+  // Per-repo gates are deliberately absent: a repo with zero mirror
+  // destinations is the *normal* starting state — gating mirror on
+  // destination_count > 0 created a chicken-and-egg where the only
+  // path to grant the bit went through the admin Repositories page
+  // first. The role IS the structural fence.
+  //
+  // The server-side allowlist still rejects anything not named here
+  // via 400, so this list must stay in lockstep with Go's list.
+  const MIRROR_ROLES = new Set(['admin', 'maintainer']);
+
   const KNOWN_ABILITIES = [
     {
       name: 'mirror',
       hint: 'self-manage remote destinations',
-      relevant: (repoName) =>
-        credentialsCache.length > 0 && repoHasMirror(repoName),
+      relevant: ({ accountRole }) =>
+        credentialsCache.length > 0 && MIRROR_ROLES.has(accountRole),
     },
   ];
 
-  function relevantAbilities(repoName) {
-    return KNOWN_ABILITIES.filter(a => a.relevant(repoName));
+  function relevantAbilities(scopedUsername) {
+    const accountRole = accountRoleFor(scopedUsername);
+    return KNOWN_ABILITIES.filter(a => a.relevant({ accountRole }));
   }
 
-  function renderAbilityPicker(container, selected, repoName) {
+  function renderAbilityPicker(container, selected, scopedUsername) {
     container.replaceChildren();
     const set = new Set(selected);
-    const relevant = relevantAbilities(repoName);
+    const relevant = relevantAbilities(scopedUsername);
     const names = new Set(relevant.map(a => a.name));
     for (const a of relevant) {
       container.append(makeAbilityChip(a, set.has(a.name), false));
     }
-    // Held but no longer relevant for THIS repo — render muted so
-    // the admin can revoke it on the current key without rebinding.
+    // Held but no longer relevant for THIS account — render muted so
+    // the admin can revoke a stale bit on the current key without
+    // rebinding. Common for keys issued before role fences existed.
     for (const name of set) {
       if (!names.has(name)) {
         container.append(makeAbilityChip(
-          { name, hint: 'granted but not applicable to this repo' },
+          { name, hint: 'granted but not allowed for this account\'s role' },
           true, true,
         ));
       }
@@ -145,11 +159,13 @@
   function syncIssueAbilities() {
     const wrap = document.getElementById('issue-abilities-wrap');
     const picker = document.getElementById('issue-abilities');
-    const repoHost = document.getElementById('issue-repo-host');
-    const repoName = repoHost ? selectedRepoFromHost(repoHost) : '';
-    const any = relevantAbilities(repoName).length > 0;
+    const usernameEl = document.querySelector(
+      '#issue-account-host input[name="username"]'
+    );
+    const scoped = usernameEl ? usernameEl.value : '';
+    const any = relevantAbilities(scoped).length > 0;
     wrap.classList.toggle('hidden', !any);
-    if (any) renderAbilityPicker(picker, [], repoName);
+    if (any) renderAbilityPicker(picker, [], scoped);
   }
 
   // ─────────────────────────────────────────────────────────── token card
@@ -280,7 +296,7 @@
       status.className = 'muted ability-status';
     }
     function repaint() {
-      renderAbilityPicker(picker, t.abilities || [], t.repo || '');
+      renderAbilityPicker(picker, t.abilities || [], t.username || '');
       setCount((t.abilities || []).length);
       saveBtn.classList.add('hidden');
       picker.querySelectorAll('.switch input[name="ability"]').forEach(cb => {
@@ -348,6 +364,9 @@
 
   // Render / re-render the Account picker (GG.select) with current
   // accountsCache. Preserves whatever scoped value was selected.
+  // Flipping the account changes which abilities are legal to grant
+  // (mirror is admin/maintainer-only), so we re-run the abilities
+  // syncer on every change.
   function renderAccountPicker(selectedValue) {
     const host = document.getElementById('issue-account-host');
     if (!host) return;
@@ -363,6 +382,8 @@
         : [{ value: '', label: 'No accounts yet — register or create one first', disabled: true }],
     });
     GG.select.initAll(host);
+    const sel = host.querySelector('.gsel');
+    if (sel) GG.select.init(sel, () => syncIssueAbilities());
   }
 
   // Full page refresh: repos + tokens + creds + accounts. Called on

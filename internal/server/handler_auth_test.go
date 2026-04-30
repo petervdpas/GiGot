@@ -205,6 +205,50 @@ func TestIssueToken_UsesExistingAccountRoleUnchanged(t *testing.T) {
 	}
 }
 
+// TestIssueToken_MirrorAbilityRequiresMaintainerOrAdmin pairs the
+// runtime role gate (handler_repo_destinations) with an issue-time
+// fence: granting `mirror` to a regular account must be rejected up
+// front, so the stored state stays honest. Pairs with a positive case
+// for maintainer.
+func TestIssueToken_MirrorAbilityRequiresMaintainerOrAdmin(t *testing.T) {
+	srv := testServer(t)
+	if err := srv.git.InitBare("repo-a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: "regular-alice",
+		Role:       accounts.RoleRegular,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: "maintainer-bob",
+		Role:       accounts.RoleMaintainer,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Negative: regular account is rejected at issue time.
+	payload := `{"username":"regular-alice","repo":"repo-a","abilities":["mirror"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(payload))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("regular role with mirror want 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Positive: maintainer is allowed to hold the bit.
+	payload = `{"username":"maintainer-bob","repo":"repo-a","abilities":["mirror"]}`
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(payload))
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("maintainer with mirror want 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestRevokeToken(t *testing.T) {
 	srv := testServer(t)
 

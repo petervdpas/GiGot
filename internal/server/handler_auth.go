@@ -67,6 +67,10 @@ func (s *Server) issueToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := s.ensureAbilitiesAllowedForAccount(req.Username, abilities); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	token, err := s.tokenStrategy.Issue(req.Username, repo, abilities)
 	if err != nil {
@@ -138,6 +142,31 @@ func (s *Server) ensureAccountForToken(username string) error {
 		return nil
 	}
 	return fmt.Errorf("no %s account for %q — register via /register or create one via POST /api/admin/accounts before issuing a token", provider, identifier)
+}
+
+// ensureAbilitiesAllowedForAccount rejects ability grants that the
+// account's role is not entitled to hold. Today only `mirror` is
+// fenced (admin + maintainer only); a regular account holding it would
+// fail the runtime role gate in handler_repo_destinations anyway, so
+// blocking it at issue/edit time keeps the stored state honest and
+// gives admins a clear error instead of a silently-dead bit. See
+// accounts.md §1.
+func (s *Server) ensureAbilitiesAllowedForAccount(scopedUsername string, abilities []string) error {
+	if !slices.Contains(abilities, auth.AbilityMirror) {
+		return nil
+	}
+	provider, identifier, err := parseTokenUsername(scopedUsername)
+	if err != nil {
+		return err
+	}
+	acc, err := s.accounts.Get(provider, identifier)
+	if err != nil {
+		return fmt.Errorf("account %s:%s not found", provider, identifier)
+	}
+	if acc.Role != accounts.RoleAdmin && acc.Role != accounts.RoleMaintainer {
+		return fmt.Errorf("ability %q requires admin or maintainer role; %s:%s is %s", auth.AbilityMirror, provider, identifier, acc.Role)
+	}
+	return nil
 }
 
 func (s *Server) revokeToken(w http.ResponseWriter, r *http.Request) {

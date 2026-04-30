@@ -184,6 +184,33 @@ Done and shipping:
       OpenAPI regenerated (`repo` on TokenRequest / TokenResponse /
       TokenListItem / UpdateTokenRequest). 2026-04-23.
 
+- [x] **Accounts — Phase 6: maintainer role + role-vs-ability fences
+      (design: [`accounts.md`](docs/design/accounts.md) §2, §6.1, §6.2).**
+      Three-tier role model: added `maintainer` between `admin` and
+      `regular`. Mirror-related endpoints
+      (`/api/repos/{name}/destinations*`) now apply
+      `requireMaintainerOrAdmin` *on top of* the existing
+      `TokenAbilityPolicy("mirror")` check, so a stale `mirror` bit on
+      a regular account's key fails at request time without needing a
+      migration of old tokens. Issue-time fence parallel: `POST
+      /api/auth/token` and `PATCH /api/admin/tokens` reject `mirror`
+      on a regular's key with 400. New endpoint `GET
+      /api/credentials/names` returns names + kinds only (no secrets,
+      no metadata) for admin + maintainer accounts so subscriber-side
+      UIs (Formidable's mirror form) can reference vault entries
+      without needing admin reach. Subscription admin UI drops the
+      chicken-and-egg `destination_count > 0` gate on the `mirror`
+      ability picker — the role IS the structural fence, no
+      bootstrap round-trip through the admin Repositories page.
+      Accounts admin UI gains the maintainer option in the role
+      dropdown, three "Make admin / maintainer / regular" row-menu
+      items (current role hidden), and a teal `.badge.maintainer`
+      style. Tests: positive + negative pairs for runtime role gate
+      (`TestRepoDestinations_RegularRoleDenied`), issue-time fence
+      (`TestIssueToken_MirrorAbilityRequiresMaintainerOrAdmin`), and
+      `/credentials/names` (4 cases including secret-leak guard,
+      anon 401, regular 403, method 405). 2026-04-30.
+
 - [x] **Auth hot-swap admin surface (design:
       [`accounts.md`](docs/design/accounts.md) §9.5).** `/admin/auth`
       UI + `GET`/`PATCH /api/admin/auth` let an admin inspect and

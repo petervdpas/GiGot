@@ -21,11 +21,24 @@
     }
   }
 
-  // admins first, then alphabetical by (provider, identifier) — the
-  // table is short enough that this is cheap and it keeps the
-  // "who can log in" rows near the top where an admin looks first.
+  // Role ordering: admins first, then maintainers, then regulars,
+  // alphabetical by (provider, identifier) within each tier. Keeps
+  // the "who can log in" + "who can manage mirrors" rows near the
+  // top where an admin looks first.
+  const ROLE_RANK = { admin: 0, maintainer: 1, regular: 2 };
+
+  // roleBadgeClass picks the .badge variant (admin = formidable accent,
+  // maintainer = teal, regular = default chip) so the role tier reads
+  // at a glance from the accounts table.
+  function roleBadgeClass(role) {
+    if (role === 'admin') return 'formidable';
+    if (role === 'maintainer') return 'maintainer';
+    return '';
+  }
   function sortAccounts(a, b) {
-    if (a.role !== b.role) return a.role === 'admin' ? -1 : 1;
+    const ra = ROLE_RANK[a.role] ?? 99;
+    const rb = ROLE_RANK[b.role] ?? 99;
+    if (ra !== rb) return ra - rb;
     if (a.provider !== b.provider) return a.provider < b.provider ? -1 : 1;
     return a.identifier < b.identifier ? -1 : 1;
   }
@@ -49,7 +62,7 @@
       '<td><code class="acct-identifier" title="' + escapeHtml(a.identifier) + '">' +
         escapeHtml(a.identifier) + '</code></td>' +
       '<td>' + escapeHtml(a.display_name || '') + '</td>' +
-      '<td><span class="badge ' + (a.role === 'admin' ? 'formidable' : '') + '">' +
+      '<td><span class="badge ' + roleBadgeClass(a.role) + '">' +
         escapeHtml(a.role) + '</span></td>' +
       '<td>' + (a.has_password ? 'yes' : '<span class="muted">dormant</span>') + '</td>' +
       '<td>' + subsCell + '</td>' +
@@ -59,16 +72,17 @@
     const actions = tr.querySelector('.row-actions');
 
     // Build the action list declaratively, then hand it to row_menu.
-    // Order: safe edits (rename) → state change (promote/demote,
-    // reset password) → destructive (delete). Conditional items use
+    // Order: safe edits (rename) → state change (set role, reset
+    // password) → destructive (delete). Conditional items use
     // `hidden: true` so the list remains a flat literal instead of
     // sprouting branches.
-    async function patchRole() {
-      const next = a.role === 'admin' ? 'regular' : 'admin';
-      try {
-        await api.patchAccount(a.provider, a.identifier, { role: next });
-        refresh();
-      } catch (e) { GG.dialog.alert('Role change failed', e.message); }
+    function setRole(target) {
+      return async () => {
+        try {
+          await api.patchAccount(a.provider, a.identifier, { role: target });
+          refresh();
+        } catch (e) { GG.dialog.alert('Role change failed', e.message); }
+      };
     }
     async function patchDisplayName() {
       const next = await GG.dialog.prompt({
@@ -114,7 +128,11 @@
 
     GG.row_menu.attach(actions, [
       { label: a.display_name ? 'Rename' : 'Set display name', onClick: patchDisplayName },
-      { label: a.role === 'admin' ? 'Demote to regular' : 'Promote to admin', onClick: patchRole },
+      // Three role targets, current one hidden. Lets the admin move
+      // between any two roles in one click instead of cycling.
+      { label: 'Make admin',      onClick: setRole('admin'),      hidden: a.role === 'admin' },
+      { label: 'Make maintainer', onClick: setRole('maintainer'), hidden: a.role === 'maintainer' },
+      { label: 'Make regular',    onClick: setRole('regular'),    hidden: a.role === 'regular' },
       { label: a.has_password ? 'Reset password' : 'Set password', onClick: resetPassword,
         hidden: a.provider !== 'local' },
       { label: 'Delete', onClick: deleteAccount, danger: true },
@@ -153,8 +171,9 @@
         name: 'role',
         value: 'regular',
         options: [
-          { value: 'regular', label: 'regular' },
-          { value: 'admin',   label: 'admin' },
+          { value: 'regular',    label: 'regular' },
+          { value: 'maintainer', label: 'maintainer' },
+          { value: 'admin',      label: 'admin' },
         ],
       });
       GG.select.initAll(roleHost);

@@ -490,6 +490,10 @@ a:hover { text-decoration: underline; }
 .badge.formidable { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-line); }
 .badge.empty { background: var(--chip); color: var(--muted); border-color: var(--line); }
 .badge.warn { background: #9e6a0322; color: #e3b341; border-color: #9e6a0366; }
+/* Maintainer role — between admin (.formidable) and regular (default).
+ * Cool/teal palette so it reads as "elevated but not full admin" at a
+ * glance on the accounts table. */
+.badge.maintainer { background: #0e7a8722; color: #5dd9e6; border-color: #0e7a8766; }
 
 /* A badge rendered as a <button> stays visually identical to the <span>
  * form but gains a cursor + hover cue so the operator knows it's a
