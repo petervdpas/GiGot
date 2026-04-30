@@ -581,10 +581,6 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/admin/tokens/bind", s.handleAdminBindToken)
 	s.mux.HandleFunc("/api/admin/credentials", s.handleAdminCredentials)
 	s.mux.HandleFunc("/api/admin/credentials/", s.handleAdminCredential)
-	// Subscriber-side, non-sensitive credential listing (names + kinds
-	// only) for maintainers wiring mirror destinations. Admins also
-	// pass; regulars receive 403.
-	s.mux.HandleFunc("/api/credentials/names", s.handleCredentialsNames)
 	s.mux.HandleFunc("/api/admin/accounts", s.handleAdminAccounts)
 	s.mux.HandleFunc("/api/admin/accounts/", s.handleAdminAccount)
 	s.mux.HandleFunc("/api/admin/auth", s.handleAdminAuth)

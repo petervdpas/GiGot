@@ -252,14 +252,17 @@ the runtime check means demotions take effect only on next key
 re-issue; dropping the issue-time check means the admin UI silently
 accumulates dead bits.
 
-### 6.2 Credential-name read for maintainers
+### 6.2 Credentials stay GiGot-side
 
-`GET /api/credentials/names` returns `[{name, kind}]` only — no
-secrets, no expiry, no last-used metadata. Gated to admin and
-maintainer accounts. Lets a maintainer wiring a mirror destination
-through the subscriber API reference vault entries by name without
-needing admin reach. The admin-only `/api/admin/credentials` route
-(full metadata) is unchanged.
+Mirror credentials and destinations are GiGot's domain end-to-end.
+The admin Repositories page configures destinations *and* picks the
+credential to use, on a privacy-notice consent gesture per
+remote-sync.md §3.7. Maintainer-role subscribers can *trigger* a
+configured destination's push (`POST /destinations/{id}/sync`) —
+that's the legitimate Formidable-side action — but credential names
+never cross the GiGot↔client boundary, and Formidable holds no
+mirror-config UI. Sealed-body trust + single-source-of-truth: GiGot
+owns destinations, the client only fires them.
 
 ---
 
@@ -506,7 +509,7 @@ in-memory, just don't survive a restart.
 | 4     | **Shipped 2026-04-20** | `internal/auth/gateway/` HMAC-SHA256 signed-header strategy with configurable header names and `max_skew_seconds` replay window, `secret_ref` → credential vault lookup, `allow_register` flag. Registered on `auth.Provider` after session so cookies still win; `requireAdminSession` honours a gateway claim when it resolves to a `role=admin` account. Boot-time lockout-risk warning flags `allow_local=false` + no non-local path or no non-local admin. Aligns with Roadmap #2. |
 | 5     | **Shipped 2026-04-20** | Documentation default flipped to `allow_local=false` for any deploy that has configured OAuth or gateway. Runtime `Defaults()` still ships `allow_local=true` — flipping that in a minor version would silently lock upgraders out; that mechanical flip is held for a separate release cycle with migration notes. |
 | Hot-swap | **Shipped 2026-04-21** | `/admin/auth` UI + `GET`/`PATCH /api/admin/auth`. `Server.ReloadAuth` rebuilds OAuth registry + gateway strategy outside the lock, swaps atomically on success, persists to `gigot.json`. Old state is preserved on any build failure. Covered §9.5. |
-| 6     | **Shipped 2026-04-30** | Three-tier role model: added `maintainer` between `admin` and `regular` (§2). Ability fences moved to two layers: issue-time check (rejects `mirror` on regular accounts) + request-time `requireMaintainerOrAdmin` gate on `/api/repos/{name}/destinations*` so stale bits go inert without migration (§6.1). New `GET /api/credentials/names` returns names + kinds only for admin + maintainer (§6.2) so subscriber-side UIs can wire mirrors without admin reach. Subscription admin UI drops the chicken-and-egg `destination_count > 0` gate; the role IS the gate. Accounts admin UI gains a maintainer option in the role dropdown and a teal `.badge.maintainer` style. |
+| 6     | **Shipped 2026-04-30** | Three-tier role model: added `maintainer` between `admin` and `regular` (§2). Ability fences moved to two layers: issue-time check (rejects `mirror` on regular accounts) + request-time `requireMaintainerOrAdmin` gate on `/api/repos/{name}/destinations*` so stale bits go inert without migration (§6.1). Subscription admin UI drops the chicken-and-egg `destination_count > 0` gate; the role IS the gate. Accounts admin UI gains a maintainer option in the role dropdown and a teal `.badge.maintainer` style. Credentials stay GiGot-side — destination CRUD remains the admin Repositories page's job (§6.2); the maintainer-role subscriber surface is push-trigger only. |
 
 ---
 

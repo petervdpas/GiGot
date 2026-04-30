@@ -1872,49 +1872,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/credentials/names": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Read-only, non-sensitive listing of credential vault\nentries. Returns only the human-readable name and kind\nper row — no secrets, no expiry, no last-used timestamps.\nThe intended caller is a subscriber-side UI wiring a\nmirror destination (Formidable's mirror form), where\nthe operator needs to know which vault names exist\nwithout seeing the secrets the admin holds.\n\nGated by role: admin and maintainer accounts pass via\neither session cookie or bearer token; regular accounts\nreceive 403. The full admin-only metadata view remains\nat /api/admin/credentials.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "credentials"
-                ],
-                "summary": "List credential names + kinds (admin or maintainer)",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/server.CredentialNameListResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Caller is not admin or maintainer",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "405": {
-                        "description": "Method Not Allowed",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/crypto/pubkey": {
             "get": {
                 "description": "Returns the base64-encoded curve25519 public key that clients\nuse to seal request bodies.",
@@ -4202,31 +4159,6 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/server.CredentialView"
                     }
-                }
-            }
-        },
-        "server.CredentialNameListResponse": {
-            "type": "object",
-            "properties": {
-                "count": {
-                    "type": "integer"
-                },
-                "credentials": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/server.CredentialNameRef"
-                    }
-                }
-            }
-        },
-        "server.CredentialNameRef": {
-            "type": "object",
-            "properties": {
-                "kind": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
                 }
             }
         },

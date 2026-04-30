@@ -401,22 +401,6 @@ definitions:
           $ref: '#/definitions/server.CredentialView'
         type: array
     type: object
-  server.CredentialNameListResponse:
-    properties:
-      count:
-        type: integer
-      credentials:
-        items:
-          $ref: '#/definitions/server.CredentialNameRef'
-        type: array
-    type: object
-  server.CredentialNameRef:
-    properties:
-      kind:
-        type: string
-      name:
-        type: string
-    type: object
   server.CredentialView:
     properties:
       created_at:
@@ -2156,45 +2140,6 @@ paths:
       summary: Enroll a client's public key
       tags:
       - clients
-  /credentials/names:
-    get:
-      description: |-
-        Read-only, non-sensitive listing of credential vault
-        entries. Returns only the human-readable name and kind
-        per row — no secrets, no expiry, no last-used timestamps.
-        The intended caller is a subscriber-side UI wiring a
-        mirror destination (Formidable's mirror form), where
-        the operator needs to know which vault names exist
-        without seeing the secrets the admin holds.
-
-        Gated by role: admin and maintainer accounts pass via
-        either session cookie or bearer token; regular accounts
-        receive 403. The full admin-only metadata view remains
-        at /api/admin/credentials.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/server.CredentialNameListResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-        "403":
-          description: Caller is not admin or maintainer
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-        "405":
-          description: Method Not Allowed
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List credential names + kinds (admin or maintainer)
-      tags:
-      - credentials
   /crypto/pubkey:
     get:
       description: |-
