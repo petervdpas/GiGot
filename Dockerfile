@@ -17,7 +17,14 @@ RUN CGO_ENABLED=0 go build \
       -o /out/gigot .
 
 # ---- runtime stage --------------------------------------------------------
-FROM gcr.io/distroless/static-debian12:nonroot
+# Alpine (not distroless/static) because GiGot's mirror + audit paths shell
+# out to git(1) at runtime — see internal/git/{refs,audit,changes}.go and
+# internal/server/mirror.go. Distroless static carries no git binary.
+FROM alpine:3.20
+
+RUN apk add --no-cache git ca-certificates \
+ && addgroup -g 65532 -S nonroot \
+ && adduser  -u 65532 -S -G nonroot nonroot
 
 COPY --from=build /out/gigot /gigot
 
@@ -27,7 +34,7 @@ USER nonroot:nonroot
 
 EXPOSE 3417
 
-# Distroless carries no curl/wget, so the binary's own -healthcheck flag
+# The image carries no curl/wget, so the binary's own -healthcheck flag
 # is what the orchestrator probes. Settings match design doc §7.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD ["/gigot", "-healthcheck", "-config", "/etc/gigot/gigot.json"]
