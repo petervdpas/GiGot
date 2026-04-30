@@ -57,16 +57,19 @@
     // base64url and wrap the row into an unreadable vertical stack.
     // Truncate in the cell and expose the full value via `title` so
     // admins can still copy-read it on hover.
+    // data-label drives the mobile card-list rendering — see
+    // .responsive-table in admin.css. One source of column names
+    // for both the table <th> and the mobile pseudo-label.
     tr.innerHTML =
-      '<td><code>' + escapeHtml(a.provider) + '</code></td>' +
-      '<td><code class="acct-identifier" title="' + escapeHtml(a.identifier) + '">' +
+      '<td data-label="Provider"><code>' + escapeHtml(a.provider) + '</code></td>' +
+      '<td data-label="Identifier"><code class="acct-identifier" title="' + escapeHtml(a.identifier) + '">' +
         escapeHtml(a.identifier) + '</code></td>' +
-      '<td>' + escapeHtml(a.display_name || '') + '</td>' +
-      '<td><span class="badge ' + roleBadgeClass(a.role) + '">' +
+      '<td data-label="Display name">' + escapeHtml(a.display_name || '') + '</td>' +
+      '<td data-label="Role"><span class="badge ' + roleBadgeClass(a.role) + '">' +
         escapeHtml(a.role) + '</span></td>' +
-      '<td>' + (a.has_password ? 'yes' : '<span class="muted">dormant</span>') + '</td>' +
-      '<td>' + subsCell + '</td>' +
-      '<td class="muted">' + escapeHtml((a.created_at || '').slice(0, 10)) + '</td>' +
+      '<td data-label="Password">' + (a.has_password ? 'yes' : '<span class="muted">dormant</span>') + '</td>' +
+      '<td data-label="Subscriptions">' + subsCell + '</td>' +
+      '<td data-label="Created" class="muted">' + escapeHtml((a.created_at || '').slice(0, 10)) + '</td>' +
       '<td class="row-actions"></td>';
 
     const actions = tr.querySelector('.row-actions');

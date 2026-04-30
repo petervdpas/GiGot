@@ -46,12 +46,16 @@
         : expBucket === 'expiring'
           ? ' title="Expires within 7 days — rotate soon."'
           : '';
+      // data-label drives the mobile card-list rendering — see the
+      // .responsive-table block at the bottom of admin.css. Labels
+      // mirror the column <th> text so the desktop and mobile views
+      // are conceptually identical, just folded differently.
       tr.innerHTML =
-        '<td><code>' + escapeHtml(c.name) + '</code></td>' +
-        '<td>' + escapeHtml(c.kind) + '</td>' +
-        '<td class="' + expClass + '"' + expTitle + '>' + escapeHtml(formatExpires(c.expires)) + '</td>' +
-        '<td>' + escapeHtml(c.notes || '') + '</td>' +
-        '<td class="muted">' + escapeHtml(formatWhen(c.last_used)) + '</td>' +
+        '<td data-label="Name"><code>' + escapeHtml(c.name) + '</code></td>' +
+        '<td data-label="Kind">' + escapeHtml(c.kind) + '</td>' +
+        '<td data-label="Expires" class="' + expClass + '"' + expTitle + '>' + escapeHtml(formatExpires(c.expires)) + '</td>' +
+        '<td data-label="Notes">' + escapeHtml(c.notes || '') + '</td>' +
+        '<td data-label="Last used" class="muted">' + escapeHtml(formatWhen(c.last_used)) + '</td>' +
         '<td class="row-actions"></td>';
 
       async function deleteCredential() {

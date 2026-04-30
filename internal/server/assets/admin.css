@@ -1197,4 +1197,81 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
   .acct-identifier {
     word-break: break-all;
   }
+
+  /* Tables flagged with .responsive-table fold each row into a
+   * stacked label/value card. The header row hides; each <td> shows
+   * its data-label as a small caption next to the value. Keeps the
+   * dense desktop view AND the mobile readability without two
+   * separate render paths.
+   *
+   * The row-actions cell (kebab menu) sticks to the right edge so
+   * the action target is always one tap away regardless of how
+   * many label rows precede it. */
+  .responsive-table,
+  .responsive-table thead,
+  .responsive-table tbody,
+  .responsive-table tr,
+  .responsive-table td {
+    display: block;
+    width: 100%;
+  }
+  .responsive-table thead {
+    /* Hidden but accessible to screen readers — the data-label
+     * captions on each cell are a visual replacement for the
+     * column headers, and we'd prefer a screen reader to keep
+     * announcing column names from the <th>s rather than the
+     * decorative ::before pseudo-elements. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .responsive-table tr {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
+    background: var(--panel);
+    position: relative;
+  }
+  .responsive-table td {
+    border: 0;
+    padding: 0.25rem 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    word-break: break-word;
+  }
+  .responsive-table td::before {
+    content: attr(data-label);
+    flex: 0 0 7.5rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+  /* Cells without a data-label (typically the row-actions column)
+   * sit aligned to the right edge of the card, no caption. */
+  .responsive-table td:not([data-label]) {
+    justify-content: flex-end;
+    padding-top: 0.5rem;
+  }
+  .responsive-table td:not([data-label])::before {
+    display: none;
+  }
+  /* Inside a responsive-table row, the identifier can wrap freely —
+   * there's plenty of vertical space and the label-value pair reads
+   * better without truncation on mobile. */
+  .responsive-table .acct-identifier {
+    max-width: none;
+    overflow: visible;
+    white-space: normal;
+    word-break: break-all;
+  }
 }
