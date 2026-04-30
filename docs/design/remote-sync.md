@@ -164,10 +164,11 @@ interact:
 2. **Subscriber (token holder).** A token that holds the `mirror`
    ability can manage its own destinations via a subscription-
    facing API — `/api/repos/{name}/destinations` with Bearer auth,
-   gated by both `TokenRepoPolicy` (repo in allowlist) and a new
-   `TokenAbilityPolicy` (`mirror` ability present). Tokens without
-   the ability get `403` on this surface; all other endpoints are
-   unchanged.
+   gated by `TokenRepoPolicy` (repo in allowlist), a role check
+   (`requireMaintainerOrAdmin`, added Phase 6 — see accounts.md
+   §6.1), and `TokenAbilityPolicy` (`mirror` ability present). All
+   three layers required; any one denies. Tokens that fail any layer
+   get `403` on this surface; all other endpoints are unchanged.
 
 The ability concept extends the existing `repos: [...]` scope on
 tokens with an orthogonal `abilities: [...]` scope. It is *not*

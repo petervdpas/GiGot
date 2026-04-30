@@ -1171,7 +1171,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Invokes ` + "`" + `git push +refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*` + "`" + `\nagainst the destination's URL, using the vault credential\nreferenced by ` + "`" + `credential_name` + "`" + `. Runs synchronously — the\nresponse is the updated destination with ` + "`" + `last_sync_at` + "`" + `,\n` + "`" + `last_sync_status` + "`" + `, and (on failure) ` + "`" + `last_sync_error` + "`" + `\npopulated. On success the vault credential's ` + "`" + `last_used` + "`" + `\ntimestamp is also touched. Destinations with enabled=false\nstill accept this call (manual is explicit operator intent);\nthe flag gates only the automatic post-receive fan-out.\nSee docs/design/remote-sync.md §2.6 and §5.",
+                "description": "Invokes ` + "`" + `git push +refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*` + "`" + `\nagainst the destination's URL, using the vault credential\nreferenced by ` + "`" + `credential_name` + "`" + `. Runs synchronously — the\nresponse is the updated destination with ` + "`" + `last_sync_at` + "`" + `,\n` + "`" + `last_sync_status` + "`" + `, and (on failure) ` + "`" + `last_sync_error` + "`" + `\npopulated. On success the vault credential's ` + "`" + `last_used` + "`" + `\ntimestamp is also touched. Destinations with enabled=false\nstill accept this call (manual is explicit operator intent);\nthe flag gates only the automatic post-receive fan-out.\n\nAuthorization mirrors the rest of /destinations*: admin\nroute requires an admin session; subscriber route requires\nbearer token + repo scope + admin/maintainer role +\n` + "`" + `mirror` + "`" + ` ability (see accounts.md §6.1, remote-sync.md\n§2.6 and §5).",
                 "produces": [
                     "application/json"
                 ],
@@ -1209,7 +1209,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Forbidden",
+                        "description": "Subscriber route: missing mirror ability, regular role, or repo out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -1322,7 +1322,7 @@ const docTemplate = `{
         },
         "/admin/tokens": {
             "get": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1399,7 +1399,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1476,7 +1476,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1553,7 +1553,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1695,7 +1695,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "POST issues a new token, DELETE revokes one",
+                "description": "POST issues a new token, DELETE revokes one. POST\nrejects ability grants the issued account's role is\nnot entitled to hold (today: ` + "`" + `mirror` + "`" + ` requires admin\nor maintainer role; granting it to a regular returns\n400). See accounts.md §6.1.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1763,7 +1763,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "POST issues a new token, DELETE revokes one",
+                "description": "POST issues a new token, DELETE revokes one. POST\nrejects ability grants the issued account's role is\nnot entitled to hold (today: ` + "`" + `mirror` + "`" + ` requires admin\nor maintainer role; granting it to a regular returns\n400). See accounts.md §6.1.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2611,7 +2611,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nBearer-authenticated, gated by both TokenRepoPolicy (repo in\nthe token's allowlist) and TokenAbilityPolicy(\"mirror\")\n(see remote-sync.md §2.6). A token without the mirror\nability receives 403 here; the admin-session route remains\navailable as an override.",
+                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nThree-layer gate (see accounts.md §6.1, remote-sync.md §2.6):\n\n1. TokenRepoPolicy — repo in the bearer token's allowlist.\n2. requireMaintainerOrAdmin — issuing account's role is\nadmin or maintainer; regular accounts are denied even\nif their key carries the ` + "`" + `mirror` + "`" + ` ability bit (the\nrole is a structural fence on top of per-token bits).\n3. TokenAbilityPolicy(\"mirror\") — the per-key opt-in.\n\nAny layer denying writes 403. The admin-session route at\n/api/admin/repos/{name}/destinations remains the override\nfor full server administration.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2676,7 +2676,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Missing mirror ability or repo out of scope",
+                        "description": "Missing mirror ability, regular role, or repo out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -2701,7 +2701,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nBearer-authenticated, gated by both TokenRepoPolicy (repo in\nthe token's allowlist) and TokenAbilityPolicy(\"mirror\")\n(see remote-sync.md §2.6). A token without the mirror\nability receives 403 here; the admin-session route remains\navailable as an override.",
+                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nThree-layer gate (see accounts.md §6.1, remote-sync.md §2.6):\n\n1. TokenRepoPolicy — repo in the bearer token's allowlist.\n2. requireMaintainerOrAdmin — issuing account's role is\nadmin or maintainer; regular accounts are denied even\nif their key carries the ` + "`" + `mirror` + "`" + ` ability bit (the\nrole is a structural fence on top of per-token bits).\n3. TokenAbilityPolicy(\"mirror\") — the per-key opt-in.\n\nAny layer denying writes 403. The admin-session route at\n/api/admin/repos/{name}/destinations remains the override\nfor full server administration.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2766,7 +2766,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Missing mirror ability or repo out of scope",
+                        "description": "Missing mirror ability, regular role, or repo out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -2793,7 +2793,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nBearer-authenticated, gated by both TokenRepoPolicy (repo in\nthe token's allowlist) and TokenAbilityPolicy(\"mirror\")\n(see remote-sync.md §2.6). A token without the mirror\nability receives 403 here; the admin-session route remains\navailable as an override.",
+                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nThree-layer gate (see accounts.md §6.1, remote-sync.md §2.6):\n\n1. TokenRepoPolicy — repo in the bearer token's allowlist.\n2. requireMaintainerOrAdmin — issuing account's role is\nadmin or maintainer; regular accounts are denied even\nif their key carries the ` + "`" + `mirror` + "`" + ` ability bit (the\nrole is a structural fence on top of per-token bits).\n3. TokenAbilityPolicy(\"mirror\") — the per-key opt-in.\n\nAny layer denying writes 403. The admin-session route at\n/api/admin/repos/{name}/destinations remains the override\nfor full server administration.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2864,7 +2864,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Missing mirror ability or repo out of scope",
+                        "description": "Missing mirror ability, regular role, or repo out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -2889,7 +2889,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nBearer-authenticated, gated by both TokenRepoPolicy (repo in\nthe token's allowlist) and TokenAbilityPolicy(\"mirror\")\n(see remote-sync.md §2.6). A token without the mirror\nability receives 403 here; the admin-session route remains\navailable as an override.",
+                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nThree-layer gate (see accounts.md §6.1, remote-sync.md §2.6):\n\n1. TokenRepoPolicy — repo in the bearer token's allowlist.\n2. requireMaintainerOrAdmin — issuing account's role is\nadmin or maintainer; regular accounts are denied even\nif their key carries the ` + "`" + `mirror` + "`" + ` ability bit (the\nrole is a structural fence on top of per-token bits).\n3. TokenAbilityPolicy(\"mirror\") — the per-key opt-in.\n\nAny layer denying writes 403. The admin-session route at\n/api/admin/repos/{name}/destinations remains the override\nfor full server administration.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2960,7 +2960,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Missing mirror ability or repo out of scope",
+                        "description": "Missing mirror ability, regular role, or repo out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -2985,7 +2985,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nBearer-authenticated, gated by both TokenRepoPolicy (repo in\nthe token's allowlist) and TokenAbilityPolicy(\"mirror\")\n(see remote-sync.md §2.6). A token without the mirror\nability receives 403 here; the admin-session route remains\navailable as an override.",
+                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nThree-layer gate (see accounts.md §6.1, remote-sync.md §2.6):\n\n1. TokenRepoPolicy — repo in the bearer token's allowlist.\n2. requireMaintainerOrAdmin — issuing account's role is\nadmin or maintainer; regular accounts are denied even\nif their key carries the ` + "`" + `mirror` + "`" + ` ability bit (the\nrole is a structural fence on top of per-token bits).\n3. TokenAbilityPolicy(\"mirror\") — the per-key opt-in.\n\nAny layer denying writes 403. The admin-session route at\n/api/admin/repos/{name}/destinations remains the override\nfor full server administration.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3056,7 +3056,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Missing mirror ability or repo out of scope",
+                        "description": "Missing mirror ability, regular role, or repo out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -3083,7 +3083,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Invokes ` + "`" + `git push +refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*` + "`" + `\nagainst the destination's URL, using the vault credential\nreferenced by ` + "`" + `credential_name` + "`" + `. Runs synchronously — the\nresponse is the updated destination with ` + "`" + `last_sync_at` + "`" + `,\n` + "`" + `last_sync_status` + "`" + `, and (on failure) ` + "`" + `last_sync_error` + "`" + `\npopulated. On success the vault credential's ` + "`" + `last_used` + "`" + `\ntimestamp is also touched. Destinations with enabled=false\nstill accept this call (manual is explicit operator intent);\nthe flag gates only the automatic post-receive fan-out.\nSee docs/design/remote-sync.md §2.6 and §5.",
+                "description": "Invokes ` + "`" + `git push +refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*` + "`" + `\nagainst the destination's URL, using the vault credential\nreferenced by ` + "`" + `credential_name` + "`" + `. Runs synchronously — the\nresponse is the updated destination with ` + "`" + `last_sync_at` + "`" + `,\n` + "`" + `last_sync_status` + "`" + `, and (on failure) ` + "`" + `last_sync_error` + "`" + `\npopulated. On success the vault credential's ` + "`" + `last_used` + "`" + `\ntimestamp is also touched. Destinations with enabled=false\nstill accept this call (manual is explicit operator intent);\nthe flag gates only the automatic post-receive fan-out.\n\nAuthorization mirrors the rest of /destinations*: admin\nroute requires an admin session; subscriber route requires\nbearer token + repo scope + admin/maintainer role +\n` + "`" + `mirror` + "`" + ` ability (see accounts.md §6.1, remote-sync.md\n§2.6 and §5).",
                 "produces": [
                     "application/json"
                 ],
@@ -3121,7 +3121,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Forbidden",
+                        "description": "Subscriber route: missing mirror ability, regular role, or repo out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }

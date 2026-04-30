@@ -14,7 +14,11 @@ import (
 
 // handleToken godoc
 // @Summary      Issue or revoke API tokens
-// @Description  POST issues a new token, DELETE revokes one
+// @Description  POST issues a new token, DELETE revokes one. POST
+// @Description  rejects ability grants the issued account's role is
+// @Description  not entitled to hold (today: `mirror` requires admin
+// @Description  or maintainer role; granting it to a regular returns
+// @Description  400). See accounts.md §6.1.
 // @Tags         auth
 // @Accept       json
 // @Produce      json

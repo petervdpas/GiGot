@@ -1639,7 +1639,12 @@ paths:
         timestamp is also touched. Destinations with enabled=false
         still accept this call (manual is explicit operator intent);
         the flag gates only the automatic post-receive fan-out.
-        See docs/design/remote-sync.md §2.6 and §5.
+
+        Authorization mirrors the rest of /destinations*: admin
+        route requires an admin session; subscriber route requires
+        bearer token + repo scope + admin/maintainer role +
+        `mirror` ability (see accounts.md §6.1, remote-sync.md
+        §2.6 and §5).
       parameters:
       - description: Repo name
         in: path
@@ -1663,7 +1668,8 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
-          description: Forbidden
+          description: 'Subscriber route: missing mirror ability, regular role, or
+            repo out of scope'
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
@@ -1757,6 +1763,11 @@ paths:
       description: |-
         GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.
         Requires a valid admin session cookie (obtained via /admin/login).
+
+        Issue and PATCH paths reject ability grants the issued
+        account's role is not entitled to hold (today: `mirror`
+        requires admin or maintainer role; granting it to a
+        regular returns 400). See accounts.md §6.1.
       parameters:
       - description: Issue body (POST)
         in: body
@@ -1809,6 +1820,11 @@ paths:
       description: |-
         GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.
         Requires a valid admin session cookie (obtained via /admin/login).
+
+        Issue and PATCH paths reject ability grants the issued
+        account's role is not entitled to hold (today: `mirror`
+        requires admin or maintainer role; granting it to a
+        regular returns 400). See accounts.md §6.1.
       parameters:
       - description: Issue body (POST)
         in: body
@@ -1861,6 +1877,11 @@ paths:
       description: |-
         GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.
         Requires a valid admin session cookie (obtained via /admin/login).
+
+        Issue and PATCH paths reject ability grants the issued
+        account's role is not entitled to hold (today: `mirror`
+        requires admin or maintainer role; granting it to a
+        regular returns 400). See accounts.md §6.1.
       parameters:
       - description: Issue body (POST)
         in: body
@@ -1913,6 +1934,11 @@ paths:
       description: |-
         GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.
         Requires a valid admin session cookie (obtained via /admin/login).
+
+        Issue and PATCH paths reject ability grants the issued
+        account's role is not entitled to hold (today: `mirror`
+        requires admin or maintainer role; granting it to a
+        regular returns 400). See accounts.md §6.1.
       parameters:
       - description: Issue body (POST)
         in: body
@@ -2005,7 +2031,12 @@ paths:
     delete:
       consumes:
       - application/json
-      description: POST issues a new token, DELETE revokes one
+      description: |-
+        POST issues a new token, DELETE revokes one. POST
+        rejects ability grants the issued account's role is
+        not entitled to hold (today: `mirror` requires admin
+        or maintainer role; granting it to a regular returns
+        400). See accounts.md §6.1.
       parameters:
       - description: Token request (for POST)
         in: body
@@ -2048,7 +2079,12 @@ paths:
     post:
       consumes:
       - application/json
-      description: POST issues a new token, DELETE revokes one
+      description: |-
+        POST issues a new token, DELETE revokes one. POST
+        rejects ability grants the issued account's role is
+        not entitled to hold (today: `mirror` requires admin
+        or maintainer role; granting it to a regular returns
+        400). See accounts.md §6.1.
       parameters:
       - description: Token request (for POST)
         in: body
@@ -2640,11 +2676,18 @@ paths:
       - application/json
       description: |-
         Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
-        Bearer-authenticated, gated by both TokenRepoPolicy (repo in
-        the token's allowlist) and TokenAbilityPolicy("mirror")
-        (see remote-sync.md §2.6). A token without the mirror
-        ability receives 403 here; the admin-session route remains
-        available as an override.
+        Three-layer gate (see accounts.md §6.1, remote-sync.md §2.6):
+
+        1. TokenRepoPolicy — repo in the bearer token's allowlist.
+        2. requireMaintainerOrAdmin — issuing account's role is
+        admin or maintainer; regular accounts are denied even
+        if their key carries the `mirror` ability bit (the
+        role is a structural fence on top of per-token bits).
+        3. TokenAbilityPolicy("mirror") — the per-key opt-in.
+
+        Any layer denying writes 403. The admin-session route at
+        /api/admin/repos/{name}/destinations remains the override
+        for full server administration.
       parameters:
       - description: Repo name
         in: path
@@ -2683,7 +2726,7 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
-          description: Missing mirror ability or repo out of scope
+          description: Missing mirror ability, regular role, or repo out of scope
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
@@ -2704,11 +2747,18 @@ paths:
       - application/json
       description: |-
         Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
-        Bearer-authenticated, gated by both TokenRepoPolicy (repo in
-        the token's allowlist) and TokenAbilityPolicy("mirror")
-        (see remote-sync.md §2.6). A token without the mirror
-        ability receives 403 here; the admin-session route remains
-        available as an override.
+        Three-layer gate (see accounts.md §6.1, remote-sync.md §2.6):
+
+        1. TokenRepoPolicy — repo in the bearer token's allowlist.
+        2. requireMaintainerOrAdmin — issuing account's role is
+        admin or maintainer; regular accounts are denied even
+        if their key carries the `mirror` ability bit (the
+        role is a structural fence on top of per-token bits).
+        3. TokenAbilityPolicy("mirror") — the per-key opt-in.
+
+        Any layer denying writes 403. The admin-session route at
+        /api/admin/repos/{name}/destinations remains the override
+        for full server administration.
       parameters:
       - description: Repo name
         in: path
@@ -2747,7 +2797,7 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
-          description: Missing mirror ability or repo out of scope
+          description: Missing mirror ability, regular role, or repo out of scope
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
@@ -2769,11 +2819,18 @@ paths:
       - application/json
       description: |-
         Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
-        Bearer-authenticated, gated by both TokenRepoPolicy (repo in
-        the token's allowlist) and TokenAbilityPolicy("mirror")
-        (see remote-sync.md §2.6). A token without the mirror
-        ability receives 403 here; the admin-session route remains
-        available as an override.
+        Three-layer gate (see accounts.md §6.1, remote-sync.md §2.6):
+
+        1. TokenRepoPolicy — repo in the bearer token's allowlist.
+        2. requireMaintainerOrAdmin — issuing account's role is
+        admin or maintainer; regular accounts are denied even
+        if their key carries the `mirror` ability bit (the
+        role is a structural fence on top of per-token bits).
+        3. TokenAbilityPolicy("mirror") — the per-key opt-in.
+
+        Any layer denying writes 403. The admin-session route at
+        /api/admin/repos/{name}/destinations remains the override
+        for full server administration.
       parameters:
       - description: Repo name
         in: path
@@ -2816,7 +2873,7 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
-          description: Missing mirror ability or repo out of scope
+          description: Missing mirror ability, regular role, or repo out of scope
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
@@ -2837,11 +2894,18 @@ paths:
       - application/json
       description: |-
         Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
-        Bearer-authenticated, gated by both TokenRepoPolicy (repo in
-        the token's allowlist) and TokenAbilityPolicy("mirror")
-        (see remote-sync.md §2.6). A token without the mirror
-        ability receives 403 here; the admin-session route remains
-        available as an override.
+        Three-layer gate (see accounts.md §6.1, remote-sync.md §2.6):
+
+        1. TokenRepoPolicy — repo in the bearer token's allowlist.
+        2. requireMaintainerOrAdmin — issuing account's role is
+        admin or maintainer; regular accounts are denied even
+        if their key carries the `mirror` ability bit (the
+        role is a structural fence on top of per-token bits).
+        3. TokenAbilityPolicy("mirror") — the per-key opt-in.
+
+        Any layer denying writes 403. The admin-session route at
+        /api/admin/repos/{name}/destinations remains the override
+        for full server administration.
       parameters:
       - description: Repo name
         in: path
@@ -2884,7 +2948,7 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
-          description: Missing mirror ability or repo out of scope
+          description: Missing mirror ability, regular role, or repo out of scope
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
@@ -2905,11 +2969,18 @@ paths:
       - application/json
       description: |-
         Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
-        Bearer-authenticated, gated by both TokenRepoPolicy (repo in
-        the token's allowlist) and TokenAbilityPolicy("mirror")
-        (see remote-sync.md §2.6). A token without the mirror
-        ability receives 403 here; the admin-session route remains
-        available as an override.
+        Three-layer gate (see accounts.md §6.1, remote-sync.md §2.6):
+
+        1. TokenRepoPolicy — repo in the bearer token's allowlist.
+        2. requireMaintainerOrAdmin — issuing account's role is
+        admin or maintainer; regular accounts are denied even
+        if their key carries the `mirror` ability bit (the
+        role is a structural fence on top of per-token bits).
+        3. TokenAbilityPolicy("mirror") — the per-key opt-in.
+
+        Any layer denying writes 403. The admin-session route at
+        /api/admin/repos/{name}/destinations remains the override
+        for full server administration.
       parameters:
       - description: Repo name
         in: path
@@ -2952,7 +3023,7 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
-          description: Missing mirror ability or repo out of scope
+          description: Missing mirror ability, regular role, or repo out of scope
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
@@ -2980,7 +3051,12 @@ paths:
         timestamp is also touched. Destinations with enabled=false
         still accept this call (manual is explicit operator intent);
         the flag gates only the automatic post-receive fan-out.
-        See docs/design/remote-sync.md §2.6 and §5.
+
+        Authorization mirrors the rest of /destinations*: admin
+        route requires an admin session; subscriber route requires
+        bearer token + repo scope + admin/maintainer role +
+        `mirror` ability (see accounts.md §6.1, remote-sync.md
+        §2.6 and §5).
       parameters:
       - description: Repo name
         in: path
@@ -3004,7 +3080,8 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
-          description: Forbidden
+          description: 'Subscriber route: missing mirror ability, regular role, or
+            repo out of scope'
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":

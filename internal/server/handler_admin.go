@@ -156,6 +156,11 @@ func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *au
 // @Summary      Manage subscription keys (admin only)
 // @Description  GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.
 // @Description  Requires a valid admin session cookie (obtained via /admin/login).
+// @Description
+// @Description  Issue and PATCH paths reject ability grants the issued
+// @Description  account's role is not entitled to hold (today: `mirror`
+// @Description  requires admin or maintainer role; granting it to a
+// @Description  regular returns 400). See accounts.md §6.1.
 // @Tags         admin
 // @Accept       json
 // @Produce      json

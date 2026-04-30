@@ -41,11 +41,18 @@ func splitRepoDestinationsPath(p string) (repo, id, action string, ok bool) {
 // handleRepoDestinations godoc
 // @Summary      Manage mirror-sync destinations on a repo (subscriber)
 // @Description  Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
-// @Description  Bearer-authenticated, gated by both TokenRepoPolicy (repo in
-// @Description  the token's allowlist) and TokenAbilityPolicy("mirror")
-// @Description  (see remote-sync.md §2.6). A token without the mirror
-// @Description  ability receives 403 here; the admin-session route remains
-// @Description  available as an override.
+// @Description  Three-layer gate (see accounts.md §6.1, remote-sync.md §2.6):
+// @Description
+// @Description    1. TokenRepoPolicy — repo in the bearer token's allowlist.
+// @Description    2. requireMaintainerOrAdmin — issuing account's role is
+// @Description       admin or maintainer; regular accounts are denied even
+// @Description       if their key carries the `mirror` ability bit (the
+// @Description       role is a structural fence on top of per-token bits).
+// @Description    3. TokenAbilityPolicy("mirror") — the per-key opt-in.
+// @Description
+// @Description  Any layer denying writes 403. The admin-session route at
+// @Description  /api/admin/repos/{name}/destinations remains the override
+// @Description  for full server administration.
 // @Tags         repos
 // @Accept       json
 // @Produce      json
@@ -59,7 +66,7 @@ func splitRepoDestinationsPath(p string) (repo, id, action string, ok bool) {
 // @Success      204   "DELETE response"
 // @Failure      400   {object}  ErrorResponse
 // @Failure      401   {object}  ErrorResponse
-// @Failure      403   {object}  ErrorResponse              "Missing mirror ability or repo out of scope"
+// @Failure      403   {object}  ErrorResponse              "Missing mirror ability, regular role, or repo out of scope"
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Security     BearerAuth

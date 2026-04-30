@@ -34,14 +34,19 @@ const (
 // @Description  timestamp is also touched. Destinations with enabled=false
 // @Description  still accept this call (manual is explicit operator intent);
 // @Description  the flag gates only the automatic post-receive fan-out.
-// @Description  See docs/design/remote-sync.md §2.6 and §5.
+// @Description
+// @Description  Authorization mirrors the rest of /destinations*: admin
+// @Description  route requires an admin session; subscriber route requires
+// @Description  bearer token + repo scope + admin/maintainer role +
+// @Description  `mirror` ability (see accounts.md §6.1, remote-sync.md
+// @Description  §2.6 and §5).
 // @Tags         repos
 // @Produce      json
 // @Param        name  path      string            true  "Repo name"
 // @Param        id    path      string            true  "Destination id"
 // @Success      200   {object}  DestinationView
 // @Failure      401   {object}  ErrorResponse
-// @Failure      403   {object}  ErrorResponse
+// @Failure      403   {object}  ErrorResponse    "Subscriber route: missing mirror ability, regular role, or repo out of scope"
 // @Failure      404   {object}  ErrorResponse    "Repo, destination, or credential (deleted) not found"
 // @Failure      409   {object}  ErrorResponse    "Credential referenced by destination no longer exists in the vault"
 // @Security     BearerAuth
