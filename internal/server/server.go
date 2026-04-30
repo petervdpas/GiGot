@@ -48,6 +48,15 @@ type Server struct {
 	policy          policy.Evaluator
 	mux             *http.ServeMux
 
+	// version is the build-stamped version string passed in by the
+	// CLI entry point via SetVersion. Empty in tests where main()
+	// isn't involved; templates skip the suffix when empty so the
+	// brand strip falls back to "GiGot" alone. Single source of
+	// truth for every place the UI shows "GiGot vX.Y.Z" — the
+	// landing page, login card, register page, and JS-rendered
+	// admin sidebar all read this through one helper.
+	version string
+
 	// authMu guards every field touched by the /admin/auth hot-reload
 	// path: cfg.Auth (AllowLocal + nested OAuth / Gateway blocks),
 	// oauthProviders (the Registry itself mutates in place via
@@ -440,6 +449,43 @@ func (s *Server) TokenStrategy() *auth.TokenStrategy {
 	return s.tokenStrategy
 }
 
+// SetVersion stamps the build-time version onto the server so brand
+// strips (landing page, login, register, admin sidebar) can render
+// "GiGot vX.Y.Z". Called once from cli.Execute after server.New;
+// tests don't call it and templates fall back to "GiGot" alone when
+// empty. Idempotent — re-stamping is harmless.
+func (s *Server) SetVersion(v string) {
+	s.version = v
+}
+
+// brandVersion is the single rendering rule for the version suffix.
+// Empty input → empty output (skip suffix); non-empty → "v" + value
+// so a stamped "0.1.0" reads as "v0.1.0" in the UI. Every brand-strip
+// surface — server-rendered templates and the meta tag the admin JS
+// reads — flows through here so the prefix and missing-version
+// behaviour can never drift between surfaces.
+func (s *Server) brandVersion() string {
+	if s.version == "" {
+		return ""
+	}
+	return "v" + s.version
+}
+
+// pageData is the shared template-data shape for every page that
+// renders the GiGot brand strip. Handlers that need extra fields
+// (e.g. the index page's port + repo count) embed PageData on their
+// own struct so the brand fields stay in lockstep across surfaces
+// without each handler hand-rolling them.
+type PageData struct {
+	Version string
+}
+
+// pageData returns the brand context for any template that needs it.
+// One source of truth feeding every handler.
+func (s *Server) pageData() PageData {
+	return PageData{Version: s.brandVersion()}
+}
+
 // Handler returns the HTTP handler chain (sealed-body middleware → auth
 // middleware → mux) for use in tests and Start().
 func (s *Server) Handler() http.Handler {
@@ -560,12 +606,16 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 	repos, _ := s.git.List()
 
+	// Embeds PageData so the brand strip on the landing page reads
+	// the same Version field as every other template surface.
 	data := struct {
+		PageData
 		Port      int
 		RepoRoot  string
 		RepoCount int
 		GoVersion string
 	}{
+		PageData:  s.pageData(),
 		Port:      s.cfg.Server.Port,
 		RepoRoot:  s.cfg.Storage.RepoRoot,
 		RepoCount: len(repos),

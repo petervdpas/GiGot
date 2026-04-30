@@ -1,6 +1,8 @@
 package server
 
 import (
+	"fmt"
+	"html"
 	"html/template"
 	"net/http"
 )
@@ -14,7 +16,7 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = adminPageTmpl.Execute(w, nil)
+	_ = adminPageTmpl.Execute(w, s.pageData())
 }
 
 // adminPageHandler returns an http.HandlerFunc that serves the given
@@ -22,6 +24,8 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 // pages — each is a thin static shell; all behaviour lives in its JS
 // bundle, which guards the session on boot and bounces to /admin on a
 // 401. Kept as a small factory so adding a fourth page is one line.
+// Every page receives s.pageData() so the brand strip + JS sidebar
+// can render "GiGot vX.Y.Z" off one source.
 func (s *Server) adminPageHandler(tmpl *template.Template, paths ...string) http.HandlerFunc {
 	allowed := make(map[string]struct{}, len(paths))
 	for _, p := range paths {
@@ -33,7 +37,7 @@ func (s *Server) adminPageHandler(tmpl *template.Template, paths ...string) http
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = tmpl.Execute(w, nil)
+		_ = tmpl.Execute(w, s.pageData())
 	}
 }
 
@@ -65,7 +69,7 @@ func (s *Server) handleUserPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = userPageTmpl.Execute(w, nil)
+	_ = userPageTmpl.Execute(w, s.pageData())
 }
 
 // handleRegisterPage serves the self-service register card. When
@@ -81,7 +85,17 @@ func (s *Server) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
 	if !s.allowLocal() {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`<!DOCTYPE html>
+		// Inline so the disabled-state card stays a single self-
+		// contained payload — no template to parse, no JS to load —
+		// even if the rest of the assets are unreachable. The brand
+		// suffix flows through the same brandVersion() rule as the
+		// regular templates.
+		v := html.EscapeString(s.brandVersion())
+		suffix := ""
+		if v != "" {
+			suffix = " <span class=\"brand-version muted\">" + v + "</span>"
+		}
+		_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -97,15 +111,15 @@ func (s *Server) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
 <body>
 <div class="login-wrap card">
   <img class="logo" src="/assets/gigot.png" alt="GiGot">
-  <div class="brand-name">GiGot</div>
+  <div class="brand-name">GiGot%s</div>
   <div class="brand-tag">Registration disabled</div>
   <p class="muted">This server doesn't accept self-service registration. Ask an administrator to create an account for you, or sign in with a configured identity provider.</p>
   <p class="login-footer"><a href="/admin">Back to sign-in</a></p>
 </div>
 </body>
-</html>`))
+</html>`, suffix)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = registerTmpl.Execute(w, nil)
+	_ = registerTmpl.Execute(w, s.pageData())
 }

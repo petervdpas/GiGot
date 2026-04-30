@@ -226,6 +226,28 @@
   }
   function shortSha(sha) { return sha ? sha.slice(0, 7) : ''; }
 
+  // brandVersion reads the build-stamped version off the
+  // `<meta name="gigot-version">` tag that every admin template
+  // emits. Returns "" when the meta is absent or its content is
+  // empty (test fixtures, unset build) so callers can append
+  // unconditionally without producing a stray "v" with no number.
+  function brandVersion() {
+    const m = document.querySelector('meta[name="gigot-version"]');
+    return (m && m.content) ? m.content : '';
+  }
+
+  // brandVersionSuffix returns the HTML fragment to append after a
+  // "GiGot" brand label — escaped, themed, and prefixed with a
+  // leading space. Empty when no version is set so the brand strip
+  // collapses cleanly. One source of truth for the JS-rendered
+  // surfaces (sidebar, future modals); server-side templates use the
+  // same shape via {{.Version}} on the Go side.
+  function brandVersionSuffix() {
+    const v = brandVersion();
+    if (!v) return '';
+    return ' <span class="brand-version muted">' + escapeHtml(v) + '</span>';
+  }
+
   // accountLabel picks the best human-readable label for an
   // account-shaped object. Accepts rows from /api/admin/accounts
   // (identifier), session / /api/me responses (username), and
@@ -453,12 +475,17 @@
     if (!aside) return;
     const navItems = NAV_ITEMS.filter(it => visibleFor(viewRole, it));
     const consoleLabel = viewRole === 'admin' ? 'Admin console' : 'My subscriptions';
+    // Server stamps `<meta name="gigot-version" content="vX.Y.Z">` into
+    // every admin template; we append it after the brand title so the
+    // sidebar matches the title bar and the public landing page. Empty
+    // content (tests, unset build) → no suffix at all.
+    const versionTag = brandVersionSuffix();
     aside.className = 'sidebar';
     aside.innerHTML =
       '<div class="brand">' +
         '<img class="logo" src="/assets/gigot.png" alt="GiGot">' +
         '<div class="brand-text">' +
-          '<h1>GiGot</h1>' +
+          '<h1>GiGot' + versionTag + '</h1>' +
           '<div class="muted">' + escapeHtml(consoleLabel) + '</div>' +
         '</div>' +
       '</div>' +

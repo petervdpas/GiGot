@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>GiGot</title>
+<title>GiGot{{if .Version}} {{.Version}}{{end}}</title>
 <link rel="stylesheet" href="/assets/index.css">
 <script>
   /* Apply stored theme before the body paints to avoid a dark-to-light
@@ -21,7 +21,7 @@
 <div class="stack">
   <div class="card">
     <img class="logo" src="/assets/gigot.png" alt="GiGot">
-    <h1>GiGot</h1>
+    <h1>GiGot{{if .Version}} <span class="brand-version muted">{{.Version}}</span>{{end}}</h1>
     <p class="subtitle">Git-backed server for Formidable</p>
     <aside class="explainer">
       <span class="tag">Gigot · /ʒi.ɡo/</span>

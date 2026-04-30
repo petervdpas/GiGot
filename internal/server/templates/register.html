@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>GiGot — Register</title>
+<title>GiGot{{if .Version}} {{.Version}}{{end}} — Register</title>
+<meta name="gigot-version" content="{{.Version}}">
 <link rel="stylesheet" href="/assets/admin.css">
 <script>
   try {
@@ -20,7 +21,7 @@
 
 <div class="login-wrap card">
   <img class="logo" src="/assets/gigot.png" alt="GiGot">
-  <div class="brand-name">GiGot</div>
+  <div class="brand-name">GiGot{{if .Version}} <span class="brand-version muted">{{.Version}}</span>{{end}}</div>
   <div class="brand-tag">Register a regular account</div>
   <h2>Create account</h2>
   <form id="register-form">

@@ -107,6 +107,7 @@ func Execute(version string) {
 			fmt.Println("Local password login is DISABLED (auth.allow_local=false).")
 		}
 		srv := server.New(cfg)
+		srv.SetVersion(version)
 		if err := srv.Start(); err != nil {
 			log.Fatalf("server error: %v", err)
 		}
