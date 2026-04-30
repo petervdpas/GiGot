@@ -99,7 +99,8 @@ func (s *Server) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>GiGot — Registration disabled</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GiGot - Registration disabled</title>
 <link rel="stylesheet" href="/assets/admin.css">
 <script>
   try {

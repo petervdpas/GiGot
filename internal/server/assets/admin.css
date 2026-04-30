@@ -1093,3 +1093,108 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
 }
 #reload-msg.ok { color: #3fb950; }
 #reload-msg.err { color: #f85149; }
+
+/* ─── Responsive: tablet and mobile ─────────────────────────
+ * Default desktop layout is sidebar (320px fixed) + main (flex:1).
+ * Below 900px the sidebar can't co-exist with the content; we
+ * collapse it to a stacked banner above main so every page stays
+ * usable on a phone. Tables and dense grids inside .main are
+ * already shielded by .main { overflow-x: auto }, so this block
+ * focuses on the chrome — sidebar shape, padding, page header.
+ *
+ * Two breakpoints intentionally:
+ *   - 900px: layout flips from row to column (the sidebar's
+ *     320px width starts crowding cards before this).
+ *   - 600px: tighten padding + collapse the sidebar's me-strip /
+ *     theme row into a single line so they don't eat half the
+ *     viewport on a phone.
+ * ──────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .shell {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    top: auto;
+    padding: 0.75rem 0;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .sidebar .brand {
+    padding: 0 1rem 0.75rem;
+  }
+  .sidebar .brand .logo {
+    width: 64px;
+  }
+  /* Nav becomes a horizontal-scrolling row of pills so all sections
+   * stay reachable without burning vertical real estate above the
+   * content the user actually came for. */
+  .sidebar nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex: 0 0 auto;
+    gap: 0.25rem;
+    padding: 0.25rem 0.75rem 0.5rem;
+  }
+  .sidebar nav .spacer {
+    display: none;
+  }
+  .sidebar nav a {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+  }
+  .sidebar .me {
+    border-top: 1px solid var(--line-2);
+    padding: 0.5rem 1rem;
+  }
+  .sidebar .theme-row {
+    border-top: none;
+    padding: 0.25rem 1rem 0.5rem;
+  }
+  .main {
+    padding: 1.25rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .main {
+    padding: 0.85rem;
+  }
+  .card {
+    padding: 1rem;
+  }
+  .page-header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  /* The login + register cards are absolute-positioned via
+   * .login-wrap; on a phone the 380px max-width is fine, but the
+   * outer wrapper needs side padding so the card doesn't kiss the
+   * viewport edges. */
+  .login-wrap {
+    margin: 1rem;
+    max-width: calc(100vw - 2rem);
+  }
+  /* Auth-page two-column grid collapses to single column — 32rem
+   * minimum total width can't fit on a phone, and the field labels
+   * read better one-per-row anyway. */
+  .auth-grid {
+    grid-template-columns: 1fr;
+  }
+  /* Create-repo "Clone from URL" field has min-width: 320px so the
+   * placeholder doesn't truncate; on a phone we relax that and let
+   * it match the rest of the form's width. */
+  .create-repo-source {
+    min-width: 0;
+  }
+  /* Long URLs in destination rows / repo metadata / account
+   * identifiers would otherwise spill out of the panel on a narrow
+   * viewport. */
+  .dest-url,
+  .repo-meta code,
+  .acct-identifier {
+    word-break: break-all;
+  }
+}

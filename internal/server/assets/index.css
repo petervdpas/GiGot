@@ -132,3 +132,16 @@ h1 {
 a { color: var(--accent); text-decoration: none; }
 
 .info-link { margin-top: 1rem; }
+
+/* Mobile: tighten the card padding so the inner content has room
+ * to breathe on a phone. The wrapper already caps width at 520px
+ * and uses 1rem body padding, so the card itself just needs less
+ * inner padding when the viewport is narrow. */
+@media (max-width: 600px) {
+  .card {
+    padding: 1.5rem;
+  }
+  .logo {
+    width: 140px;
+  }
+}
