@@ -13,6 +13,7 @@ type AccountView struct {
 	Identifier        string    `json:"identifier"`
 	Role              string    `json:"role"`
 	DisplayName       string    `json:"display_name,omitempty"`
+	Email             string    `json:"email,omitempty"`
 	HasPassword       bool      `json:"has_password"`
 	SubscriptionCount int       `json:"subscription_count"`
 	CreatedAt         time.Time `json:"created_at"`
@@ -34,6 +35,7 @@ type CreateAccountRequest struct {
 	Identifier  string `json:"identifier"`
 	Role        string `json:"role"`
 	DisplayName string `json:"display_name,omitempty"`
+	Email       string `json:"email,omitempty"`
 	Password    string `json:"password,omitempty"`
 }
 
@@ -45,6 +47,7 @@ type CreateAccountRequest struct {
 type UpdateAccountRequest struct {
 	Role        *string `json:"role,omitempty"`
 	DisplayName *string `json:"display_name,omitempty"`
+	Email       *string `json:"email,omitempty"`
 	Password    *string `json:"password,omitempty"`
 }
 
@@ -54,6 +57,7 @@ type RegisterRequest struct {
 	Username    string `json:"username"`
 	Password    string `json:"password"`
 	DisplayName string `json:"display_name,omitempty"`
+	Email       string `json:"email,omitempty"`
 }
 
 // BindTokenRequest is the body of POST /api/admin/tokens/bind — the

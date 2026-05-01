@@ -94,6 +94,74 @@ func TestAdminAccounts_CreateWithPassword(t *testing.T) {
 	}
 }
 
+// TestAdminAccounts_CreateWithEmail covers the email round-trip:
+// admin POST passes an email, the response carries it back, the
+// store has it lowercased + trimmed (canonical form).
+func TestAdminAccounts_CreateWithEmail(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	body := map[string]any{
+		"provider":     "local",
+		"identifier":   "carol",
+		"role":         "regular",
+		"display_name": "Carol",
+		// Mixed case + whitespace → must be normalised to lowercase trimmed.
+		"email": "  Carol@Example.COM  ",
+	}
+	rec := do(t, srv, http.MethodPost, "/api/admin/accounts", body, sess)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var view AccountView
+	_ = json.Unmarshal(rec.Body.Bytes(), &view)
+	if view.Email != "carol@example.com" {
+		t.Errorf("response Email = %q, want lowercased+trimmed", view.Email)
+	}
+	stored, err := srv.accounts.Get(accounts.ProviderLocal, "carol")
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if stored.Email != "carol@example.com" {
+		t.Errorf("stored Email = %q, want lowercased+trimmed", stored.Email)
+	}
+}
+
+// TestAdminAccounts_PatchEmail covers the partial-update path.
+// PATCH with a new email overwrites; PATCH without an email field
+// leaves it alone (nil pointer = "don't touch this").
+func TestAdminAccounts_PatchEmail(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: "carol",
+		Role:       accounts.RoleRegular,
+		Email:      "old@example.com",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := do(t, srv, http.MethodPatch, "/api/admin/accounts/local/carol",
+		map[string]any{"email": "NEW@example.com"}, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var view AccountView
+	_ = json.Unmarshal(rec.Body.Bytes(), &view)
+	if view.Email != "new@example.com" {
+		t.Errorf("PATCH Email = %q, want overwritten + lowercased", view.Email)
+	}
+
+	// PATCH without email field: leaves the new email alone.
+	rec = do(t, srv, http.MethodPatch, "/api/admin/accounts/local/carol",
+		map[string]any{"display_name": "Carol C"}, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("display-only PATCH want 200, got %d", rec.Code)
+	}
+	stored, _ := srv.accounts.Get(accounts.ProviderLocal, "carol")
+	if stored.Email != "new@example.com" {
+		t.Errorf("display-only PATCH clobbered Email: %q", stored.Email)
+	}
+}
+
 func TestAdminAccounts_CreateRejectsDuplicate(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	body := map[string]any{"provider": "local", "identifier": "alice", "role": "admin"}

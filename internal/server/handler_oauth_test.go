@@ -247,6 +247,116 @@ func TestOAuth_CallbackAdminLoginMintsSession(t *testing.T) {
 	}
 }
 
+// TestOAuth_CallbackRefreshesEmailAndDisplayNameOnExistingAccount
+// locks in the per-login refresh path: when an OAuth account already
+// exists and the IdP now returns a different DisplayName / Email,
+// the stored row gets updated. Role + PasswordHash + CreatedAt must
+// be preserved across the refresh — promotions and any local
+// password setup survive an upstream profile change.
+func TestOAuth_CallbackRefreshesEmailAndDisplayNameOnExistingAccount(t *testing.T) {
+	srv := testServer(t)
+	// Pre-create the account as a maintainer (a non-default role) so
+	// we can prove the refresh doesn't clobber the role back to
+	// regular. DisplayName + Email are deliberately stale so the
+	// callback has something to replace.
+	originalCreated := time.Now().Add(-7 * 24 * time.Hour).UTC().Truncate(time.Second)
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider:    "entra",
+		Identifier:  "stable-oid",
+		Role:        accounts.RoleMaintainer,
+		DisplayName: "Old Name",
+		Email:       "old@example.com",
+		CreatedAt:   originalCreated,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	installStubProviders(srv, &stubProvider{
+		name: "entra", display: "Entra", register: true,
+		claim: oauth.Claim{
+			Identifier:  "stable-oid",
+			DisplayName: "New Name",
+			Email:       "new@example.com",
+		},
+	})
+
+	startReq := httptest.NewRequest(http.MethodGet, "/admin/login/entra", nil)
+	startRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(startRec, startReq)
+	state := extractState(t, startRec.Header().Get("Location"))
+
+	cbReq := httptest.NewRequest(http.MethodGet,
+		"/admin/login/entra/callback?state="+state+"&code=code-abc", nil)
+	cbRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(cbRec, cbReq)
+	if cbRec.Code != http.StatusFound {
+		t.Fatalf("callback want 302, got %d body=%s", cbRec.Code, cbRec.Body.String())
+	}
+
+	got, err := srv.accounts.Get("entra", "stable-oid")
+	if err != nil {
+		t.Fatalf("account lookup: %v", err)
+	}
+	if got.DisplayName != "New Name" {
+		t.Errorf("DisplayName = %q, want refreshed to %q", got.DisplayName, "New Name")
+	}
+	if got.Email != "new@example.com" {
+		t.Errorf("Email = %q, want refreshed to %q", got.Email, "new@example.com")
+	}
+	// Role MUST survive — the refresh path is a profile update, not a
+	// role reset.
+	if got.Role != accounts.RoleMaintainer {
+		t.Errorf("Role = %q, want maintainer (preserved across refresh)", got.Role)
+	}
+	if !got.CreatedAt.Equal(originalCreated) {
+		t.Errorf("CreatedAt = %v, want preserved %v", got.CreatedAt, originalCreated)
+	}
+}
+
+// TestOAuth_CallbackEmptyClaimDoesNotClobberStoredFields pairs with
+// the refresh test above: when the IdP omits email / name on a
+// subsequent login (rare, but minimal Entra configs strip them), the
+// stored values must NOT be overwritten with empty strings. "Empty
+// incoming = IdP didn't send this claim" is the rule, not "user
+// cleared it."
+func TestOAuth_CallbackEmptyClaimDoesNotClobberStoredFields(t *testing.T) {
+	srv := testServer(t)
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider:    "entra",
+		Identifier:  "stable-oid",
+		Role:        accounts.RoleRegular,
+		DisplayName: "Kept Name",
+		Email:       "kept@example.com",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	installStubProviders(srv, &stubProvider{
+		name: "entra", display: "Entra", register: true,
+		// Claim with both fields blank — minimal-Entra simulation.
+		claim: oauth.Claim{Identifier: "stable-oid"},
+	})
+
+	startReq := httptest.NewRequest(http.MethodGet, "/admin/login/entra", nil)
+	startRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(startRec, startReq)
+	state := extractState(t, startRec.Header().Get("Location"))
+
+	cbReq := httptest.NewRequest(http.MethodGet,
+		"/admin/login/entra/callback?state="+state+"&code=code-abc", nil)
+	cbRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(cbRec, cbReq)
+	if cbRec.Code != http.StatusFound {
+		t.Fatalf("callback want 302, got %d", cbRec.Code)
+	}
+
+	got, _ := srv.accounts.Get("entra", "stable-oid")
+	if got.DisplayName != "Kept Name" {
+		t.Errorf("DisplayName clobbered: %q", got.DisplayName)
+	}
+	if got.Email != "kept@example.com" {
+		t.Errorf("Email clobbered: %q", got.Email)
+	}
+}
+
 func TestOAuth_CallbackUnknownUserRejectedWhenRegisterDisabled(t *testing.T) {
 	srv := testServer(t)
 	installStubProviders(srv, &stubProvider{

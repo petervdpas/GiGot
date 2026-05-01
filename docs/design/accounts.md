@@ -32,13 +32,25 @@ GiGot has one kind of human principal:
 ```go
 type Account struct {
     Provider     string  // local | github | microsoft | gateway
-    Identifier   string  // lowercased: username, github login, email, ...
+    Identifier   string  // lowercased: per-provider stable handle (see §2.6.1)
     Role         string  // admin | maintainer | regular   (closed set)
     DisplayName  string  // optional, for UI
+    Email        string  // user-facing handle, lowercased; populated by IdP
     PasswordHash string  // bcrypt; only populated for provider=local
     CreatedAt    time.Time
 }
 ```
+
+`Email` is independent of `Identifier`. For some providers
+(github, microsoft consumer) Identifier IS the email; for others
+(entra → `oid`, local → username) it isn't. Email is the
+human-recognisable handle every UI surface ("signed in as", account
+chips, audit pills) reads — keeping it as a separate field means a
+stable user-facing label even when the identifier is something
+machine-shaped. OAuth callbacks populate Email from the IdP's
+`email` claim on every login, refreshing the stored value when it
+changes upstream; local accounts get it set explicitly via the
+admin form or the registration page.
 
 Keyed by `(Provider, Identifier)`. `Role` is a closed set of three:
 
@@ -70,23 +82,41 @@ the appropriate role), not a new role tier.
 
 ### Providers
 
+Per-provider identifier choice and what populates `Account.Email`:
+
 - **local** — username + bcrypt password, held in `accounts.enc`.
-  Identifier is the chosen username (lowercased).
-- **github** — OAuth login verified against GitHub. Identifier is the
-  GitHub login (`login` field; lowercased, case-insensitive on GitHub's
-  side anyway).
-- **entra** — OIDC login against a configured Microsoft Entra ID
-  tenant (work/school accounts). Identifier is the `oid` claim — a
-  stable GUID, tenant-scoped. This is the path enterprise deploys will
-  use.
-- **microsoft** — OIDC login against consumer Microsoft Accounts
+  Identifier is the chosen username (lowercased). Email is set
+  explicitly via the admin POST/PATCH form or the `/register` page
+  — there's no IdP to pull it from.
+- **github** — OAuth verified against GitHub. Identifier is the
+  user's **primary verified email** (lowercased), fetched from
+  `/user/emails` with the `user:email` scope. Login (`login` field)
+  was the identifier prior to 2026-05-01; it's now only used as a
+  fallback display name if the IdP omits `name`. Same email +
+  Identifier means there's just one row.
+- **entra** — OIDC against a configured Microsoft Entra ID tenant
+  (work/school accounts). Identifier is the `oid` claim — a stable
+  GUID, tenant-scoped, doesn't rotate when the user's email changes.
+  Email comes from the `email` claim in the same ID token,
+  populated alongside; the two are stored independently so an
+  email change on the work side doesn't re-key the row. This is the
+  path enterprise deploys will use.
+- **microsoft** — OIDC against consumer Microsoft Accounts
   (outlook.com, hotmail.com, live.com — the `consumers` audience).
-  Identifier is the `sub` claim. Kept separate from `entra` on purpose:
-  the trust boundary differs (any MSA vs. a specific tenant) and the
-  identifier shape differs, so mixing them in one row would be a
-  footgun. Most deploys will only turn on one of the two.
-- **gateway** — identity forwarded by a signed header from a trusted
-  fronting proxy (APIM etc.), verified on ingress.
+  Identifier is the **`email` claim** (lowercased). The `sub` claim
+  was the identifier prior to 2026-05-01; per spec it's unique
+  per (client_id, user) — same human across two App Registrations
+  got two distinct subs, which created duplicate rows in
+  multi-environment deploys. Email is stable across App
+  Registrations, so it's the right key. Kept separate from `entra`
+  on purpose: the trust boundary differs (any MSA vs. a specific
+  tenant), and the identifier shape no longer matches between them
+  either.
+- **gateway** — identity forwarded by a signed header from a
+  trusted fronting proxy (APIM etc.), verified on ingress.
+  Identifier is whatever the upstream claim says; Email is
+  populated only if the gateway forwards it as a separate header
+  (out of scope for the current Phase 4 implementation).
 
 Providers are orthogonal to role: a `local` admin, a `github` regular,
 a `github` maintainer, an `entra` admin are all legal combinations.
@@ -509,7 +539,7 @@ in-memory, just don't survive a restart.
 | 4     | **Shipped 2026-04-20** | `internal/auth/gateway/` HMAC-SHA256 signed-header strategy with configurable header names and `max_skew_seconds` replay window, `secret_ref` → credential vault lookup, `allow_register` flag. Registered on `auth.Provider` after session so cookies still win; `requireAdminSession` honours a gateway claim when it resolves to a `role=admin` account. Boot-time lockout-risk warning flags `allow_local=false` + no non-local path or no non-local admin. Aligns with Roadmap #2. |
 | 5     | **Shipped 2026-04-20** | Documentation default flipped to `allow_local=false` for any deploy that has configured OAuth or gateway. Runtime `Defaults()` still ships `allow_local=true` — flipping that in a minor version would silently lock upgraders out; that mechanical flip is held for a separate release cycle with migration notes. |
 | Hot-swap | **Shipped 2026-04-21** | `/admin/auth` UI + `GET`/`PATCH /api/admin/auth`. `Server.ReloadAuth` rebuilds OAuth registry + gateway strategy outside the lock, swaps atomically on success, persists to `gigot.json`. Old state is preserved on any build failure. Covered §9.5. |
-| 6     | **Shipped 2026-04-30** | Three-tier role model: added `maintainer` between `admin` and `regular` (§2). Ability fences moved to two layers: issue-time check (rejects `mirror` on regular accounts) + request-time `requireMaintainerOrAdmin` gate on `/api/repos/{name}/destinations*` so stale bits go inert without migration (§6.1). Subscription admin UI drops the chicken-and-egg `destination_count > 0` gate; the role IS the gate. Accounts admin UI gains a maintainer option in the role dropdown and a teal `.badge.maintainer` style. Credentials stay GiGot-side — destination CRUD remains the admin Repositories page's job (§6.2); the maintainer-role subscriber surface is push-trigger only. |
+| 6     | **Shipped 2026-04-30 — extended 2026-05-01** | Three-tier role model: added `maintainer` between `admin` and `regular` (§2). Ability fences moved to two layers: issue-time check (rejects `mirror` on regular accounts) + request-time `requireMaintainerOrAdmin` gate on `/api/repos/{name}/destinations*` so stale bits go inert without migration (§6.1). Subscription admin UI drops the chicken-and-egg `destination_count > 0` gate; the role IS the gate. Accounts admin UI gains a maintainer option in the role dropdown and a teal `.badge.maintainer` style. Credentials stay GiGot-side — destination CRUD remains the admin Repositories page's job (§6.2); the maintainer-role subscriber surface is push-trigger only. **2026-05-01 follow-up:** `Account.Email` first-class field (§2). GitHub identifier flipped from `login` → primary verified email (fetched via `/user/emails` with `user:email` scope). Microsoft consumer identifier flipped from `sub` → `email` (fixes the per-App-Registration duplicate-account problem; entra stays on `oid`). OAuth callback writes Email + DisplayName on auto-register and refreshes them on every login (preserves Role + PasswordHash + CreatedAt). `/api/me`, `AccountView`, `CreateAccountRequest`, `UpdateAccountRequest`, `RegisterRequest` all carry `email`. Subscription chips on the Repositories page and token-card titles render `display_name` plus a muted email suffix so two accounts that share a display name are distinguishable at a glance. |
 
 ---
 

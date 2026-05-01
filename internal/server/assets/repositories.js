@@ -114,13 +114,15 @@
   }
 
   // labelForSubscription resolves the token's stored username to an
-  // account's display name when possible — OAuth `sub` identifiers
-  // are opaque 40-char strings, so "Peter van de Pas" beats
-  // "microsoft:aaaa…6waw" in a chip. Falls back to the raw username
+  // account's display name + email when possible — OAuth `sub`
+  // identifiers are opaque 40-char strings, so "Peter van de Pas"
+  // beats "microsoft:aaaa…6waw" in a chip; the email tail
+  // disambiguates two accounts that happen to share a display name.
+  // Returns pre-escaped HTML; falls back to the escaped raw username
   // for legacy tokens whose account was deleted or never created.
   function labelForSubscription(t) {
     const acc = Admin.resolveAccount(t.username, accountsCache);
-    return acc ? Admin.accountLabel(acc) : t.username;
+    return acc ? Admin.accountLabelHTML(acc) : escapeHtml(t.username);
   }
 
   function renderSubscriptionsSection(container, repoName) {
@@ -149,9 +151,11 @@
         ? '<div class="muted ic-section-empty">No subscription keys grant access to this repo.</div>'
         : '<div class="sub-chips">' +
             subs.map(s => {
-              const label = labelForSubscription(s);
+              // labelForSubscription returns pre-escaped HTML (name +
+              // muted email) so the chip can disambiguate two
+              // identically-named accounts at a glance.
               return '<span class="sub-chip" title="' + escapeHtml(s.username) + '">' +
-                escapeHtml(label) + '</span>';
+                labelForSubscription(s) + '</span>';
             }).join('') +
           '</div>') +
       '<div class="subs-actions">' +

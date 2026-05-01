@@ -164,6 +164,7 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request, p oauth.P
 			Identifier:  claim.Identifier,
 			Role:        accounts.RoleRegular,
 			DisplayName: claim.DisplayName,
+			Email:       claim.Email,
 		})
 		if err != nil {
 			log.Printf("server: oauth: %s: auto-register %s: %v", p.Name(), claim.Identifier, err)
@@ -176,6 +177,29 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request, p oauth.P
 		log.Printf("server: oauth: %s: lookup %s: %v", p.Name(), claim.Identifier, err)
 		oauthLoginFailed(w, r, "sign-in failed")
 		return
+	} else {
+		// Existing account — refresh DisplayName/Email from the IdP if
+		// they changed upstream so the row never goes stale. Role and
+		// PasswordHash are NOT touched (preserves admin promotions and
+		// any local password). An empty incoming value is treated as
+		// "IdP didn't send this claim" rather than "user cleared it";
+		// we keep the stored value rather than clobber.
+		dirty := false
+		if claim.DisplayName != "" && claim.DisplayName != acc.DisplayName {
+			acc.DisplayName = claim.DisplayName
+			dirty = true
+		}
+		if claim.Email != "" && claim.Email != acc.Email {
+			acc.Email = claim.Email
+			dirty = true
+		}
+		if dirty {
+			if updated, perr := s.accounts.Put(*acc); perr == nil {
+				acc = updated
+			} else {
+				log.Printf("server: oauth: %s: refresh %s: %v", p.Name(), claim.Identifier, perr)
+			}
+		}
 	}
 
 	sess, err := s.sessionStrategy.Create(acc.Provider, acc.Identifier)

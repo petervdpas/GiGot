@@ -70,11 +70,20 @@ var (
 // Account is one row in the directory. PasswordHash is populated only
 // for Provider == ProviderLocal. CreatedAt is set on first Put when
 // zero.
+//
+// Email is a first-class field independent of Identifier. For some
+// providers (microsoft consumer, github) Identifier is itself the
+// email; for others (entra → oid GUID, local → username) it isn't.
+// Email is what the human knows themselves as and what Formidable
+// surfaces in headers, audit logs, and "signed in as" strips. The
+// OAuth callbacks populate it from the IdP's email claim on every
+// login; for local accounts it's set explicitly via the admin form.
 type Account struct {
 	Provider     string    `json:"provider"`
 	Identifier   string    `json:"identifier"`
 	Role         string    `json:"role"`
 	DisplayName  string    `json:"display_name,omitempty"`
+	Email        string    `json:"email,omitempty"`
 	PasswordHash string    `json:"password_hash,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 }
@@ -210,6 +219,7 @@ func (s *Store) Put(a Account) (*Account, error) {
 		Identifier:   identifier,
 		Role:         role,
 		DisplayName:  strings.TrimSpace(a.DisplayName),
+		Email:        strings.ToLower(strings.TrimSpace(a.Email)),
 		PasswordHash: a.PasswordHash,
 		CreatedAt:    a.CreatedAt,
 	}

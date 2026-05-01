@@ -196,6 +196,14 @@ form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
   vertical-align: middle;
   margin-left: 0.4em;
 }
+
+/* Sidebar version stays inline next to "GiGot" — the brand reads
+ * as one phrase. If a very long dev-build version wraps to a second
+ * line, both halves should stay together (white-space: nowrap on the
+ * span keeps the version intact rather than breaking mid-token). */
+.sidebar .brand h1 .brand-version {
+  white-space: nowrap;
+}
 .login-wrap h2 { text-align: left; }
 .login-wrap form { flex-direction: column; }
 .login-wrap form input,
@@ -287,7 +295,7 @@ a:hover { text-decoration: underline; }
 .shell { display: flex; min-height: 100vh; }
 
 .sidebar {
-  width: 320px;
+  width: 360px;
   flex-shrink: 0;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--line);
@@ -348,7 +356,24 @@ a:hover { text-decoration: underline; }
   gap: 0.5rem;
 }
 .sidebar .me .me-label { flex: 1; min-width: 0; }
-.sidebar .me strong { color: var(--text); display: block; }
+.sidebar .me .me-label-prefix { display: block; }
+/* Name + role chip share one row so the role reads as a qualifier
+ * of the name (admin/maintainer/regular), not as a separate stanza.
+ * Wraps to a second line on a tight viewport rather than overflow. */
+.sidebar .me .me-name-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  min-width: 0;
+}
+.sidebar .me strong { color: var(--text); min-width: 0; }
+.sidebar .me .me-role {
+  font-size: 0.6rem;
+  padding: 0.1em 0.45em;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
 .sidebar .me .me-actions { flex-shrink: 0; }
 
 /* Theme toggle block sits between the signed-in-as line and the top of
@@ -505,6 +530,19 @@ a:hover { text-decoration: underline; }
  * Cool/teal palette so it reads as "elevated but not full admin" at a
  * glance on the accounts table. */
 .badge.maintainer { background: #0e7a8722; color: #5dd9e6; border-color: #0e7a8766; }
+
+/* Email suffix rendered after a display name in subscription chips
+ * and token-card titles. Visually secondary so the name still reads
+ * as the primary handle, but present so two accounts that share a
+ * display name (different OAuth Apps, typo'd duplicates) are
+ * distinguishable at a glance. */
+.acct-email {
+  font-size: 0.78em;
+  font-weight: 400;
+  margin-left: 0.4em;
+  word-break: break-all;
+}
+.sub-chip .acct-email { font-size: 0.85em; }
 
 /* A badge rendered as a <button> stays visually identical to the <span>
  * form but gains a cursor + hover cue so the operator knows it's a

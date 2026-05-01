@@ -167,9 +167,18 @@ func buildMicrosoft(ctx context.Context, cfg config.OAuthProviderConfig, resolve
 		display = "Microsoft (personal)"
 	}
 	ctx = oidc.InsecureIssuerURLContext(ctx, msaTenantIssuer)
+	// Identifier claim is `email`, not `sub`. Consumer MSA `sub` is
+	// unique per (client_id, user) — same human signing into two
+	// different App Registrations gets two distinct subs and would
+	// land as two separate accounts. Email is the user's mental-model
+	// identity ("same email = same person") and matches what the
+	// admin sees on the Accounts page. Trade-off: email *can* change,
+	// but for consumer MSA that's vanishingly rare; the per-app-sub
+	// duplicate-account problem hits every multi-environment deploy.
+	// See accounts.md §2 for the per-provider identifier rationale.
 	return NewOIDCProvider(ctx, "microsoft",
 		"https://login.microsoftonline.com/consumers/v2.0",
-		cfg.ClientID, secret, display, "sub", cfg.AllowRegister)
+		cfg.ClientID, secret, display, "email", cfg.AllowRegister)
 }
 
 func requireClientCreds(name string, cfg config.OAuthProviderConfig) error {

@@ -27,14 +27,11 @@
   // top where an admin looks first.
   const ROLE_RANK = { admin: 0, maintainer: 1, regular: 2 };
 
-  // roleBadgeClass picks the .badge variant (admin = formidable accent,
-  // maintainer = teal, regular = default chip) so the role tier reads
-  // at a glance from the accounts table.
-  function roleBadgeClass(role) {
-    if (role === 'admin') return 'formidable';
-    if (role === 'maintainer') return 'maintainer';
-    return '';
-  }
+  // roleBadgeClass is shared with the sidebar identity strip via
+  // Admin.roleBadgeClass — one source of truth for "what colour is
+  // this role" so the table, sidebar, and any future role display
+  // never drift apart.
+  const roleBadgeClass = Admin.roleBadgeClass;
   function sortAccounts(a, b) {
     const ra = ROLE_RANK[a.role] ?? 99;
     const rb = ROLE_RANK[b.role] ?? 99;

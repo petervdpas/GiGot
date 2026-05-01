@@ -222,6 +222,8 @@ definitions:
         type: string
       display_name:
         type: string
+      email:
+        type: string
       has_password:
         type: boolean
       identifier:
@@ -348,6 +350,8 @@ definitions:
   server.CreateAccountRequest:
     properties:
       display_name:
+        type: string
+      email:
         type: string
       identifier:
         type: string
@@ -519,6 +523,8 @@ definitions:
     properties:
       display_name:
         type: string
+      email:
+        type: string
       provider:
         type: string
       role:
@@ -574,6 +580,8 @@ definitions:
   server.RegisterRequest:
     properties:
       display_name:
+        type: string
+      email:
         type: string
       password:
         type: string
@@ -713,6 +721,8 @@ definitions:
   server.UpdateAccountRequest:
     properties:
       display_name:
+        type: string
+      email:
         type: string
       password:
         type: string

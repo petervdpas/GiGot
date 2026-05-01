@@ -148,6 +148,74 @@ func TestOIDCProvider_HappyPath(t *testing.T) {
 	}
 }
 
+// TestOIDCProvider_EmailPopulatedIndependentlyOfIdentifier locks in
+// the rule that Claim.Email comes from the `email` claim regardless
+// of which claim is the identifier. Entra keys on `oid` (a GUID),
+// but Account.Email still has to be populated for the
+// "signed in as" surface and Formidable's user header.
+func TestOIDCProvider_EmailPopulatedIndependentlyOfIdentifier(t *testing.T) {
+	idp := newMockIdP(t, "client-xyz")
+	idp.nextClaims = map[string]any{
+		"sub":   "11111111-2222-3333-4444-555555555555",
+		"oid":   "11111111-2222-3333-4444-555555555555",
+		"email": "Peter@Example.com", // mixed case → must lowercase
+		"name":  "Peter van de Pas",
+		"nonce": "test-nonce",
+	}
+
+	ctx := context.Background()
+	p, err := NewOIDCProvider(ctx, "entra", idp.server.URL, "client-xyz", "client-secret", "Entra test", "oid", true)
+	if err != nil {
+		t.Fatalf("NewOIDCProvider: %v", err)
+	}
+
+	claim, err := p.ExchangeAndClaim(ctx, "code-abc", "verifier-xyz", "http://localhost/callback", "test-nonce")
+	if err != nil {
+		t.Fatalf("ExchangeAndClaim: %v", err)
+	}
+	// Identifier still = oid (the configured identifierClaim).
+	if claim.Identifier != "11111111-2222-3333-4444-555555555555" {
+		t.Fatalf("Identifier = %q, want oid passthrough", claim.Identifier)
+	}
+	// Email picked up from the "email" claim, lowercased.
+	if claim.Email != "peter@example.com" {
+		t.Fatalf("Email = %q, want lowercased email claim", claim.Email)
+	}
+}
+
+// TestOIDCProvider_MissingEmailLeavesEmailEmpty pairs the positive
+// above: when the IdP doesn't ship an `email` claim (rare, but some
+// minimal Entra configs strip it), Claim.Email is empty rather than
+// raising — Account.Email just stays unset until the next login or
+// admin edit. Identifier still resolves so login isn't blocked.
+func TestOIDCProvider_MissingEmailLeavesEmailEmpty(t *testing.T) {
+	idp := newMockIdP(t, "client-xyz")
+	idp.nextClaims = map[string]any{
+		"sub":   "11111111-2222-3333-4444-555555555555",
+		"oid":   "11111111-2222-3333-4444-555555555555",
+		"name":  "Peter van de Pas",
+		"nonce": "test-nonce",
+		// no "email" claim
+	}
+
+	ctx := context.Background()
+	p, err := NewOIDCProvider(ctx, "entra", idp.server.URL, "client-xyz", "client-secret", "Entra test", "oid", true)
+	if err != nil {
+		t.Fatalf("NewOIDCProvider: %v", err)
+	}
+
+	claim, err := p.ExchangeAndClaim(ctx, "code-abc", "verifier-xyz", "http://localhost/callback", "test-nonce")
+	if err != nil {
+		t.Fatalf("ExchangeAndClaim: %v", err)
+	}
+	if claim.Email != "" {
+		t.Fatalf("Email = %q, want empty when claim absent", claim.Email)
+	}
+	if claim.Identifier == "" {
+		t.Fatalf("Identifier should still be populated even when email missing")
+	}
+}
+
 func TestOIDCProvider_NonceMismatchIsRejected(t *testing.T) {
 	idp := newMockIdP(t, "client-xyz")
 	idp.nextClaims = map[string]any{
@@ -212,24 +280,41 @@ func TestGitHubProvider_ExchangeAndClaim(t *testing.T) {
 			http.Error(w, "bad auth", 401)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"login": "Peter-VDPas", // mixed case → must lowercase
-			"name":  "Peter VDP",
-		})
+		// Mux on the path so the same fixture serves both /user (for
+		// the display name) and /user/emails (for the identifier).
+		// The provider hits both during one ExchangeAndClaim.
+		switch r.URL.Path {
+		case "/user":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"login": "Peter-VDPas",
+				"name":  "Peter VDP",
+			})
+		case "/user/emails":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"email": "secondary@example.com", "primary": false, "verified": true},
+				{"email": "Peter@Example.com", "primary": true, "verified": true},
+				{"email": "unverified@example.com", "primary": false, "verified": false},
+			})
+		default:
+			http.Error(w, "unexpected path "+r.URL.Path, 404)
+		}
 	}))
 	t.Cleanup(apiSrv.Close)
 
 	p := NewGitHubProvider("client-id", "client-secret", "GitHub", true)
 	p.cfg.Endpoint.TokenURL = tokenSrv.URL + "/login/oauth/access_token"
 	p.cfg.Endpoint.AuthURL = tokenSrv.URL + "/login/oauth/authorize"
-	p.userAPIURL = apiSrv.URL
+	p.userAPIURL = apiSrv.URL + "/user"
 
 	claim, err := p.ExchangeAndClaim(context.Background(), "code", "", "http://localhost/callback", "")
 	if err != nil {
 		t.Fatalf("ExchangeAndClaim: %v", err)
 	}
-	if claim.Identifier != "peter-vdpas" {
-		t.Fatalf("Identifier = %q, want lowercased login", claim.Identifier)
+	if claim.Identifier != "peter@example.com" {
+		t.Fatalf("Identifier = %q, want primary verified email lowercased", claim.Identifier)
+	}
+	if claim.Email != "peter@example.com" {
+		t.Fatalf("Email = %q, want primary verified email lowercased", claim.Email)
 	}
 	if claim.DisplayName != "Peter VDP" {
 		t.Fatalf("DisplayName = %q", claim.DisplayName)
@@ -247,6 +332,106 @@ func TestGitHubProvider_ExchangeAndClaim(t *testing.T) {
 	}
 	if got := u.Query().Get("client_id"); got != "client-id" {
 		t.Fatalf("client_id param = %q", got)
+	}
+}
+
+// gitHubProviderForTest spins up a GitHub-flavoured OAuth provider
+// wired against a stub apiSrv that the caller controls — keeps the
+// negative-path tests below focused on the /user/emails response
+// shape without copy-pasting the token-exchange + URL plumbing.
+func gitHubProviderForTest(t *testing.T, emailsHandler http.HandlerFunc) *GitHubProvider {
+	t.Helper()
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "gho_test", "token_type": "bearer", "scope": "read:user user:email",
+		})
+	}))
+	t.Cleanup(tokenSrv.Close)
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer gho_test" {
+			http.Error(w, "bad auth", 401)
+			return
+		}
+		switch r.URL.Path {
+		case "/user":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"login": "Peter-VDPas", "name": "Peter VDP",
+			})
+		case "/user/emails":
+			emailsHandler(w, r)
+		default:
+			http.Error(w, "unexpected path "+r.URL.Path, 404)
+		}
+	}))
+	t.Cleanup(apiSrv.Close)
+
+	p := NewGitHubProvider("client-id", "client-secret", "GitHub", true)
+	p.cfg.Endpoint.TokenURL = tokenSrv.URL + "/login/oauth/access_token"
+	p.cfg.Endpoint.AuthURL = tokenSrv.URL + "/login/oauth/authorize"
+	p.userAPIURL = apiSrv.URL + "/user"
+	return p
+}
+
+// TestGitHubProvider_NoPrimaryVerifiedEmailIsRejected pairs with the
+// happy-path TestGitHubProvider_ExchangeAndClaim: when /user/emails
+// has zero entries that are both primary AND verified, login must
+// fail clearly. Falling back to the GitHub login here would silently
+// re-introduce the per-app duplicate-account problem the email
+// switch was meant to fix; hard-fail is the spec.
+func TestGitHubProvider_NoPrimaryVerifiedEmailIsRejected(t *testing.T) {
+	cases := map[string]http.HandlerFunc{
+		"empty": func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		},
+		"primary-but-unverified": func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"email": "peter@example.com", "primary": true, "verified": false},
+			})
+		},
+		"verified-but-not-primary": func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"email": "peter@example.com", "primary": false, "verified": true},
+				{"email": "secondary@example.com", "primary": false, "verified": true},
+			})
+		},
+	}
+	for name, handler := range cases {
+		t.Run(name, func(t *testing.T) {
+			p := gitHubProviderForTest(t, handler)
+			_, err := p.ExchangeAndClaim(context.Background(), "code", "", "http://localhost/callback", "")
+			if err == nil {
+				t.Fatalf("want error, got nil")
+			}
+			if !strings.Contains(err.Error(), "no primary verified email") {
+				t.Fatalf("error = %v, want 'no primary verified email'", err)
+			}
+		})
+	}
+}
+
+// TestGitHubProvider_EmailsEndpointFailureSurfacesError locks in
+// that a transport-level /user/emails failure (5xx, malformed JSON)
+// becomes a clear error rather than silently degrading to login or
+// to an empty identifier.
+func TestGitHubProvider_EmailsEndpointFailureSurfacesError(t *testing.T) {
+	cases := map[string]http.HandlerFunc{
+		"5xx": func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "boom", http.StatusServiceUnavailable)
+		},
+		"malformed-json": func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("{not-json"))
+		},
+	}
+	for name, handler := range cases {
+		t.Run(name, func(t *testing.T) {
+			p := gitHubProviderForTest(t, handler)
+			_, err := p.ExchangeAndClaim(context.Background(), "code", "", "http://localhost/callback", "")
+			if err == nil {
+				t.Fatalf("want error, got nil")
+			}
+		})
 	}
 }
 

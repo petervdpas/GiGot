@@ -209,7 +209,34 @@ Done and shipping:
       negative pairs for runtime role gate
       (`TestRepoDestinations_RegularRoleDenied`) and issue-time fence
       (`TestIssueToken_MirrorAbilityRequiresMaintainerOrAdmin`).
-      2026-05-01.
+
+      **Email as first-class identity (2026-05-01).** `Account.Email`
+      added as an independent field. GitHub identifier changed from
+      `login` to **primary verified email** (fetched via
+      `/user/emails` with the `user:email` scope; rejected if no
+      verified primary). Microsoft consumer identifier changed from
+      `sub` to **`email`** (consumer `sub` is unique per
+      `(client_id, user)` per spec, so the same human signing into
+      two App Registrations would create two account rows; email is
+      stable across them). Entra unchanged (`oid` is already
+      tenant-scoped + stable). OAuth callback writes Email +
+      DisplayName on auto-register and *refreshes* them on every
+      login (preserves Role, PasswordHash, CreatedAt — empty
+      incoming claim treated as "IdP didn't send", not "user
+      cleared"). New endpoint surfaces: `/api/me` returns `email`;
+      `AccountView`, `CreateAccountRequest`, `UpdateAccountRequest`,
+      `RegisterRequest` all carry `email` (lowercased + trimmed at
+      the store boundary). Subscription chips on the Repositories
+      page and token-card titles render `display_name` plus a muted
+      email suffix so two accounts sharing a display name are
+      distinguishable at a glance. Tests: GitHub negative paths
+      (no primary verified email, only-unverified, /user/emails
+      5xx + malformed JSON), OIDC email-populated-independently and
+      missing-email-leaves-empty pairs, OAuth callback refresh +
+      empty-claim-doesn't-clobber, HTTP-layer round-trip for create
+      / patch / register / `/api/me`, plus three feature scenarios
+      in `accounts.feature` and `me.feature` exercising the full
+      session→handler→store path. 2026-05-01.
 
 - [x] **Auth hot-swap admin surface (design:
       [`accounts.md`](docs/design/accounts.md) §9.5).** `/admin/auth`

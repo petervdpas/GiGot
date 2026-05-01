@@ -41,6 +41,31 @@ func TestRegister_CreatesRegularAccount(t *testing.T) {
 	}
 }
 
+// TestRegister_PersistsEmail covers the email-on-register path:
+// self-service registration accepts an email, normalises it to
+// lowercase+trimmed, stores it, and ships it back in the response.
+func TestRegister_PersistsEmail(t *testing.T) {
+	srv := testServer(t)
+	body := `{"username":"newuser","password":"pw123456","email":"  Peter@Example.COM  "}`
+	req := httptest.NewRequest(http.MethodPost, "/api/register", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var view AccountView
+	_ = json.Unmarshal(rec.Body.Bytes(), &view)
+	if view.Email != "peter@example.com" {
+		t.Errorf("response Email = %q, want lowercased+trimmed", view.Email)
+	}
+	stored, _ := srv.accounts.Get(accounts.ProviderLocal, "newuser")
+	if stored.Email != "peter@example.com" {
+		t.Errorf("stored Email = %q, want lowercased+trimmed", stored.Email)
+	}
+}
+
 func TestRegister_RejectsDuplicate(t *testing.T) {
 	srv := testServer(t)
 	if _, err := srv.accounts.Put(accounts.Account{

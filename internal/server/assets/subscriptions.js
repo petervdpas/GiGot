@@ -177,7 +177,13 @@
   // so changes to that visual stay in one place.
   function renderTokenCard(t) {
     const resolved = resolveAccountForToken(t.username);
-    const title = resolved ? Admin.accountLabel(resolved) : t.username;
+    // titleHTML carries the display name + (when set) a muted email
+    // suffix so two accounts that share a display name are visually
+    // distinguishable on the cards. Falls back to plain title when
+    // we can't resolve to an account row.
+    const titleHTML = resolved
+      ? Admin.accountLabelHTML(resolved)
+      : escapeHtml(t.username);
     const subtitle = resolved
       ? '<code class="acct-identifier" title="' + escapeHtml(t.username) + '">' +
           escapeHtml(resolved.provider) + ':' + escapeHtml(resolved.identifier) + '</code>'
@@ -218,7 +224,7 @@
       },
     });
 
-    const card = Admin.renderTokenCard(t, { title, subtitle, leftChips, actions });
+    const card = Admin.renderTokenCard(t, { titleHTML, subtitle, leftChips, actions });
     installAbilitiesSection(card, t);
     return card;
   }

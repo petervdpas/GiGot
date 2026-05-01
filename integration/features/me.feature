@@ -23,6 +23,16 @@ Feature: Self-serve /api/me
     And the JSON response "role" should be "admin"
     And the response body should contain "\"username\":\"alice\""
 
+  Scenario: /api/me carries the email an admin set on the caller's account
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I PATCH "/api/admin/accounts/local/alice" with body '{"email":"alice@example.com"}'
+    Then the response status should be 200
+    When I GET "/api/me"
+    Then the response status should be 200
+    And the JSON response "email" should be "alice@example.com"
+
   Scenario: /api/me filters to the caller's own subscriptions only
     Given the server is running
     And an admin "alice" exists with password "hunter2"

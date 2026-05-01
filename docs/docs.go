@@ -3892,6 +3892,9 @@ const docTemplate = `{
                 "display_name": {
                     "type": "string"
                 },
+                "email": {
+                    "type": "string"
+                },
                 "has_password": {
                     "type": "boolean"
                 },
@@ -4081,6 +4084,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "display_name": {
+                    "type": "string"
+                },
+                "email": {
                     "type": "string"
                 },
                 "identifier": {
@@ -4312,6 +4318,9 @@ const docTemplate = `{
                 "display_name": {
                     "type": "string"
                 },
+                "email": {
+                    "type": "string"
+                },
                 "provider": {
                     "type": "string"
                 },
@@ -4396,6 +4405,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "display_name": {
+                    "type": "string"
+                },
+                "email": {
                     "type": "string"
                 },
                 "password": {
@@ -4600,6 +4612,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "display_name": {
+                    "type": "string"
+                },
+                "email": {
                     "type": "string"
                 },
                 "password": {

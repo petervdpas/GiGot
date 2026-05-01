@@ -22,6 +22,7 @@ func accountView(a accounts.Account) AccountView {
 		Identifier:  a.Identifier,
 		Role:        a.Role,
 		DisplayName: a.DisplayName,
+		Email:       a.Email,
 		HasPassword: a.PasswordHash != "",
 		CreatedAt:   a.CreatedAt,
 	}
@@ -178,6 +179,7 @@ func (s *Server) adminCreateAccount(w http.ResponseWriter, r *http.Request) {
 		Identifier:  req.Identifier,
 		Role:        req.Role,
 		DisplayName: req.DisplayName,
+		Email:       strings.ToLower(strings.TrimSpace(req.Email)),
 	})
 	if err != nil {
 		if errors.Is(err, accounts.ErrBadProvider) || errors.Is(err, accounts.ErrBadRole) {
@@ -234,12 +236,17 @@ func (s *Server) adminUpdateAccount(w http.ResponseWriter, r *http.Request, prov
 	if req.DisplayName != nil {
 		newDisplay = *req.DisplayName
 	}
+	newEmail := existing.Email
+	if req.Email != nil {
+		newEmail = strings.ToLower(strings.TrimSpace(*req.Email))
+	}
 
 	updated, err := s.accounts.Put(accounts.Account{
 		Provider:    existing.Provider,
 		Identifier:  existing.Identifier,
 		Role:        newRole,
 		DisplayName: newDisplay,
+		Email:       newEmail,
 		CreatedAt:   existing.CreatedAt,
 	})
 	if err != nil {

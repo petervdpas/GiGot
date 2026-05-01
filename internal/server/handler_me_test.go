@@ -105,6 +105,36 @@ func TestMe_AdminAlsoHasProfile(t *testing.T) {
 	}
 }
 
+// TestMe_ReturnsEmail covers the email round-trip from /api/me.
+// Formidable's "signed in as" header reads me.email; without this
+// guard, a stored Email could silently stop appearing in the
+// response without the unit suite catching it.
+func TestMe_ReturnsEmail(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	// Update the seeded admin to carry an email so /api/me reads it
+	// off the row. adminTestServer's bootstrap doesn't set one.
+	if existing, err := srv.accounts.Get(accounts.ProviderLocal, "alice"); err == nil {
+		existing.Email = "alice@example.com"
+		if _, err := srv.accounts.Put(*existing); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		t.Fatal(err)
+	}
+
+	rec := do(t, srv, http.MethodGet, "/api/me", nil, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	var got MeResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Email != "alice@example.com" {
+		t.Fatalf("Email = %q, want round-tripped from store", got.Email)
+	}
+}
+
 // TestMe_LegacyBareTokenMatchesLocalCaller proves we respect the
 // bare-token back-compat shape: a token whose Username is "alice"
 // (no provider prefix) resolves to (local, alice) and surfaces for

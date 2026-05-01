@@ -3886,6 +3886,9 @@
                 "display_name": {
                     "type": "string"
                 },
+                "email": {
+                    "type": "string"
+                },
                 "has_password": {
                     "type": "boolean"
                 },
@@ -4075,6 +4078,9 @@
             "type": "object",
             "properties": {
                 "display_name": {
+                    "type": "string"
+                },
+                "email": {
                     "type": "string"
                 },
                 "identifier": {
@@ -4306,6 +4312,9 @@
                 "display_name": {
                     "type": "string"
                 },
+                "email": {
+                    "type": "string"
+                },
                 "provider": {
                     "type": "string"
                 },
@@ -4390,6 +4399,9 @@
             "type": "object",
             "properties": {
                 "display_name": {
+                    "type": "string"
+                },
+                "email": {
                     "type": "string"
                 },
                 "password": {
@@ -4594,6 +4606,9 @@
             "type": "object",
             "properties": {
                 "display_name": {
+                    "type": "string"
+                },
+                "email": {
                     "type": "string"
                 },
                 "password": {

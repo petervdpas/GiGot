@@ -78,6 +78,30 @@ Feature: Accounts (admins + regulars)
     Then the response status should be 201
     And the JSON response "username" should be "github:petervdpas"
 
+  Scenario: Register persists the email field, lowercased and trimmed
+    Given the server is running
+    When I POST "/api/register" with body '{"username":"peter","password":"hunter2","display_name":"Peter","email":"  Peter@Example.COM  "}'
+    Then the response status should be 201
+    And the JSON response "email" should be "peter@example.com"
+
+  Scenario: Admin can create a local account with an email
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/accounts" with body '{"provider":"local","identifier":"bob","role":"regular","email":"BOB@example.com"}'
+    Then the response status should be 201
+    And the JSON response "email" should be "bob@example.com"
+
+  Scenario: Admin can patch an account's email without touching other fields
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a regular account "bob" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I PATCH "/api/admin/accounts/local/bob" with body '{"email":"bob@new.example.com"}'
+    Then the response status should be 200
+    And the JSON response "email" should be "bob@new.example.com"
+    And the JSON response "role" should be "regular"
+
   Scenario: Issuing a scoped token for an unknown provider account is rejected
     Given the server is running
     And an admin "alice" exists with password "hunter2"

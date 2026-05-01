@@ -16,6 +16,7 @@ type MeResponse struct {
 	Username      string          `json:"username"`
 	Provider      string          `json:"provider"`
 	DisplayName   string          `json:"display_name,omitempty"`
+	Email         string          `json:"email,omitempty"`
 	Role          string          `json:"role"`
 	Subscriptions []TokenListItem `json:"subscriptions"`
 }
@@ -48,6 +49,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 	if acc, err := s.accounts.Get(id.AccountProvider, id.Username); err == nil {
 		resp.DisplayName = acc.DisplayName
+		resp.Email = acc.Email
 		resp.Role = acc.Role
 	}
 

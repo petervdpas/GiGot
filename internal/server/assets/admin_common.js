@@ -260,6 +260,32 @@
     return obj.display_name || obj.identifier || obj.username || '';
   }
 
+  // roleBadgeClass picks the .badge variant for a role chip.
+  // Centralised in admin_common so the accounts table, sidebar
+  // identity strip, and any future role-display surface render the
+  // same colour for the same role. Empty string for `regular` so the
+  // chip falls through to the default neutral palette.
+  function roleBadgeClass(role) {
+    if (role === 'admin') return 'formidable';
+    if (role === 'maintainer') return 'maintainer';
+    return '';
+  }
+
+  // accountLabelHTML returns the same human-readable label as
+  // accountLabel, plus the email rendered as a muted secondary span
+  // when present. Two accounts that share a display name (e.g. two
+  // Microsoft App Registrations for the same human, or a typo'd
+  // duplicate) become distinguishable at a glance — the email is the
+  // disambiguator the admin actually recognises. Pre-escaped, safe
+  // to insert into innerHTML at the call site.
+  function accountLabelHTML(obj) {
+    const name = accountLabel(obj);
+    const email = (obj && obj.email) ? obj.email : '';
+    if (!email) return escapeHtml(name);
+    return escapeHtml(name) +
+      ' <span class="acct-email muted">' + escapeHtml(email) + '</span>';
+  }
+
   // resolveAccount takes a token's stored Username (either
   // "provider:identifier" or a bare local-shorthand string) and
   // returns the matching account row from a supplied list, or null.
@@ -355,7 +381,7 @@
     card.innerHTML =
       '<div class="ic-header">' +
         '<div class="ic-title-wrap">' +
-          '<div class="ic-title" title="' + escapeHtml(t.username || '') + '">' + escapeHtml(opts.title || '') + '</div>' +
+          '<div class="ic-title" title="' + escapeHtml(t.username || '') + '">' + (opts.titleHTML || escapeHtml(opts.title || '')) + '</div>' +
           subtitleHTML +
         '</div>' +
         (headerChipsHTML ? '<div class="ic-chips">' + headerChipsHTML + '</div>' : '') +
@@ -500,7 +526,16 @@
       // it's a session verb about WHO you are, not a destination you
       // navigate to. Kebab keeps it from hiding the display name.
       '<div class="me">' +
-        '<div class="me-label">signed in as<strong id="me-name">' + escapeHtml(label) + '</strong></div>' +
+        '<div class="me-label">' +
+          '<span class="me-label-prefix">signed in as</span>' +
+          '<div class="me-name-row">' +
+            '<strong id="me-name">' + escapeHtml(label) + '</strong>' +
+            (realRole
+              ? '<span class="badge me-role ' + roleBadgeClass(realRole) + '">' +
+                  escapeHtml(realRole) + '</span>'
+              : '') +
+          '</div>' +
+        '</div>' +
         '<span class="me-actions row-actions"></span>' +
       '</div>' +
       '<div class="theme-row">' +
@@ -584,7 +619,7 @@
   window.Admin = {
     api,
     escapeHtml, shortSha,
-    accountLabel, accountOption, resolveAccount,
+    accountLabel, accountLabelHTML, accountOption, resolveAccount, roleBadgeClass,
     renderTokenCard,
     initSidebar, guardSession,
     copyToClipboard,

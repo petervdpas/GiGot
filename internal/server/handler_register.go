@@ -66,6 +66,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		Identifier:  username,
 		Role:        accounts.RoleRegular,
 		DisplayName: strings.TrimSpace(req.DisplayName),
+		Email:       strings.ToLower(strings.TrimSpace(req.Email)),
 	})
 	if err != nil {
 		if errors.Is(err, accounts.ErrBadProvider) || errors.Is(err, accounts.ErrBadRole) {

@@ -30,12 +30,19 @@ type Provider interface {
 
 // Claim is the normalized view of a successful IdP login — the
 // identifier GiGot uses to key the Account row plus a best-effort
-// display name. Provider-specific quirks (GitHub's `login` being
-// tied to a REST call, Entra's `oid` being a GUID) are hidden behind
-// this shape.
+// display name and email. Provider-specific quirks (GitHub's email
+// requiring a separate API call, Entra's `oid` being a GUID) are
+// hidden behind this shape.
+//
+// Email is populated independently of Identifier so accounts have a
+// stable user-facing handle even when the identifier is something
+// machine-shaped (entra `oid`, GitHub `login` historically). The
+// callback handler writes it to Account.Email and refreshes it on
+// every successful login.
 type Claim struct {
 	Identifier  string
 	DisplayName string
+	Email       string
 }
 
 // PKCEChallenge returns the S256 code_challenge for a given verifier.
@@ -62,14 +69,19 @@ type GitHubProvider struct {
 }
 
 // NewGitHubProvider constructs the GitHub provider. clientSecret is
-// the resolved secret (looked up from the vault by the caller).
+// the resolved secret (looked up from the vault by the caller). The
+// `user:email` scope is required because the account identifier is
+// the user's primary verified email (read from /user/emails) — the
+// public `email` field on /user is null for users who haven't opted
+// in to a public email, and we'd rather index every user than only
+// those who set one.
 func NewGitHubProvider(clientID, clientSecret, displayName string, allowRegister bool) *GitHubProvider {
 	return &GitHubProvider{
 		cfg: oauth2.Config{
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
 			Endpoint:     oauth2github.Endpoint,
-			Scopes:       []string{"read:user"},
+			Scopes:       []string{"read:user", "user:email"},
 		},
 		displayName:   displayName,
 		allowRegister: allowRegister,
@@ -97,36 +109,93 @@ func (p *GitHubProvider) ExchangeAndClaim(ctx context.Context, code, _, redirect
 	if err != nil {
 		return Claim{}, fmt.Errorf("github: exchange: %w", err)
 	}
-	url := p.userAPIURL
-	if url == "" {
-		url = "https://api.github.com/user"
+	userURL := p.userAPIURL
+	if userURL == "" {
+		userURL = "https://api.github.com/user"
 	}
+	user, err := p.fetchUser(ctx, userURL, tok.AccessToken)
+	if err != nil {
+		return Claim{}, err
+	}
+	// /user/emails is a peer endpoint; suffixing the configured user
+	// URL keeps the test fixture (single httptest server) able to
+	// route both calls without growing a second knob.
+	email, err := p.fetchPrimaryEmail(ctx, userURL+"/emails", tok.AccessToken)
+	if err != nil {
+		return Claim{}, err
+	}
+	// Identifier IS the email, lowercased. Email field on Claim
+	// duplicates it for callers that key on Identifier but still
+	// want a semantic email handle to write to Account.Email.
+	loweredEmail := strings.ToLower(email)
+	return Claim{
+		Identifier:  loweredEmail,
+		Email:       loweredEmail,
+		DisplayName: strings.TrimSpace(user.Name),
+	}, nil
+}
+
+// gitHubUser is the subset of /user we read. Login is no longer the
+// account identifier (email took over) but we still pluck Name for
+// the human-readable display label.
+type gitHubUser struct {
+	Login string `json:"login"`
+	Name  string `json:"name"`
+}
+
+func (p *GitHubProvider) fetchUser(ctx context.Context, url, token string) (gitHubUser, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return Claim{}, fmt.Errorf("github: /user: %w", err)
+		return gitHubUser{}, fmt.Errorf("github: /user: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return Claim{}, fmt.Errorf("github: /user: %s: %s", resp.Status, string(body))
+		return gitHubUser{}, fmt.Errorf("github: /user: %s: %s", resp.Status, string(body))
 	}
-	var u struct {
-		Login string `json:"login"`
-		Name  string `json:"name"`
-	}
+	var u gitHubUser
 	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
-		return Claim{}, fmt.Errorf("github: decode /user: %w", err)
+		return gitHubUser{}, fmt.Errorf("github: decode /user: %w", err)
 	}
-	if u.Login == "" {
-		return Claim{}, fmt.Errorf("github: /user returned empty login")
+	return u, nil
+}
+
+// fetchPrimaryEmail returns the user's primary verified email from
+// /user/emails. Errors out if no verified primary exists — that
+// state means the account has no usable identity from our model's
+// perspective and we'd rather fail clearly than fall back to login
+// (which would silently re-introduce the per-app duplicate-account
+// problem the email switch was meant to fix).
+func (p *GitHubProvider) fetchPrimaryEmail(ctx context.Context, url, token string) (string, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("github: /user/emails: %w", err)
 	}
-	return Claim{
-		Identifier:  strings.ToLower(u.Login),
-		DisplayName: strings.TrimSpace(u.Name),
-	}, nil
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("github: /user/emails: %s: %s", resp.Status, string(body))
+	}
+	var emails []struct {
+		Email    string `json:"email"`
+		Primary  bool   `json:"primary"`
+		Verified bool   `json:"verified"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&emails); err != nil {
+		return "", fmt.Errorf("github: decode /user/emails: %w", err)
+	}
+	for _, e := range emails {
+		if e.Primary && e.Verified && e.Email != "" {
+			return e.Email, nil
+		}
+	}
+	return "", fmt.Errorf("github: no primary verified email on account")
 }
 
 // ---------------------------------------------------------------- OIDC
@@ -214,8 +283,14 @@ func (p *OIDCProvider) ExchangeAndClaim(ctx context.Context, code, codeVerifier,
 		return Claim{}, fmt.Errorf("oauth: %s: claim %q missing or not a string", p.name, p.identifierClaim)
 	}
 	displayName, _ := claims["name"].(string)
+	// Email is read independently — populated even when it isn't the
+	// identifier (entra keys on `oid`, but we still want Account.Email
+	// for Formidable's "signed in as" surface). Missing is OK; we
+	// just leave Claim.Email empty.
+	rawEmail, _ := claims["email"].(string)
 	return Claim{
 		Identifier:  strings.ToLower(idClaim),
+		Email:       strings.ToLower(strings.TrimSpace(rawEmail)),
 		DisplayName: strings.TrimSpace(displayName),
 	}, nil
 }
