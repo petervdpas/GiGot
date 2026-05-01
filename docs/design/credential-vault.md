@@ -229,11 +229,18 @@ implementation detail.
 
 Before starting:
 
-- [ ] Is the sidebar really the right place, or does this belong
-      under Subscription Keys as a sibling concept?
+- [x] Is the sidebar really the right place, or does this belong
+      under Subscription Keys as a sibling concept? **Resolved:**
+      Credentials ship as their own top-level admin sidebar entry
+      (see `assets/admin_common.js` `NAV_ITEMS`); they outgrew the
+      "sibling of Subscription Keys" framing once mirror destinations
+      and OAuth client_secret_ref both started referencing them.
 - [ ] Do we want the "kinds" dropdown to be an enum or free text?
       Enum is safer today; free text is easier to extend. Probably
       enum with an "other" fallback.
-- [ ] Should we block `DELETE` when a credential is referenced by a
-      repo, or allow deletion and flag the broken references? Block
-      is safer.
+- [x] Should we block `DELETE` when a credential is referenced by a
+      repo, or allow deletion and flag the broken references? **Resolved:**
+      Block. `DELETE /api/admin/credentials/{name}` returns `409` with
+      `{ error, ref_repos: [...] }` listing the destinations still
+      referencing the credential, so the admin sees exactly what to
+      detach first (see `admin_common.js::deleteCredential`).

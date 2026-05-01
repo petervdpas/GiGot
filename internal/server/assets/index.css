@@ -30,7 +30,7 @@ body {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 2.5rem;
+  padding: 1.75rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -130,8 +130,15 @@ h1 {
 }
 
 a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
 
-.info-link { margin-top: 1rem; }
+.help-pointer {
+  align-self: stretch;
+  text-align: center;
+  margin-top: 1.5rem;
+  font-size: 0.95rem;
+}
+.help-pointer .sep { color: var(--muted); margin: 0 0.5rem; }
 
 /* Mobile: tighten the card padding so the inner content has room
  * to breathe on a phone. The wrapper already caps width at 520px

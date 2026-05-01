@@ -183,6 +183,16 @@ form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
   display: block;
   margin: 0 auto 0.5rem;
 }
+/* Logo wraps in an <a href="/"> on the login + register cards so the
+ * brand mark is the universal "back to home" affordance. The anchor
+ * itself takes a full row; the inner img keeps its existing
+ * margin-auto centering. line-height: 0 kills the descender gap a
+ * default inline anchor would leave under the image. */
+.login-wrap .logo-link {
+  display: block;
+  line-height: 0;
+}
+.login-wrap .logo-link img { border: 0; }
 .login-wrap .brand-name {
   font-size: 1.8rem;
   font-weight: 600;

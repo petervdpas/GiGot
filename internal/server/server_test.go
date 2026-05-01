@@ -62,15 +62,42 @@ func TestIndexPageShowsRepoCount(t *testing.T) {
 	}
 }
 
-func TestIndexPageLinksToSwagger(t *testing.T) {
+// The landing page surfaces a single "Help" link as its primary CTA;
+// /help in turn links out to Swagger. This pair of asserts locks the
+// two-hop discoverability path so a future "drop the help link" or
+// "drop the swagger link in help" change fails fast.
+func TestIndexLinksToHelpAndHelpLinksToSwagger(t *testing.T) {
 	srv := testServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
 	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if !strings.Contains(rec.Body.String(), `href="/help"`) {
+		t.Error("index page should link to /help")
+	}
 
-	srv.Handler().ServeHTTP(rec, req)
-
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/help", nil))
 	if !strings.Contains(rec.Body.String(), "/swagger/") {
-		t.Error("index page should link to swagger docs")
+		t.Error("/help should link to swagger docs")
+	}
+}
+
+// /signin is a public alias for /admin so the landing page can offer a
+// "Sign in" link that doesn't read like an admin-only URL. Both paths
+// must serve the same login card; tests pin both ends so a "clean up
+// duplicate routes" pass can't silently drop the alias.
+func TestSigninAliasServesLoginCard(t *testing.T) {
+	srv := testServer(t)
+
+	for _, path := range []string{"/admin", "/signin"} {
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s: want 200, got %d", path, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "login-form") {
+			t.Errorf("%s: expected login form in body", path)
+		}
 	}
 }
 

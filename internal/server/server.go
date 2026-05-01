@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -106,6 +105,8 @@ func New(cfg *config.Config) *Server {
 	ap.MarkPublic("/api/admin/session")    // returns 401 internally for the page to decide
 	ap.MarkPublic("/admin")
 	ap.MarkPublic("/admin/")
+	ap.MarkPublic("/signin")
+	ap.MarkPublic("/signin/")
 	ap.MarkPublic("/admin/login")
 	ap.MarkPublic("/admin/logout")
 	ap.MarkPublic("/admin/register")       // self-service registration page
@@ -119,6 +120,8 @@ func New(cfg *config.Config) *Server {
 	ap.MarkPublic("/admin/auth/")
 	ap.MarkPublic("/user")
 	ap.MarkPublic("/user/")
+	ap.MarkPublic("/help")
+	ap.MarkPublicPrefix("/help/")
 	ap.MarkPublicPrefix("/swagger/")
 	ap.MarkPublicPrefix("/assets/")
 	// Basic auth is only meaningful for /git/* — git-the-binary can't
@@ -556,6 +559,11 @@ func (s *Server) routes() {
 	// authenticated sections each live on their own peer URL.
 	s.mux.HandleFunc("/admin", s.handleAdminPage)
 	s.mux.HandleFunc("/admin/", s.handleAdminPage)
+	// /signin is a friendlier alias for the same login card. /admin
+	// stays canonical so OAuth callbacks, login.js, and tests don't
+	// move; the landing page just points users at /signin.
+	s.mux.HandleFunc("/signin", s.handleAdminPage)
+	s.mux.HandleFunc("/signin/", s.handleAdminPage)
 	s.mux.HandleFunc("/admin/login", s.handleAdminLogin)
 	s.mux.HandleFunc("/admin/logout", s.handleAdminLogout)
 	s.mux.HandleFunc("/admin/register", s.handleRegisterPage)
@@ -575,6 +583,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/admin/auth/", s.handleAuthPage)
 	s.mux.HandleFunc("/user", s.handleUserPage)
 	s.mux.HandleFunc("/user/", s.handleUserPage)
+	// /help and /help/<slug> render embedded markdown via goldmark.
+	// Public so an operator can reach it without a session.
+	s.mux.HandleFunc("/help", s.handleHelp)
+	s.mux.HandleFunc("/help/", s.handleHelp)
 	s.mux.HandleFunc("/api/me", s.handleMe)
 	s.mux.HandleFunc("/api/admin/session", s.handleAdminSession)
 	s.mux.HandleFunc("/api/admin/tokens", s.handleAdminTokens)
@@ -603,19 +615,18 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	repos, _ := s.git.List()
 
 	// Embeds PageData so the brand strip on the landing page reads
-	// the same Version field as every other template surface.
+	// the same Version field as every other template surface. Repo
+	// root + Go version were dropped — operator-facing detail with
+	// no actionable meaning to a user, and Go version on a public
+	// page is a small fingerprinting gift to vuln scanners.
 	data := struct {
 		PageData
 		Port      int
-		RepoRoot  string
 		RepoCount int
-		GoVersion string
 	}{
 		PageData:  s.pageData(),
 		Port:      s.cfg.Server.Port,
-		RepoRoot:  s.cfg.Storage.RepoRoot,
 		RepoCount: len(repos),
-		GoVersion: runtime.Version(),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

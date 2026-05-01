@@ -39,13 +39,18 @@
 
   <div class="card">
     <div class="status">GiGot is Running!</div>
-    <div class="info">
-      <div><span>Port:</span> {{.Port}}</div>
-      <div><span>Repo root:</span> {{.RepoRoot}}</div>
-      <div><span>Repos:</span> {{.RepoCount}}</div>
-      <div><span>Go:</span> {{.GoVersion}}</div>
-      <div class="info-link"><a href="/swagger/index.html">API Documentation</a></div>
-    </div>
+    <aside class="explainer">
+      <span class="tag">Server</span>
+      <div class="info">
+        <div><span>Port:</span> {{.Port}}</div>
+        <div><span>Repos:</span> {{.RepoCount}}</div>
+      </div>
+    </aside>
+    <p class="help-pointer">
+      <a href="/signin">Sign in</a>
+      <span class="sep" aria-hidden="true">·</span>
+      <a href="/help">Help</a>
+    </p>
   </div>
 </div>
 

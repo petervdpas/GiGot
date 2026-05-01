@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GiGot{{if .Version}} {{.Version}}{{end}} - Help: {{.Title}}</title>
+<meta name="gigot-version" content="{{.Version}}">
+<link rel="stylesheet" href="/assets/admin.css">
+<link rel="stylesheet" href="/assets/help.css">
+<script>
+  try {
+    var t = localStorage.getItem('gigot.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) { /* private-mode / disabled storage -> stay on default dark */ }
+</script>
+</head>
+<body>
+
+<div class="theme-fab">
+  <span>Light theme</span>
+  <span id="theme-toggle-host"></span>
+</div>
+
+<div class="help-wrap">
+  <header class="help-header">
+    <a class="help-home" href="/" aria-label="Back to GiGot home">
+      <img class="help-logo" src="/assets/gigot.png" alt="">
+      <span class="help-brand">GiGot{{if .Version}} <span class="brand-version muted">{{.Version}}</span>{{end}}</span>
+    </a>
+    <nav class="help-nav">
+      <a href="/help">Help index</a>
+      <a href="/swagger/index.html">API documentation</a>
+      <a href="/signin">Sign in</a>
+    </nav>
+  </header>
+  <main class="help-main markdown">
+    {{.Body}}
+  </main>
+</div>
+
+<script src="/assets/ui.js"></script>
+<script>
+  (function () {
+    var host = document.getElementById('theme-toggle-host');
+    if (host) {
+      host.innerHTML = GG.toggle_switch.html({ id: 'theme-toggle', ariaLabel: 'Toggle light theme' });
+      GG.theme.initToggle('theme-toggle');
+    }
+  })();
+</script>
+</body>
+</html>

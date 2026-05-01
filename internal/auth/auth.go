@@ -197,6 +197,18 @@ func requestUsesBasic(r *http.Request) bool {
 	return len(parts) == 2 && strings.EqualFold(parts[0], "Basic")
 }
 
+// wantsHTML reports whether the request looks like a browser
+// navigation that should land on a page rather than receive a 401
+// text body. Browsers send Accept: text/html,... on top-level GETs;
+// fetch()/curl/git default to */* or application/json so they keep
+// the original 401 path and the JS guard layer keeps working.
+func wantsHTML(r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+	return strings.Contains(r.Header.Get("Accept"), "text/html")
+}
+
 // isPublic reports whether the request path is marked public.
 func (p *Provider) isPublic(urlPath string) bool {
 	for _, pp := range p.publicExact {
@@ -263,6 +275,15 @@ func (p *Provider) Middleware(next http.Handler) http.Handler {
 
 		id, err := p.Authenticate(r)
 		if err != nil {
+			// Browser navigations bounce to the public landing page
+			// instead of rendering a bare "unauthorized" body in the
+			// address bar — dead-end UX with no path back to sign-in.
+			// API callers (Accept: */* or application/json) still get
+			// 401 so the admin SPA's guardSession() keeps working.
+			if wantsHTML(r) {
+				http.Redirect(w, r, "/", http.StatusFound)
+				return
+			}
 			// Challenge advertises whichever scheme the caller would be
 			// able to retry with on this path. /git/* gets Basic (which
 			// is what git-the-binary understands); everything else gets

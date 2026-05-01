@@ -90,6 +90,50 @@ func TestMiddlewareEnabledRejectsUnauthenticated(t *testing.T) {
 	}
 }
 
+// Browser navigations to a protected admin page used to render a bare
+// "unauthorized" body — dead-end UX with no path back to sign-in. The
+// middleware now bounces text/html GETs to the public landing page.
+// API callers (no text/html in Accept) keep the original 401 so the
+// admin SPA's guardSession() path is unchanged.
+func TestMiddlewareHTMLNavigationRedirectsToRoot(t *testing.T) {
+	p := NewProvider()
+	p.SetEnabled(true)
+
+	handler := p.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("inner handler should not have been called")
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/repositories", nil)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Errorf("expected 302, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/" {
+		t.Errorf("expected Location: /, got %q", loc)
+	}
+}
+
+func TestMiddlewareAPICallStillGets401(t *testing.T) {
+	p := NewProvider()
+	p.SetEnabled(true)
+
+	handler := p.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("inner handler should not have been called")
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/repos", nil)
+	req.Header.Set("Accept", "application/json, */*")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", rec.Code)
+	}
+}
+
 func TestMiddlewareEnabledAllowsAuthenticated(t *testing.T) {
 	p := NewProvider()
 	p.SetEnabled(true)

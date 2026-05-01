@@ -7,11 +7,16 @@ import (
 	"net/http"
 )
 
-// handleAdminPage serves the /admin login card. No session check here —
-// if a session already exists, login.js in the browser bounces the
-// caller to /admin/repositories on boot.
+// handleAdminPage serves the login card. No session check here — if a
+// session already exists, login.js in the browser bounces the caller
+// to /admin/repositories on boot. Reachable at both /admin (historical
+// URL, kept for OAuth callbacks, bookmarks, and the dozens of internal
+// references in login.js + tests + README) and /signin (the friendlier
+// public-facing URL the landing page links to).
 func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/admin" && r.URL.Path != "/admin/" {
+	switch r.URL.Path {
+	case "/admin", "/admin/", "/signin", "/signin/":
+	default:
 		http.NotFound(w, r)
 		return
 	}
@@ -111,7 +116,7 @@ func (s *Server) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
 </head>
 <body>
 <div class="login-wrap card">
-  <img class="logo" src="/assets/gigot.png" alt="GiGot">
+  <a href="/" class="logo-link" aria-label="GiGot home"><img class="logo" src="/assets/gigot.png" alt="GiGot"></a>
   <div class="brand-name">GiGot%s</div>
   <div class="brand-tag">Registration disabled</div>
   <p class="muted">This server doesn't accept self-service registration. Ask an administrator to create an account for you, or sign in with a configured identity provider.</p>
