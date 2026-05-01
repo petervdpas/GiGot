@@ -113,16 +113,23 @@
     return card;
   }
 
-  // labelForSubscription resolves the token's stored username to an
-  // account's display name + email when possible — OAuth `sub`
-  // identifiers are opaque 40-char strings, so "Peter van de Pas"
-  // beats "microsoft:aaaa…6waw" in a chip; the email tail
-  // disambiguates two accounts that happen to share a display name.
-  // Returns pre-escaped HTML; falls back to the escaped raw username
-  // for legacy tokens whose account was deleted or never created.
+  // labelForSubscription returns the chip's visible text: the canonical
+  // provider:identifier ("github:peter.vdpas@protonmail.com"). That's
+  // the disambiguator an admin scans for — display names collide
+  // across an org but the scoped identifier is unique. The full
+  // human name moves into the tooltip (see chipTitle below).
   function labelForSubscription(t) {
     const acc = Admin.resolveAccount(t.username, accountsCache);
-    return acc ? Admin.accountLabelHTML(acc) : escapeHtml(t.username);
+    if (acc) return escapeHtml(acc.provider + ':' + acc.identifier);
+    return escapeHtml(t.username);
+  }
+
+  // chipTitle is the hover tooltip for a subscription chip — the
+  // resolved account's full display name. Falls back to the scoped
+  // username when the account row was deleted (legacy tokens).
+  function chipTitle(t) {
+    const acc = Admin.resolveAccount(t.username, accountsCache);
+    return acc ? Admin.accountLabel(acc) : t.username;
   }
 
   function renderSubscriptionsSection(container, repoName) {
@@ -151,10 +158,11 @@
         ? '<div class="muted ic-section-empty">No subscription keys grant access to this repo.</div>'
         : '<div class="sub-chips">' +
             subs.map(s => {
-              // labelForSubscription returns pre-escaped HTML (name +
-              // muted email) so the chip can disambiguate two
-              // identically-named accounts at a glance.
-              return '<span class="sub-chip" title="' + escapeHtml(s.username) + '">' +
+              // Chip face is just the display name; the tooltip
+              // carries name + provider:identifier so the
+              // disambiguator (which provider account this is) is
+              // one hover away without crowding the chip.
+              return '<span class="sub-chip" title="' + escapeHtml(chipTitle(s)) + '">' +
                 labelForSubscription(s) + '</span>';
             }).join('') +
           '</div>') +

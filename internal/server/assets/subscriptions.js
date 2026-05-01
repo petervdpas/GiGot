@@ -5,7 +5,7 @@
 
 (function () {
   const Admin = window.Admin;
-  const { api, escapeHtml, initSidebar, guardSession, copyToClipboard } = Admin;
+  const { api, escapeHtml, initSidebar, guardSession, copyToClipboard, accountLabel } = Admin;
 
   let repoInfoCache = [];
   let tokensCache = [];
@@ -177,15 +177,18 @@
   // so changes to that visual stay in one place.
   function renderTokenCard(t) {
     const resolved = resolveAccountForToken(t.username);
-    // titleHTML carries the display name + (when set) a muted email
-    // suffix so two accounts that share a display name are visually
-    // distinguishable on the cards. Falls back to plain title when
-    // we can't resolve to an account row.
+    // Title is just the display name — the provider:identifier
+    // subtitle below already carries the email-shaped identifier in
+    // full, so duplicating it as a muted suffix here is noise.
     const titleHTML = resolved
-      ? Admin.accountLabelHTML(resolved)
+      ? escapeHtml(accountLabel(resolved))
       : escapeHtml(t.username);
+    // Subtitle shows provider:identifier in full. The card header has
+    // room for it, and clipping the email-form identifiers behind an
+    // ellipsis hid the disambiguator (which provider account this key
+    // belongs to) — exactly the thing admins scan for.
     const subtitle = resolved
-      ? '<code class="acct-identifier" title="' + escapeHtml(t.username) + '">' +
+      ? '<code class="acct-identifier-full" title="' + escapeHtml(t.username) + '">' +
           escapeHtml(resolved.provider) + ':' + escapeHtml(resolved.identifier) + '</code>'
       : null;
     const leftChips = t.has_account ? null :

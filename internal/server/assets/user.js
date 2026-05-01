@@ -138,8 +138,17 @@
     }
     empty.classList.add('hidden');
     for (const t of subs) {
-      const title = t.repo || 'Subscription key';
-      const card = renderTokenCard(t, { title });
+      const repo = t.repo || 'Subscription key';
+      // A user can hold accounts on multiple providers (github + microsoft,
+      // etc.); show provider:identifier in small print after the repo name
+      // so they can tell which account a key was issued to without
+      // expanding the card. Falls back to plain repo when the token has
+      // no scoped username (legacy / unbound shouldn't happen here, but
+      // the empty state stays clean if it does).
+      const titleHTML = t.username
+        ? escapeHtml(repo) + ' <span class="muted sub-card-acct">' + escapeHtml(t.username) + '</span>'
+        : escapeHtml(repo);
+      const card = renderTokenCard(t, { title: repo, titleHTML });
       augmentCardForFormidable(card, t);
       wrapCardAsCollapsible(card, t);
       grid.appendChild(card);

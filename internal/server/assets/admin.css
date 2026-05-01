@@ -92,6 +92,15 @@ code {
   vertical-align: bottom;
 }
 
+/* Variant used on the subscription-key cards, where the header
+ * row has plenty of horizontal room and the provider:identifier
+ * subtitle is the disambiguator the admin scans for. No clamp —
+ * wrap inside the cell on narrow viewports rather than hiding
+ * the email behind an ellipsis. */
+.acct-identifier-full {
+  word-break: break-all;
+}
+
 /* --- row_menu (kebab action menu) ------------------------------ */
 /* Wrapper owns the relative positioning so the popup anchors to
  * the trigger. `.open` toggles popup visibility — js keeps only
@@ -543,6 +552,17 @@ a:hover { text-decoration: underline; }
   word-break: break-all;
 }
 .sub-chip .acct-email { font-size: 0.85em; }
+
+/* /user "My subscriptions" card titles: small-print provider:identifier
+ * tail after the repo name, so a user with accounts on multiple
+ * providers can tell which account a key was issued to without
+ * expanding the card. Same proportions as .acct-email. */
+.sub-card-acct {
+  font-size: 0.78em;
+  font-weight: 400;
+  margin-left: 0.4em;
+  word-break: break-all;
+}
 
 /* A badge rendered as a <button> stays visually identical to the <span>
  * form but gains a cursor + hover cue so the operator knows it's a
