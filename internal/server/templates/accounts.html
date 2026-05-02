@@ -7,6 +7,7 @@
 <meta name="gigot-version" content="{{.Version}}">
 <link rel="stylesheet" href="/assets/admin.css">
 <link rel="stylesheet" href="/assets/tags.css">
+<link rel="stylesheet" href="/assets/drawer.css">
 <script>
   try {
     var t = localStorage.getItem('gigot.theme');
@@ -21,24 +22,9 @@
     <aside id="admin-sidebar"></aside>
     <main class="main">
       <div class="panel active">
-        <div class="page-header">
+        <div class="page-header with-add">
           <h1>Accounts <span class="muted">(<span id="acct-count">0</span>)</span></h1>
-        </div>
-        <div class="card">
-          <h2>Create account</h2>
-          <form id="acct-form" class="row">
-            <input name="identifier" placeholder="Identifier (username, github login, oid…)" required>
-            <input name="display_name" placeholder="Display name (optional)">
-            <span id="provider-host"></span>
-            <span id="role-host"></span>
-            <input name="password" type="password" placeholder="Password (local only, optional)" autocomplete="new-password">
-            <button type="submit">Create</button>
-          </form>
-          <div class="muted create-repo-hint">
-            Regular accounts are the binding target for subscription keys.
-            Local accounts with no password are dormant until one is set.
-          </div>
-          <div id="acct-msg" class="muted"></div>
+          <button class="btn-add" data-drawer-open="create-account" aria-label="Create account" title="Create account">+</button>
         </div>
         <div class="card" id="tag-filter-card">
           <h2>Filter by tag</h2>
@@ -58,10 +44,19 @@
   </div>
 </div>
 
+<aside class="drawer" data-drawer-name="create-account">
+  <div class="drawer-head">
+    <h2>Create account</h2>
+    <button type="button" class="drawer-close" aria-label="Close">×</button>
+  </div>
+  <div class="drawer-body" data-lazy-tpl="create-account" data-lazy-trigger="manual"></div>
+</aside>
+
 <script src="/assets/ui.js"></script>
 <script src="/assets/dialogs.js"></script>
 <script src="/assets/admin_common.js"></script>
 <script src="/assets/lazy.js"></script>
+<script src="/assets/drawer.js"></script>
 <script src="/assets/tag_picker.js"></script>
 <script src="/assets/tag_filter.js"></script>
 <script src="/assets/accounts.js"></script>

@@ -1,0 +1,30 @@
+<div class="drawer-form-info">
+  Regular accounts are the binding target for subscription keys.
+  Local accounts with no password are dormant until one is set.
+</div>
+<form id="acct-form" class="drawer-form">
+  <label>
+    <span class="field-label">Identifier</span>
+    <input name="identifier" placeholder="username, github login, oid…" required>
+  </label>
+  <label>
+    <span class="field-label">Display name</span>
+    <input name="display_name" placeholder="e.g. Peter van de Pas">
+  </label>
+  <label>
+    <span class="field-label">Provider</span>
+    <span id="provider-host"></span>
+  </label>
+  <label>
+    <span class="field-label">Role</span>
+    <span id="role-host"></span>
+  </label>
+  <label>
+    <span class="field-label">Password</span>
+    <input name="password" type="password" placeholder="local only, optional" autocomplete="new-password">
+  </label>
+  <div id="acct-msg" class="muted"></div>
+  <div class="drawer-form-actions">
+    <button type="submit">Create</button>
+  </div>
+</form>

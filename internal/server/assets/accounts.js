@@ -240,6 +240,74 @@
     return frag;
   }
 
+  // wireCreateAccountForm runs every time the drawer's lazy body
+  // re-renders. Re-mounts the Provider / Role pickers in their
+  // hosts (GG.select needs to be initialized after the markup
+  // exists) and binds the form's submit handler. On success:
+  // refresh the page list, close the drawer, surface a success
+  // message in the empty form ready for the next entry.
+  function wireCreateAccountForm(host) {
+    const providerHost = host.querySelector('#provider-host');
+    if (providerHost) {
+      providerHost.innerHTML = GG.select.html({
+        name: 'provider',
+        value: 'local',
+        options: [
+          { value: 'local',     label: 'local' },
+          { value: 'github',    label: 'github' },
+          { value: 'entra',     label: 'entra' },
+          { value: 'microsoft', label: 'microsoft' },
+          { value: 'gateway',   label: 'gateway' },
+        ],
+      });
+      GG.select.initAll(providerHost);
+    }
+    const roleHost = host.querySelector('#role-host');
+    if (roleHost) {
+      roleHost.innerHTML = GG.select.html({
+        name: 'role',
+        value: 'regular',
+        options: [
+          { value: 'regular',    label: 'regular' },
+          { value: 'maintainer', label: 'maintainer' },
+          { value: 'admin',      label: 'admin' },
+        ],
+      });
+      GG.select.initAll(roleHost);
+    }
+
+    const form = host.querySelector('#acct-form');
+    if (!form) return;
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const f = e.target;
+      const msg = host.querySelector('#acct-msg');
+      msg.textContent = '';
+      msg.className = 'muted';
+      const body = {
+        provider: f.provider.value,
+        identifier: f.identifier.value.trim(),
+        role: f.role.value,
+      };
+      const display = f.display_name.value.trim();
+      if (display) body.display_name = display;
+      const pw = f.password.value;
+      if (pw && body.provider === 'local') body.password = pw;
+
+      try {
+        await api.createAccount(body);
+        // Refresh the page list, close the drawer. The drawer's
+        // next open will re-render the fragment fresh (empty
+        // fields, ready for the next entry).
+        await refresh();
+        GG.drawer.close();
+      } catch (ex) {
+        msg.textContent = ex.message;
+        msg.className = 'error';
+      }
+    });
+  }
+
   (async function boot() {
     const who = await guardSession();
     if (!who) return;
@@ -260,66 +328,23 @@
       },
     });
 
-    // Render the Provider + Role dropdowns with the shared .gsel chrome
-    // so they match the Kind dropdown on the credentials page. The
-    // hidden <input name=...> the component creates means the form's
-    // submit handler keeps reading f.provider.value / f.role.value.
-    const providerHost = document.getElementById('provider-host');
-    if (providerHost) {
-      providerHost.innerHTML = GG.select.html({
-        name: 'provider',
-        value: 'local',
-        options: [
-          { value: 'local',     label: 'local' },
-          { value: 'github',    label: 'github' },
-          { value: 'entra',     label: 'entra' },
-          { value: 'microsoft', label: 'microsoft' },
-          { value: 'gateway',   label: 'gateway' },
-        ],
+    // Bind the create-account drawer body to its fragment. Pickers
+    // (Provider / Role) need imperative initialization after every
+    // render, plus the form's submit handler — onRendered is where
+    // both happen so the drawer is fully wired by the time it
+    // slides in.
+    //
+    // getData is a no-op (the form has no per-render data yet); a
+    // future "edit account" drawer reusing the same pattern would
+    // pass the account row through here.
+    const drawerBody = document.querySelector('.drawer[data-drawer-name="create-account"] .drawer-body');
+    if (drawerBody) {
+      GG.lazy.bind(drawerBody, {
+        getData: () => ({}),
+        onRendered: host => wireCreateAccountForm(host),
       });
-      GG.select.initAll(providerHost);
     }
-    const roleHost = document.getElementById('role-host');
-    if (roleHost) {
-      roleHost.innerHTML = GG.select.html({
-        name: 'role',
-        value: 'regular',
-        options: [
-          { value: 'regular',    label: 'regular' },
-          { value: 'maintainer', label: 'maintainer' },
-          { value: 'admin',      label: 'admin' },
-        ],
-      });
-      GG.select.initAll(roleHost);
-    }
-
-    document.getElementById('acct-form').addEventListener('submit', async e => {
-      e.preventDefault();
-      const f = e.target;
-      const msg = document.getElementById('acct-msg');
-      msg.textContent = '';
-      msg.className = 'muted';
-      const body = {
-        provider: f.provider.value,
-        identifier: f.identifier.value.trim(),
-        role: f.role.value,
-      };
-      const display = f.display_name.value.trim();
-      if (display) body.display_name = display;
-      const pw = f.password.value;
-      if (pw && body.provider === 'local') body.password = pw;
-
-      try {
-        await api.createAccount(body);
-        msg.textContent = 'Account created.';
-        msg.className = 'success';
-        f.reset();
-        refresh();
-      } catch (ex) {
-        msg.textContent = ex.message;
-        msg.className = 'error';
-      }
-    });
+    GG.drawer.attachAll();
 
     await refresh();
   })();
