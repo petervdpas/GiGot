@@ -52,6 +52,12 @@ func (s *Server) handleCredentialsPage(w http.ResponseWriter, r *http.Request) {
 	s.adminPageHandler(credentialsPageTmpl, "/admin/credentials", "/admin/credentials/")(w, r)
 }
 
+// handleTagsPage serves the /admin/tags catalogue page. Same
+// static-shell-plus-JS pattern as the other admin pages.
+func (s *Server) handleTagsPage(w http.ResponseWriter, r *http.Request) {
+	s.adminPageHandler(tagsPageTmpl, "/admin/tags", "/admin/tags/")(w, r)
+}
+
 // handleAccountsPage serves the admin accounts console. Same shape as
 // the other admin pages — static HTML shell, session-guarded in JS.
 func (s *Server) handleAccountsPage(w http.ResponseWriter, r *http.Request) {

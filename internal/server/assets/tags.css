@@ -1,0 +1,30 @@
+/* /admin/tags page-specific styles. Pills + usage chips that the
+   Existing tags table renders. Reuses the global theme variables
+   (--chip, --line, --accent-bg, --muted) so the look stays in
+   lock-step with admin.css under either theme.
+
+   Slice 1 only renders the catalogue. Slice 2 will reuse .tag-pill
+   on repo + subscription + account detail pages, with extra
+   modifier classes for inherited-vs-explicit display. */
+
+.tag-pill {
+  display: inline-block;
+  background: var(--chip);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 0.85rem;
+  font-family: ui-monospace, monospace;
+  color: var(--text);
+}
+
+.tag-usage-pill {
+  display: inline-block;
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 1px solid var(--accent-line, transparent);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}

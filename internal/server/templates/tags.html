@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GiGot{{if .Version}} {{.Version}}{{end}} Admin - Tags</title>
+<meta name="gigot-version" content="{{.Version}}">
+<link rel="stylesheet" href="/assets/admin.css">
+<link rel="stylesheet" href="/assets/tags.css">
+<script>
+  /* Apply stored theme before the body paints to avoid a flash on page
+     load. Identical block on every admin page. */
+  try {
+    var t = localStorage.getItem('gigot.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) { /* private-mode / disabled storage → stay on default dark */ }
+</script>
+</head>
+<body>
+
+<div id="app">
+  <div class="shell">
+    <aside id="admin-sidebar"></aside>
+    <main class="main">
+      <div class="panel active">
+        <div class="page-header">
+          <h1>Tags <span class="muted">(<span id="tag-count">0</span>)</span></h1>
+        </div>
+        <div class="card">
+          <h2>Add tag</h2>
+          <form id="tag-form" class="row">
+            <input name="name" placeholder="Name (e.g. team:marketing)" required>
+            <button type="submit">Add</button>
+          </form>
+          <div class="muted create-repo-hint">
+            Tags are organisational labels — they do not grant or revoke access.
+            Use the <code>prefix:value</code> shape (<code>team:marketing</code>, <code>env:prod</code>,
+            <code>contractor:acme</code>) so the subscription-list filter can group chips by category.
+            Names are case-insensitive unique; the first creator's casing wins for display.
+          </div>
+          <div id="tag-msg" class="muted"></div>
+        </div>
+        <div class="card">
+          <h2>Existing tags</h2>
+          <table class="responsive-table">
+            <thead><tr><th>Name</th><th>Repos</th><th>Subs</th><th>Accounts</th><th>Created</th><th>By</th><th></th></tr></thead>
+            <tbody id="tag-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="/assets/ui.js"></script>
+<script src="/assets/dialogs.js"></script>
+<script src="/assets/admin_common.js"></script>
+<script src="/assets/tags.js"></script>
+</body>
+</html>

@@ -396,6 +396,11 @@ definitions:
         example: https://github.com/owner/repo.git
         type: string
     type: object
+  server.CreateTagRequest:
+    properties:
+      name:
+        type: string
+    type: object
   server.CredentialListResponse:
     properties:
       count:
@@ -588,6 +593,11 @@ definitions:
       username:
         type: string
     type: object
+  server.RenameTagRequest:
+    properties:
+      name:
+        type: string
+    type: object
   server.RepoInfo:
     properties:
       commits:
@@ -662,6 +672,44 @@ definitions:
       public_key:
         example: base64-encoded-32-byte-key
         type: string
+    type: object
+  server.TagDeleteResponse:
+    properties:
+      deleted:
+        $ref: '#/definitions/server.TagView'
+      swept:
+        $ref: '#/definitions/server.TagUsage'
+    type: object
+  server.TagListResponse:
+    properties:
+      count:
+        type: integer
+      tags:
+        items:
+          $ref: '#/definitions/server.TagView'
+        type: array
+    type: object
+  server.TagUsage:
+    properties:
+      accounts:
+        type: integer
+      repos:
+        type: integer
+      subscriptions:
+        type: integer
+    type: object
+  server.TagView:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      usage:
+        $ref: '#/definitions/server.TagUsage'
     type: object
   server.TokenListItem:
     properties:
@@ -1748,6 +1796,192 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       summary: Current admin session
+      tags:
+      - admin
+  /admin/tags:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        GET lists every tag with direct usage counts; POST
+        creates a new tag. Names are case-insensitive unique.
+        Session-cookie authenticated.
+      parameters:
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateTagRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET response
+          schema:
+            $ref: '#/definitions/server.TagListResponse'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.TagView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Name already exists
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage the tag catalogue (admin only)
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      description: |-
+        GET lists every tag with direct usage counts; POST
+        creates a new tag. Names are case-insensitive unique.
+        Session-cookie authenticated.
+      parameters:
+      - description: Create body (POST)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.CreateTagRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET response
+          schema:
+            $ref: '#/definitions/server.TagListResponse'
+        "201":
+          description: POST response
+          schema:
+            $ref: '#/definitions/server.TagView'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Name already exists
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage the tag catalogue (admin only)
+      tags:
+      - admin
+  /admin/tags/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: |-
+        PATCH renames the tag (case-insensitive unique). DELETE
+        cascades through every assignment join — repo, subscription,
+        and account — and returns the per-set sweep counts.
+        Session-cookie authenticated.
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.RenameTagRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: DELETE response
+          schema:
+            $ref: '#/definitions/server.TagDeleteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Rename collides with another tag
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage one tag by ID (admin only)
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        PATCH renames the tag (case-insensitive unique). DELETE
+        cascades through every assignment join — repo, subscription,
+        and account — and returns the per-set sweep counts.
+        Session-cookie authenticated.
+      parameters:
+      - description: Tag ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Patch body (PATCH)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.RenameTagRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: DELETE response
+          schema:
+            $ref: '#/definitions/server.TagDeleteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Rename collides with another tag
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage one tag by ID (admin only)
       tags:
       - admin
   /admin/tokens:

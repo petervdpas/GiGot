@@ -382,21 +382,38 @@ with a few edge cases worth pinning:
 
 ## 7.1 Audit trail — every action
 
-Every tag-related admin action emits an event onto `refs/audit/main`.
-That covers both lifecycle (catalogue) actions and per-assignment
-churn:
+Every tag-related admin action emits an audit event. The destination
+depends on whether the event has a clear repo target:
 
-| Event type                    | Fired by                                                  |
-| ----------------------------- | --------------------------------------------------------- |
-| `tag.created`                 | `POST /api/admin/tags`                                    |
-| `tag.renamed`                 | `PATCH /api/admin/tags/{name}` — payload carries old + new |
-| `tag.deleted`                 | `DELETE /api/admin/tags/{name}` — payload carries swept counts (repos/subs/accounts) |
-| `tag.assigned.repo`           | `POST /api/admin/repos/{name}/tags/{tag}` (and via PUT diff) |
-| `tag.unassigned.repo`         | `DELETE /api/admin/repos/{name}/tags/{tag}` (and via PUT diff) |
-| `tag.assigned.subscription`   | `POST /api/admin/subscriptions/{id}/tags/{tag}` (and via PUT diff) |
-| `tag.unassigned.subscription` | `DELETE /api/admin/subscriptions/{id}/tags/{tag}` (and via PUT diff) |
-| `tag.assigned.account`        | `POST /api/admin/accounts/{id}/tags/{tag}` (and via PUT diff) |
-| `tag.unassigned.account`      | `DELETE /api/admin/accounts/{id}/tags/{tag}` (and via PUT diff) |
+- **Per-repo events** (anything that changes the tag set on a specific
+  repo or on a subscription against a specific repo) ride on that
+  repo's existing `refs/audit/main` chain — the same audit ref already
+  used for repo lifecycle, mirror events, etc.
+- **System-wide events** (anything that doesn't belong to one repo —
+  catalogue lifecycle and account-level assignments, since accounts
+  span repos) land in a new sealed system audit log:
+  `data/audit_system.enc`. Same NaCl-box sealing as the other stores;
+  rewrapped by `-rotate-keys` alongside the rest. Append-only writes,
+  read via a new admin endpoint `/api/admin/audit/system`.
+
+This split keeps repo-bound events forensically tied to their repo
+(so a `git fetch refs/audit/main` still tells the whole repo story),
+while server-wide events have a single destination instead of being
+fanned out noisily to every repo.
+
+Event-type table with destinations:
+
+| Event type                    | Destination                                  | Fired by |
+| ----------------------------- | -------------------------------------------- | -------- |
+| `tag.created`                 | `audit_system.enc`                           | `POST /api/admin/tags` |
+| `tag.renamed`                 | `audit_system.enc` — payload: old + new      | `PATCH /api/admin/tags/{name}` |
+| `tag.deleted`                 | `audit_system.enc` — payload: swept counts (repos/subs/accounts) | `DELETE /api/admin/tags/{name}` |
+| `tag.assigned.repo`           | repo's `refs/audit/main`                     | `POST /api/admin/repos/{name}/tags/{tag}` (and via PUT diff) |
+| `tag.unassigned.repo`         | repo's `refs/audit/main`                     | `DELETE /api/admin/repos/{name}/tags/{tag}` (and via PUT diff) |
+| `tag.assigned.subscription`   | sub's repo's `refs/audit/main`               | `POST /api/admin/subscriptions/{id}/tags/{tag}` (and via PUT diff) |
+| `tag.unassigned.subscription` | sub's repo's `refs/audit/main`               | `DELETE /api/admin/subscriptions/{id}/tags/{tag}` (and via PUT diff) |
+| `tag.assigned.account`        | `audit_system.enc`                           | `POST /api/admin/accounts/{id}/tags/{tag}` (and via PUT diff) |
+| `tag.unassigned.account`      | `audit_system.enc`                           | `DELETE /api/admin/accounts/{id}/tags/{tag}` (and via PUT diff) |
 
 PUT (replace-the-set) emits one event per actually-changed assignment,
 not one per call — diffing the new set against the existing one keeps

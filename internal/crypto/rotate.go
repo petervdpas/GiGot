@@ -137,10 +137,12 @@ func DefaultSealedFiles(dataDir string) []string {
 	return []string{
 		filepath.Join(dataDir, "accounts.enc"),
 		filepath.Join(dataDir, "admins.enc"), // legacy; left in place as a backup after migration, but still rewrapped so a rotate-while-stale stays recoverable
+		filepath.Join(dataDir, "audit_system.enc"),
 		filepath.Join(dataDir, "clients.enc"),
 		filepath.Join(dataDir, "credentials.enc"),
 		filepath.Join(dataDir, "destinations.enc"),
 		filepath.Join(dataDir, "sessions.enc"),
+		filepath.Join(dataDir, "tags.enc"),
 		filepath.Join(dataDir, "tokens.enc"),
 	}
 }

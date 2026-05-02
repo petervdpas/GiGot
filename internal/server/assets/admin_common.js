@@ -175,6 +175,38 @@
       if (Array.isArray(body.ref_repos)) err.refRepos = body.ref_repos;
       throw err;
     },
+    async listTags() {
+      const r = await fetch('/api/admin/tags', { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('list tags failed');
+      return r.json();
+    },
+    async createTag(name) {
+      const r = await fetch('/api/admin/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'create failed');
+      return r.json();
+    },
+    async renameTag(id, name) {
+      const r = await fetch('/api/admin/tags/' + encodeURIComponent(id), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'rename failed');
+      return r.json();
+    },
+    async deleteTag(id) {
+      const r = await fetch('/api/admin/tags/' + encodeURIComponent(id), {
+        method: 'DELETE', credentials: 'same-origin',
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'delete failed');
+      return r.json();
+    },
     async listAccounts() {
       const r = await fetch('/api/admin/accounts', { credentials: 'same-origin' });
       if (!r.ok) throw new Error('list accounts failed');
@@ -458,6 +490,7 @@
     { key: 'repositories',  label: 'Repositories',      href: '/admin/repositories',  adminOnly: true },
     { key: 'subscriptions', label: 'Subscription keys', href: '/admin/subscriptions', adminOnly: true },
     { key: 'credentials',   label: 'Credentials',       href: '/admin/credentials',   adminOnly: true },
+    { key: 'tags',          label: 'Tags',              href: '/admin/tags',          adminOnly: true },
     { key: 'accounts',      label: 'Accounts',          href: '/admin/accounts',      adminOnly: true },
     { key: 'auth',          label: 'Authentication',    href: '/admin/auth',          adminOnly: true },
   ];

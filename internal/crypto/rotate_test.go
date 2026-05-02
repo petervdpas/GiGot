@@ -144,10 +144,12 @@ func TestDefaultSealedFiles(t *testing.T) {
 	want := []string{
 		"/var/lib/gigot/data/accounts.enc",
 		"/var/lib/gigot/data/admins.enc",
+		"/var/lib/gigot/data/audit_system.enc",
 		"/var/lib/gigot/data/clients.enc",
 		"/var/lib/gigot/data/credentials.enc",
 		"/var/lib/gigot/data/destinations.enc",
 		"/var/lib/gigot/data/sessions.enc",
+		"/var/lib/gigot/data/tags.enc",
 		"/var/lib/gigot/data/tokens.enc",
 	}
 	if len(got) != len(want) {

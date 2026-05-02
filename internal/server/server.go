@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 
 	"github.com/petervdpas/GiGot/internal/accounts"
+	"github.com/petervdpas/GiGot/internal/audit"
 	"github.com/petervdpas/GiGot/internal/auth"
 	"github.com/petervdpas/GiGot/internal/auth/oauth"
 	"github.com/petervdpas/GiGot/internal/clients"
@@ -25,6 +26,7 @@ import (
 	"github.com/petervdpas/GiGot/internal/destinations"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
 	"github.com/petervdpas/GiGot/internal/policy"
+	"github.com/petervdpas/GiGot/internal/tags"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 
@@ -44,6 +46,8 @@ type Server struct {
 	accounts        *accounts.Store
 	credentials     *credentials.Store
 	destinations    *destinations.Store
+	tags            *tags.Store
+	systemAudit     *audit.SystemLog
 	policy          policy.Evaluator
 	mux             *http.ServeMux
 
@@ -114,6 +118,8 @@ func New(cfg *config.Config) *Server {
 	ap.MarkPublic("/api/admin/providers")  // enabled OAuth providers, public to the login page
 	ap.MarkPublic("/admin/credentials")
 	ap.MarkPublic("/admin/credentials/")
+	ap.MarkPublic("/admin/tags")
+	ap.MarkPublic("/admin/tags/")
 	ap.MarkPublic("/admin/accounts")
 	ap.MarkPublic("/admin/accounts/")
 	ap.MarkPublic("/admin/auth")
@@ -178,6 +184,16 @@ func New(cfg *config.Config) *Server {
 		log.Fatalf("server: open destination store: %v", err)
 	}
 
+	tagStore, err := tags.Open(filepath.Join(cfg.Crypto.DataDir, "tags.enc"), enc)
+	if err != nil {
+		log.Fatalf("server: open tag store: %v", err)
+	}
+
+	systemAudit, err := audit.Open(filepath.Join(cfg.Crypto.DataDir, "audit_system.enc"), enc)
+	if err != nil {
+		log.Fatalf("server: open system audit log: %v", err)
+	}
+
 	session := auth.NewSessionStrategy(12 * time.Hour)
 	sessionStore, err := auth.NewSealedSessionStore(filepath.Join(cfg.Crypto.DataDir, "sessions.enc"), enc)
 	if err != nil {
@@ -235,6 +251,8 @@ func New(cfg *config.Config) *Server {
 		accounts:        accountStore,
 		credentials:     credentialStore,
 		destinations:    destinationStore,
+		tags:            tagStore,
+		systemAudit:     systemAudit,
 		policy:          policy.TokenRepoPolicy{},
 		mux:             http.NewServeMux(),
 		pushDest:        executeMirrorPush,
@@ -577,6 +595,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/admin/subscriptions/", s.adminPageHandler(subscriptionsTmpl, "/admin/subscriptions", "/admin/subscriptions/"))
 	s.mux.HandleFunc("/admin/credentials", s.handleCredentialsPage)
 	s.mux.HandleFunc("/admin/credentials/", s.handleCredentialsPage)
+	s.mux.HandleFunc("/admin/tags", s.handleTagsPage)
+	s.mux.HandleFunc("/admin/tags/", s.handleTagsPage)
 	s.mux.HandleFunc("/admin/accounts", s.handleAccountsPage)
 	s.mux.HandleFunc("/admin/accounts/", s.handleAccountsPage)
 	s.mux.HandleFunc("/admin/auth", s.handleAuthPage)
@@ -593,6 +613,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/admin/tokens/bind", s.handleAdminBindToken)
 	s.mux.HandleFunc("/api/admin/credentials", s.handleAdminCredentials)
 	s.mux.HandleFunc("/api/admin/credentials/", s.handleAdminCredential)
+	s.mux.HandleFunc("/api/admin/tags", s.handleAdminTags)
+	s.mux.HandleFunc("/api/admin/tags/", s.handleAdminTag)
 	s.mux.HandleFunc("/api/admin/accounts", s.handleAdminAccounts)
 	s.mux.HandleFunc("/api/admin/accounts/", s.handleAdminAccount)
 	s.mux.HandleFunc("/api/admin/auth", s.handleAdminAuth)

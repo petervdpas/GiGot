@@ -61,6 +61,28 @@ is schema-aware publishing (records → Azure DevOps wiki, Confluence,
 etc.) which explicitly belongs in Formidable's WikiWonder plugin, not
 here. The items below do not overlap with Track B.
 
+Open work:
+
+- [ ] **Tags — slice 1 (design:
+      [`tags.md`](docs/design/tags.md) §3, §6.1, §10).**
+      Storage scaffold for the four-table tag model: `tags` catalogue
+      plus `repo_tags` / `subscription_tags` / `account_tags`
+      assignment sets in a single sealed `data/tags.enc`.
+      `internal/tags` package with Open/Put/Get/All/Rename/Remove
+      and the four `*_tags` join helpers (write paths only used by
+      the catalogue endpoints in this slice — assignment endpoints
+      land in slice 2). Catalogue API at `/api/admin/tags`
+      (GET/POST/PATCH/DELETE) with case-insensitive uniqueness +
+      cascade-delete-by-default per design §11. New admin sidebar
+      entry "Tags" + dedicated page (`/admin/tags`) listing the
+      catalogue with create / rename / delete forms; usage counts
+      per tag visible from day one. New system audit log
+      `data/audit_system.enc` (sealed, rewrapped by `-rotate-keys`
+      alongside the other `.enc` files) carrying tag.created /
+      tag.renamed / tag.deleted events per §7.1; repo-bound and
+      account-level assignment events come with slice 2. Swagger
+      annotations + unit + handler + Cucumber coverage.
+
 Done and shipping:
 
 - [x] **Docker image — slice 3 (design:

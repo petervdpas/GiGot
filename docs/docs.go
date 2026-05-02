@@ -1320,6 +1320,268 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/tags": {
+            "get": {
+                "description": "GET lists every tag with direct usage counts; POST\ncreates a new tag. Names are case-insensitive unique.\nSession-cookie authenticated.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage the tag catalogue (admin only)",
+                "parameters": [
+                    {
+                        "description": "Create body (POST)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateTagRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET response",
+                        "schema": {
+                            "$ref": "#/definitions/server.TagListResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "POST response",
+                        "schema": {
+                            "$ref": "#/definitions/server.TagView"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Name already exists",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "GET lists every tag with direct usage counts; POST\ncreates a new tag. Names are case-insensitive unique.\nSession-cookie authenticated.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage the tag catalogue (admin only)",
+                "parameters": [
+                    {
+                        "description": "Create body (POST)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.CreateTagRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET response",
+                        "schema": {
+                            "$ref": "#/definitions/server.TagListResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "POST response",
+                        "schema": {
+                            "$ref": "#/definitions/server.TagView"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Name already exists",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/tags/{id}": {
+            "delete": {
+                "description": "PATCH renames the tag (case-insensitive unique). DELETE\ncascades through every assignment join — repo, subscription,\nand account — and returns the per-set sweep counts.\nSession-cookie authenticated.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage one tag by ID (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tag ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Patch body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.RenameTagRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "DELETE response",
+                        "schema": {
+                            "$ref": "#/definitions/server.TagDeleteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Rename collides with another tag",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "PATCH renames the tag (case-insensitive unique). DELETE\ncascades through every assignment join — repo, subscription,\nand account — and returns the per-set sweep counts.\nSession-cookie authenticated.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage one tag by ID (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tag ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Patch body (PATCH)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.RenameTagRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "DELETE response",
+                        "schema": {
+                            "$ref": "#/definitions/server.TagDeleteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Rename collides with another tag",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/tokens": {
             "get": {
                 "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.",
@@ -4154,6 +4416,14 @@ const docTemplate = `{
                 }
             }
         },
+        "server.CreateTagRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "server.CredentialListResponse": {
             "type": "object",
             "properties": {
@@ -4418,6 +4688,14 @@ const docTemplate = `{
                 }
             }
         },
+        "server.RenameTagRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "server.RepoInfo": {
             "type": "object",
             "properties": {
@@ -4523,6 +4801,65 @@ const docTemplate = `{
                 "public_key": {
                     "type": "string",
                     "example": "base64-encoded-32-byte-key"
+                }
+            }
+        },
+        "server.TagDeleteResponse": {
+            "type": "object",
+            "properties": {
+                "deleted": {
+                    "$ref": "#/definitions/server.TagView"
+                },
+                "swept": {
+                    "$ref": "#/definitions/server.TagUsage"
+                }
+            }
+        },
+        "server.TagListResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.TagView"
+                    }
+                }
+            }
+        },
+        "server.TagUsage": {
+            "type": "object",
+            "properties": {
+                "accounts": {
+                    "type": "integer"
+                },
+                "repos": {
+                    "type": "integer"
+                },
+                "subscriptions": {
+                    "type": "integer"
+                }
+            }
+        },
+        "server.TagView": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "usage": {
+                    "$ref": "#/definitions/server.TagUsage"
                 }
             }
         },
