@@ -25,6 +25,13 @@
   // repo grid doesn't fold every section the user opened.
   const subsOpenState = Object.create(null);
 
+  // repoOpenState tracks each repo card's outer collapse state. The
+  // card itself is now a <details>; without persistence, every
+  // refreshRepos() (which rebuilds the grid) would slam every open
+  // card shut. Same shape as subsOpenState / destOpenState — keyed
+  // by repo name.
+  const repoOpenState = Object.create(null);
+
   function subscriptionsForRepo(name) {
     // Subscription keys bind to exactly one repo. The old multi-repo
     // shape is gone (§ one-repo-per-key migration), so this is a
@@ -32,75 +39,100 @@
     return tokensCache.filter(t => t.repo === name);
   }
 
+  // repoCardViewModel shapes the JSON the repo-card-body fragment
+  // renders against. Empty-state and conditional fields use the
+  // class-toggle trick (no {{#if}} in the template engine), e.g.
+  // an empty repo has no HEAD/branch so those rows hide via the
+  // *_hidden classes.
+  function repoCardViewModel(r) {
+    const canConvert = !r.has_formidable && !r.empty;
+    return {
+      commit_label:   r.commits === 1 ? 'commit' : 'commits',
+      commits:        r.commits,
+      head:           shortSha(r.head),
+      head_hidden:    r.empty ? 'hidden' : '',
+      branch:         r.default_branch || '',
+      branch_hidden:  (r.empty || !r.default_branch) ? 'hidden' : '',
+      convert_hidden: canConvert ? '' : 'hidden',
+    };
+  }
+
+  // renderRepoCard builds the outer <details> shell with the summary
+  // (title + badges) imperatively, and binds GG.lazy to render the
+  // body fragment on first open. The body contains stats + tags +
+  // subs collapse + dest collapse + actions; onRendered wires the
+  // imperative bits (tag picker, nested collapses, button click
+  // handlers) against the freshly rendered DOM. Open/close state
+  // persists per-repo across refreshes via repoOpenState.
   function renderRepoCard(r) {
-    const card = document.createElement('div');
+    const card = document.createElement('details');
     card.className = 'info-card repo-card';
     card.dataset.repo = r.name;
+    card.dataset.lazyTpl = 'repo-card-body';
 
     const badges = [];
     if (r.has_formidable) badges.push('<span class="badge formidable" title="Scaffolded as a Formidable context">Formidable</span>');
     if (r.empty) badges.push('<span class="badge empty" title="No commits yet. Nothing has been pushed to this repo">empty</span>');
 
-    const stats = [];
-    const commitLabel = r.commits === 1 ? 'commit' : 'commits';
-    stats.push('<span><span class="stat-label">' + commitLabel + '</span><span class="stat-value">' + r.commits + '</span></span>');
-    if (!r.empty) {
-      stats.push('<span><span class="stat-label">HEAD</span><span class="stat-value">' + escapeHtml(shortSha(r.head)) + '</span></span>');
-      if (r.default_branch) {
-        stats.push('<span><span class="stat-label">Branch</span><span class="stat-value">' + escapeHtml(r.default_branch) + '</span></span>');
-      }
-    }
-
-    // "Convert to Formidable" is only meaningful for a repo that has
-    // commits and doesn't already carry the marker. The server gates
-    // the endpoint to formidable_first mode; in generic mode the
-    // button would 403, so we hide it upfront rather than fail on click.
-    const canConvert = !r.has_formidable && !r.empty;
-    const convertBtn = canConvert
-      ? '<button class="small secondary convert-formidable-btn">Convert to Formidable</button>'
-      : '';
-
     card.innerHTML =
-      '<div class="ic-header">' +
-        '<div class="ic-title">' + escapeHtml(r.name) + '</div>' +
+      '<summary class="ic-header repo-card-head">' +
+        '<div class="repo-card-title-wrap">' +
+          '<span class="repo-card-chevron" aria-hidden="true">▶</span>' +
+          '<div class="ic-title">' + escapeHtml(r.name) + '</div>' +
+        '</div>' +
         '<div class="ic-chips">' + badges.join('') + '</div>' +
-      '</div>' +
-      '<div class="ic-stats">' + stats.join('') + '</div>' +
-      '<div class="ic-section ic-tags-section">' +
-        '<div class="ic-section-label muted">Tags</div>' +
-        '<div class="ic-tags-host"></div>' +
-      '</div>' +
-      '<div class="ic-section" data-section="subs"></div>' +
-      '<div class="ic-section" data-section="dest"></div>' +
-      '<div class="ic-actions">' +
-        convertBtn +
-        '<button class="small danger delete-btn">Delete</button>' +
-      '</div>';
+      '</summary>';
 
-    GG.tag_picker.mount(card.querySelector('.ic-tags-host'), {
-      tags: r.tags || [],
-      allTags: tagsCatalogueCache,
-      onChange: async (next) => {
-        const resp = await api.setRepoTags(r.name, next);
-        // Mutate the cached row so the next render reads the new
-        // state, then ask the chip filter controller to re-evaluate
-        // (prune any stale selection + repaint chips + re-narrow
-        // the visible repo list).
-        r.tags = resp.tags || [];
-        // Catalogue may have grown (auto-create), so refresh names
-        // for the picker dropdown too.
-        try {
-          const data = await api.listTags();
-          tagsCatalogueCache = (data.tags || []).map(t => t.name);
-        } catch { /* leave cache as-is */ }
-        if (tagFilterCtl) tagFilterCtl.refresh();
-      },
+    card.addEventListener('toggle', () => { repoOpenState[r.name] = card.open; });
+
+    GG.lazy.bind(card, {
+      getData: () => repoCardViewModel(r),
+      onRendered: host => wireRepoCardBody(host, r),
     });
 
-    renderSubscriptionsSection(card.querySelector('[data-section="subs"]'), r.name);
-    renderDestinationSection(card.querySelector('[data-section="dest"]'), r.name);
+    // Restore prior open state across refreshes. Setting `open`
+    // doesn't fire the toggle event, so we trigger the lazy render
+    // directly to populate the body.
+    if (repoOpenState[r.name]) {
+      card.open = true;
+      GG.lazy.refresh(card);
+    }
 
-    const convertEl = card.querySelector('.convert-formidable-btn');
+    return card;
+  }
+
+  // wireRepoCardBody runs after each repo body fragment renders.
+  // Mounts the tag picker, calls the inner collapse renderers, and
+  // wires the convert / delete buttons. Same imperative work as the
+  // old renderRepoCard, just deferred until the user opens the card.
+  function wireRepoCardBody(host, r) {
+    const tagsHost = host.querySelector('.ic-tags-host');
+    if (tagsHost) {
+      GG.tag_picker.mount(tagsHost, {
+        tags: r.tags || [],
+        allTags: tagsCatalogueCache,
+        onChange: async (next) => {
+          const resp = await api.setRepoTags(r.name, next);
+          r.tags = resp.tags || [];
+          try {
+            const data = await api.listTags();
+            tagsCatalogueCache = (data.tags || []).map(t => t.name);
+          } catch { /* leave cache as-is */ }
+          if (tagFilterCtl) tagFilterCtl.refresh();
+        },
+      });
+    }
+
+    const subsContainer = host.querySelector('[data-section="subs"]');
+    if (subsContainer) renderSubscriptionsSection(subsContainer, r.name);
+    const destContainer = host.querySelector('[data-section="dest"]');
+    if (destContainer) renderDestinationSection(destContainer, r.name);
+
+    // Convert-to-Formidable button is hidden via class for repos
+    // that already carry the marker or are empty (the fragment uses
+    // the convert_hidden class). The click handler still attaches —
+    // if the button is hidden, the click never fires.
+    const convertEl = host.querySelector('.convert-formidable-btn');
     if (convertEl) {
       convertEl.addEventListener('click', async () => {
         const ok = await GG.dialog.confirm({
@@ -124,88 +156,86 @@
       });
     }
 
-    card.querySelector('.delete-btn').addEventListener('click', async () => {
-      const ok = await GG.dialog.confirm({
-        title: 'Delete repository',
-        message: 'Delete repo "' + r.name + '"?\n\nThis is destructive. The bare repo and any attached destinations are dropped.',
-        okText: 'Delete',
-        dangerOk: true,
+    const deleteBtn = host.querySelector('.delete-btn');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', async () => {
+        const ok = await GG.dialog.confirm({
+          title: 'Delete repository',
+          message: 'Delete repo "' + r.name + '"?\n\nThis is destructive. The bare repo and any attached destinations are dropped.',
+          okText: 'Delete',
+          dangerOk: true,
+        });
+        if (!ok) return;
+        try {
+          await api.deleteRepo(r.name);
+          await refreshRepos();
+        } catch (e) {
+          await GG.dialog.alert('Delete failed', e.message);
+        }
       });
-      if (!ok) return;
-      try {
-        await api.deleteRepo(r.name);
-        await refreshRepos();
-      } catch (e) {
-        await GG.dialog.alert('Delete failed', e.message);
-      }
+    }
+  }
+
+  // subscriptionViewModel shapes the JSON the repo-subscriptions
+  // fragment renders against. Each chip carries its precomputed
+  // visible label + hover-title (account.provider:identifier vs the
+  // resolved display name) — same disambiguation that the imperative
+  // version applied. Empty-state hiding via class trick (no {{#if}}
+  // in the template engine, see lazy.md §4.3).
+  function subscriptionViewModel(repoName) {
+    const subs = subscriptionsForRepo(repoName).map(s => {
+      const acc = Admin.resolveAccount(s.username, accountsCache);
+      return {
+        label: acc ? acc.provider + ':' + acc.identifier : s.username,
+        title: acc ? Admin.accountLabel(acc) : s.username,
+      };
     });
-
-    return card;
+    return {
+      subs,
+      chips_hidden: subs.length === 0 ? 'hidden' : '',
+      empty_hidden: subs.length === 0 ? '' : 'hidden',
+    };
   }
 
-  // labelForSubscription returns the chip's visible text: the canonical
-  // provider:identifier ("github:peter.vdpas@protonmail.com"). That's
-  // the disambiguator an admin scans for — display names collide
-  // across an org but the scoped identifier is unique. The full
-  // human name moves into the tooltip (see chipTitle below).
-  function labelForSubscription(t) {
-    const acc = Admin.resolveAccount(t.username, accountsCache);
-    if (acc) return escapeHtml(acc.provider + ':' + acc.identifier);
-    return escapeHtml(t.username);
-  }
-
-  // chipTitle is the hover tooltip for a subscription chip — the
-  // resolved account's full display name. Falls back to the scoped
-  // username when the account row was deleted (legacy tokens).
-  function chipTitle(t) {
-    const acc = Admin.resolveAccount(t.username, accountsCache);
-    return acc ? Admin.accountLabel(acc) : t.username;
-  }
-
+  // renderSubscriptionsSection builds the <details> chrome (count in
+  // the summary, persistent open/close state via subsOpenState) and
+  // hands the body off to GG.lazy. The fragment renders the chip
+  // list + the empty hint + the "+ Issue key" button; onRendered
+  // wires the button to a cross-page nav (the Subscription keys
+  // page reads ?repo= and pre-selects).
   function renderSubscriptionsSection(container, repoName) {
     const subs = subscriptionsForRepo(repoName);
     const open = subsOpenState[repoName] ? ' open' : '';
 
-    // No summary hint: the expanded body already renders each
-    // account as a chip, and duplicating names in the summary felt
-    // redundant (per user feedback). Count alone is enough for the
-    // collapsed row.
     container.innerHTML =
       '<details class="ic-collapse subs-details"' + open + '>' +
         '<summary class="ic-section-head">' +
           '<span class="ic-section-title">Subscriptions</span>' +
           '<span class="muted">(' + subs.length + ')</span>' +
         '</summary>' +
-        '<div class="ic-collapse-body subs-body"></div>' +
       '</details>';
 
     const details = container.querySelector('.subs-details');
+    details.dataset.lazyTpl = 'repo-subscriptions';
     details.addEventListener('toggle', () => { subsOpenState[repoName] = details.open; });
 
-    const body = container.querySelector('.subs-body');
-    body.innerHTML =
-      (subs.length === 0
-        ? '<div class="muted ic-section-empty">No subscription keys grant access to this repo.</div>'
-        : '<div class="sub-chips">' +
-            subs.map(s => {
-              // Chip face is just the display name; the tooltip
-              // carries name + provider:identifier so the
-              // disambiguator (which provider account this is) is
-              // one hover away without crowding the chip.
-              return '<span class="sub-chip" title="' + escapeHtml(chipTitle(s)) + '">' +
-                labelForSubscription(s) + '</span>';
-            }).join('') +
-          '</div>') +
-      '<div class="subs-actions">' +
-        '<button type="button" class="small secondary issue-key-btn">+ Issue key</button>' +
-      '</div>';
-
-    body.querySelector('.issue-key-btn').addEventListener('click', () => {
-      // Cross-page nav: carry the repo through as a query param so the
-      // Subscription keys page pre-selects it in the issue form. Used to
-      // be pendingKeysRepo + panel switch; the URL is the seam now.
-      location.href = '/admin/subscriptions?repo=' + encodeURIComponent(repoName);
+    GG.lazy.bind(details, {
+      getData: () => subscriptionViewModel(repoName),
+      onRendered: host => {
+        const btn = host.querySelector('.issue-key-btn');
+        if (btn) {
+          btn.addEventListener('click', () => {
+            location.href = '/admin/subscriptions?repo=' + encodeURIComponent(repoName);
+          });
+        }
+      },
     });
+
+    // Restore prior open state: refresh()-induced re-renders rebuild
+    // this DOM, so we re-trigger the lazy render if the user had it
+    // open. Without this the body stays empty until the user clicks
+    // the summary again.
+    if (subsOpenState[repoName]) GG.lazy.refresh(details);
   }
 
 
