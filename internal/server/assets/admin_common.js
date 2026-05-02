@@ -230,6 +230,16 @@
       if (!r.ok) throw new Error((await r.json()).error || 'delete failed');
       return r.json();
     },
+    // sweepUnusedTags drops every catalogue row with zero references
+    // across repos / subs / accounts. Idempotent: a no-op sweep
+    // returns count: 0 + empty list, no errors.
+    async sweepUnusedTags() {
+      const r = await fetch('/api/admin/tags/sweep-unused', {
+        method: 'POST', credentials: 'same-origin',
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'sweep failed');
+      return r.json();
+    },
     async setRepoTags(repo, tags) {
       const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/tags', {
         method: 'PUT',

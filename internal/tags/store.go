@@ -354,6 +354,61 @@ func splitByTag(in []*Assignment, tagID string) (matched, kept []*Assignment) {
 	return matched, kept
 }
 
+// DeleteUnused removes every catalogue row that has zero assignments
+// across all three join sets. Returns the deleted Tag rows so the
+// caller can emit one tag.deleted audit event per removal — matching
+// the per-row event shape used elsewhere in §7.1, no special bulk
+// "swept_unused" event type to learn. The catalogue is scanned, the
+// unused tag IDs are removed in one persist call, and the live
+// in-memory state stays consistent on persist failure.
+func (s *Store) DeleteUnused() ([]*Tag, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	used := make(map[string]struct{})
+	for _, a := range s.repoAssignments {
+		used[a.TagID] = struct{}{}
+	}
+	for _, a := range s.subscriptionAssignments {
+		used[a.TagID] = struct{}{}
+	}
+	for _, a := range s.accountAssignments {
+		used[a.TagID] = struct{}{}
+	}
+
+	var removed []*Tag
+	prevTags := make(map[string]*Tag, len(s.tags))
+	for k, v := range s.tags {
+		cp := *v
+		prevTags[k] = &cp
+	}
+	prevNameIndex := make(map[string]string, len(s.nameIndex))
+	for k, v := range s.nameIndex {
+		prevNameIndex[k] = v
+	}
+
+	for id, t := range s.tags {
+		if _, in := used[id]; in {
+			continue
+		}
+		cp := *t
+		removed = append(removed, &cp)
+		delete(s.tags, id)
+		delete(s.nameIndex, strings.ToLower(t.Name))
+	}
+
+	if len(removed) == 0 {
+		return nil, nil
+	}
+
+	if err := s.persist(); err != nil {
+		s.tags = prevTags
+		s.nameIndex = prevNameIndex
+		return nil, err
+	}
+	return removed, nil
+}
+
 // Count returns the number of tags in the catalogue.
 func (s *Store) Count() int {
 	s.mu.RLock()

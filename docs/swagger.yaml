@@ -746,6 +746,15 @@ definitions:
           $ref: '#/definitions/server.TagView'
         type: array
     type: object
+  server.TagSweepUnusedResponse:
+    properties:
+      count:
+        type: integer
+      removed:
+        items:
+          type: string
+        type: array
+    type: object
   server.TagUsage:
     properties:
       accounts:
@@ -2309,6 +2318,34 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       summary: Manage one tag by ID (admin only)
+      tags:
+      - admin
+  /admin/tags/sweep-unused:
+    post:
+      description: |-
+        Deletes every catalogue row that has zero assignments
+        across repos, subscriptions, and accounts. Each
+        removed row emits a `tag.deleted` system audit event
+        so the chain answers "where did `team:archived` go?"
+        the same way a one-by-one delete would. The response
+        carries the names that were removed so the UI can
+        show a "swept N tags" summary.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.TagSweepUnusedResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Sweep unused tags (admin only)
       tags:
       - admin
   /admin/tokens:

@@ -75,6 +75,58 @@ func (s *Server) handleAdminTags(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleAdminTagsSweepUnused godoc
+// @Summary      Sweep unused tags (admin only)
+// @Description  Deletes every catalogue row that has zero assignments
+// @Description  across repos, subscriptions, and accounts. Each
+// @Description  removed row emits a `tag.deleted` system audit event
+// @Description  so the chain answers "where did `team:archived` go?"
+// @Description  the same way a one-by-one delete would. The response
+// @Description  carries the names that were removed so the UI can
+// @Description  show a "swept N tags" summary.
+// @Tags         admin
+// @Produce      json
+// @Success      200   {object}  TagSweepUnusedResponse
+// @Failure      401   {object}  ErrorResponse
+// @Failure      405   {object}  ErrorResponse
+// @Router       /admin/tags/sweep-unused [post]
+func (s *Server) handleAdminTagsSweepUnused(w http.ResponseWriter, r *http.Request) {
+	id := s.requireAdminSession(w, r)
+	if id == nil {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	removed, err := s.tags.DeleteUnused()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	names := make([]string, 0, len(removed))
+	for _, t := range removed {
+		// Per-row audit event matches the single-delete path so a
+		// forensic reader doesn't see two different event shapes for
+		// "this tag is gone."
+		s.recordSystemAudit("tag.deleted", id, map[string]any{
+			"id":   t.ID,
+			"name": t.Name,
+			"swept": map[string]int{
+				"repos":         0,
+				"subscriptions": 0,
+				"accounts":      0,
+			},
+			"reason": "unused-sweep",
+		})
+		names = append(names, t.Name)
+	}
+	writeJSON(w, http.StatusOK, TagSweepUnusedResponse{
+		Removed: names,
+		Count:   len(names),
+	})
+}
+
 // handleAdminTag godoc
 // @Summary      Manage one tag by ID (admin only)
 // @Description  PATCH renames the tag (case-insensitive unique). DELETE

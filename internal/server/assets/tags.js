@@ -18,9 +18,33 @@
     return '<span class="tag-usage-pill">' + n + ' ' + label + '</span>';
   }
 
+  // unusedTagNames returns the catalogue rows with zero references
+  // across repos / subs / accounts. Used by the sweep dialog to show
+  // exactly which tags will go before the admin commits — same
+  // visibility-before-blast-radius pattern the cascade-delete dialog
+  // uses for a single tag.
+  function unusedTagNames(tags) {
+    return (tags || []).filter(t => {
+      const u = t.usage || {};
+      return !u.repos && !u.subscriptions && !u.accounts;
+    }).map(t => t.name);
+  }
+
   async function refresh() {
     const data = await api.listTags();
     document.getElementById('tag-count').textContent = data.count;
+    // The "Remove unused" button is enabled iff at least one
+    // catalogue row has zero references; otherwise click would do
+    // nothing, so the button reflects that as a disabled state.
+    const sweepBtn = document.getElementById('btn-sweep-unused');
+    if (sweepBtn) {
+      const unused = unusedTagNames(data.tags);
+      sweepBtn.disabled = unused.length === 0;
+      sweepBtn.title = unused.length === 0
+        ? 'No unused tags — every catalogue row has at least one assignment'
+        : 'Remove ' + unused.length + ' tag' + (unused.length === 1 ? '' : 's') + ' with no assignments';
+      sweepBtn._unused = unused;
+    }
     const tbody = document.getElementById('tag-rows');
     tbody.replaceChildren(...data.tags.map(t => {
       const tr = document.createElement('tr');
@@ -91,6 +115,38 @@
     const who = await guardSession();
     if (!who) return;
     initSidebar('tags', who);
+
+    // "Remove unused" sweep — confirm with the list of names before
+    // firing, since the action is destructive (each removed row is a
+    // catalogue row gone forever) even though it doesn't touch any
+    // assignments. The dialog body shows up to 12 names inline; for
+    // a sweep of 50+ tags we let the count carry the load and the
+    // names truncate with an ellipsis hint.
+    const sweepBtn = document.getElementById('btn-sweep-unused');
+    if (sweepBtn) {
+      sweepBtn.addEventListener('click', async () => {
+        const unused = sweepBtn._unused || [];
+        if (unused.length === 0) return;
+        const preview = unused.length <= 12
+          ? unused.join(', ')
+          : unused.slice(0, 12).join(', ') + ' and ' + (unused.length - 12) + ' more';
+        const ok = await GG.dialog.confirm({
+          title: 'Remove unused tags',
+          message: 'Remove ' + unused.length + ' tag' + (unused.length === 1 ? '' : 's') +
+            ' with no assignments?\n\n' + preview +
+            '\n\nThe tags themselves are deleted from the catalogue. This cannot be undone.',
+          okText: 'Remove ' + unused.length,
+          dangerOk: true,
+        });
+        if (!ok) return;
+        try {
+          await api.sweepUnusedTags();
+          await refresh();
+        } catch (e) {
+          await GG.dialog.alert('Sweep failed', e.message);
+        }
+      });
+    }
 
     document.getElementById('tag-form').addEventListener('submit', async e => {
       e.preventDefault();

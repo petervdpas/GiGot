@@ -212,3 +212,85 @@ func TestTags_AuditEventsLanded(t *testing.T) {
 		}
 	}
 }
+
+// TestTagsSweepUnused_RemovesOrphansKeepsAssigned exercises the
+// /admin/tags/sweep-unused endpoint end-to-end: only tags with zero
+// references go, every assigned tag stays, and one tag.deleted audit
+// event lands per removed row.
+func TestTagsSweepUnused_RemovesOrphansKeepsAssigned(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	if err := srv.git.InitBare("addresses"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Three tags: one assigned, two orphaned.
+	for _, name := range []string{"team:keep", "team:orphan-a", "team:orphan-b"} {
+		if rec := do(t, srv, http.MethodPost, "/api/admin/tags",
+			map[string]any{"name": name}, sess); rec.Code != http.StatusCreated {
+			t.Fatalf("seed %q: %d", name, rec.Code)
+		}
+	}
+	if rec := do(t, srv, http.MethodPut, "/api/admin/repos/addresses/tags",
+		map[string]any{"tags": []string{"team:keep"}}, sess); rec.Code != http.StatusOK {
+		t.Fatalf("assign repo tag: %d", rec.Code)
+	}
+
+	auditBefore := len(srv.systemAudit.All())
+	rec := do(t, srv, http.MethodPost, "/api/admin/tags/sweep-unused", nil, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("sweep want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp TagSweepUnusedResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Count != 2 {
+		t.Fatalf("Count = %d, want 2", resp.Count)
+	}
+
+	// Assigned tag must still be in the catalogue.
+	listRec := do(t, srv, http.MethodGet, "/api/admin/tags", nil, sess)
+	if !strings.Contains(listRec.Body.String(), "team:keep") {
+		t.Errorf("kept tag swept by mistake: %s", listRec.Body.String())
+	}
+	if strings.Contains(listRec.Body.String(), "team:orphan-a") {
+		t.Errorf("orphan tag still present: %s", listRec.Body.String())
+	}
+
+	// One tag.deleted audit event per removed orphan.
+	auditAdded := len(srv.systemAudit.All()) - auditBefore
+	if auditAdded != 2 {
+		t.Errorf("audit events added = %d, want 2", auditAdded)
+	}
+}
+
+// TestTagsSweepUnused_NothingToDoIsZero confirms the empty-sweep happy
+// path returns count: 0 + empty list, no audit events fire — the UI
+// surface can show a muted "no unused tags" hint with a clean check.
+func TestTagsSweepUnused_NothingToDoIsZero(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	auditBefore := len(srv.systemAudit.All())
+
+	rec := do(t, srv, http.MethodPost, "/api/admin/tags/sweep-unused", nil, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp TagSweepUnusedResponse
+	json.Unmarshal(rec.Body.Bytes(), &resp)
+	if resp.Count != 0 {
+		t.Errorf("Count = %d, want 0", resp.Count)
+	}
+	if len(srv.systemAudit.All()) != auditBefore {
+		t.Errorf("empty sweep emitted audit events")
+	}
+}
+
+// TestTagsSweepUnused_RequiresAdminSession pins the auth fence — no
+// cookie is a 401 before the store is touched.
+func TestTagsSweepUnused_RequiresAdminSession(t *testing.T) {
+	srv, _ := adminTestServer(t)
+	rec := do(t, srv, http.MethodPost, "/api/admin/tags/sweep-unused", nil, nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("want 401, got %d", rec.Code)
+	}
+}

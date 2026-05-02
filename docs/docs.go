@@ -1762,6 +1762,38 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/tags/sweep-unused": {
+            "post": {
+                "description": "Deletes every catalogue row that has zero assignments\nacross repos, subscriptions, and accounts. Each\nremoved row emits a ` + "`" + `tag.deleted` + "`" + ` system audit event\nso the chain answers \"where did ` + "`" + `team:archived` + "`" + ` go?\"\nthe same way a one-by-one delete would. The response\ncarries the names that were removed so the UI can\nshow a \"swept N tags\" summary.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Sweep unused tags (admin only)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.TagSweepUnusedResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/tags/{id}": {
             "delete": {
                 "description": "PATCH renames the tag (case-insensitive unique). DELETE\ncascades through every assignment join — repo, subscription,\nand account — and returns the per-set sweep counts.\nSession-cookie authenticated.",
@@ -5270,6 +5302,20 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/server.TagView"
+                    }
+                }
+            }
+        },
+        "server.TagSweepUnusedResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "removed": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
                     }
                 }
             }

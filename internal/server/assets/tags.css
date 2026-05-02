@@ -10,6 +10,18 @@
 /* Tag pills + filter chips share the green family from theme.css.
    Distinct from repos (orange), roles (blue), and subscriptions
    (purple) so the eye can sort the chip soup on a card at a glance. */
+/* Header row on the "Existing tags" card: title on the left, the
+   "Remove unused" sweep button on the right so the destructive action
+   sits at the same flow position as the row-level kebab menus. */
+.tag-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+.tag-card-head h2 { margin: 0; }
+
 .tag-pill {
   display: inline-block;
   background: var(--tag-bg);

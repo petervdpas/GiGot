@@ -46,3 +46,12 @@ type TagDeleteResponse struct {
 	Deleted TagView  `json:"deleted"`
 	Swept   TagUsage `json:"swept"`
 }
+
+// TagSweepUnusedResponse reports the names removed by the
+// "remove unused" admin action. Empty list + zero count is the
+// nothing-to-do happy path; the UI shows a muted "no unused tags"
+// hint instead of a confirmation toast.
+type TagSweepUnusedResponse struct {
+	Removed []string `json:"removed"`
+	Count   int      `json:"count"`
+}

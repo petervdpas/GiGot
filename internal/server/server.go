@@ -615,6 +615,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/admin/credentials", s.handleAdminCredentials)
 	s.mux.HandleFunc("/api/admin/credentials/", s.handleAdminCredential)
 	s.mux.HandleFunc("/api/admin/tags", s.handleAdminTags)
+	s.mux.HandleFunc("/api/admin/tags/sweep-unused", s.handleAdminTagsSweepUnused)
 	s.mux.HandleFunc("/api/admin/tags/", s.handleAdminTag)
 	s.mux.HandleFunc("/api/admin/accounts", s.handleAdminAccounts)
 	s.mux.HandleFunc("/api/admin/accounts/", s.handleAdminAccount)

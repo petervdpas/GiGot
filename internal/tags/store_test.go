@@ -413,3 +413,55 @@ func TestUsage_ReportsZeroForFreshTag(t *testing.T) {
 		t.Fatalf("fresh tag has non-zero usage: %+v", c)
 	}
 }
+
+// TestDeleteUnused_KeepsAssignedRemovesOrphans pins the contract:
+// only catalogue rows that are not referenced anywhere get swept;
+// every assigned tag stays. Returned slice carries the names of
+// removed tags so the handler can emit per-row audit events.
+func TestDeleteUnused_KeepsAssignedRemovesOrphans(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	keep, _ := s.Create("team:keep", "peter")
+	orphan1, _ := s.Create("team:orphan-a", "peter")
+	orphan2, _ := s.Create("team:orphan-b", "peter")
+	if _, err := s.SetRepoTags("addresses", []string{keep.Name}, "peter"); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, err := s.DeleteUnused()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 2 {
+		t.Fatalf("removed %d tags, want 2", len(removed))
+	}
+	names := []string{removed[0].Name, removed[1].Name}
+	for _, want := range []string{orphan1.Name, orphan2.Name} {
+		if !slices.Contains(names, want) {
+			t.Errorf("expected %q in removed, got %v", want, names)
+		}
+	}
+	if _, err := s.Get(keep.ID); err != nil {
+		t.Errorf("kept tag (still assigned) was swept: %v", err)
+	}
+	if _, err := s.Get(orphan1.ID); err == nil {
+		t.Errorf("orphan tag still in catalogue")
+	}
+}
+
+// TestDeleteUnused_EmptyWhenNothingOrphan returns nil + nil error
+// when every tag is referenced — handler can early-return without a
+// special "nothing to do" branch.
+func TestDeleteUnused_EmptyWhenNothingOrphan(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	t1, _ := s.Create("a", "peter")
+	if _, err := s.SetRepoTags("addresses", []string{t1.Name}, "peter"); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := s.DeleteUnused()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 0 {
+		t.Fatalf("expected zero removals, got %d", len(removed))
+	}
+}
