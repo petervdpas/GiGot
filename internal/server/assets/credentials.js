@@ -3,7 +3,7 @@
 // Admin.initSidebar for the shared left-rail chrome.
 
 (function () {
-  const { api, escapeHtml, initSidebar, guardSession } = window.Admin;
+  const { api, escapeHtml } = window.Admin;
 
   // GG.text_filter.attachClientSide controller. Free-text search
   // across name + kind + notes — credentials aren't tagged so a
@@ -159,9 +159,11 @@
   }
 
   (async function boot() {
-    const who = await guardSession();
-    if (!who) return;
-    initSidebar('credentials', who);
+    if (!(await Admin.bootPage('credentials'))) return;
+    GG.drawer.declareAll([
+      { name: 'create-credential', title: 'Add credential' },
+      { name: 'edit-credential',   title: 'Edit credential' },
+    ]);
 
     // Free-text search across name + kind + notes. Credentials
     // aren't tagged so the chip filter doesn't apply; with many

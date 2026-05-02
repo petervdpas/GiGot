@@ -16,15 +16,17 @@ func TestTagsPage_RendersShell(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	// Page shell asserts: the data-driven drawer markup (Add-tag
-	// drawer + tpl reference), the existing-tags table body, and
-	// the page assets. The form itself lives in the create-tag
-	// fragment, fetched on first drawer open — it's not in the
-	// page body, so we don't pin id="tag-form" here.
+	// Page shell asserts: the existing-tags table body and the
+	// page assets. The Add-tag drawer markup is now created at
+	// runtime by GG.drawer.declareAll inside tags.js (was inline
+	// in the template before the DRY refactor) — see
+	// templates/fragments/create-tag.html for the form itself.
+	// The trigger button + sweep-unused button still live in the
+	// template, so we pin those.
 	for _, want := range []string{
-		`data-drawer-name="create-tag"`,
-		`data-lazy-tpl="create-tag"`,
+		`data-drawer-open="create-tag"`,
 		`id="tag-rows"`,
+		`id="btn-sweep-unused"`,
 		`/assets/tags.js`,
 		`/assets/tags.css`,
 		`/assets/drawer.js`,

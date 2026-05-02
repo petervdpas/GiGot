@@ -742,6 +742,27 @@
     return who;
   }
 
+  // bootPage bundles the standard "guard the session, initialise the
+  // sidebar" prelude every authenticated admin page runs. Returns
+  // the session principal so callers can use display_name / role,
+  // or null when the session is missing (after triggering the
+  // bounce). Replaces the per-page boilerplate:
+  //
+  //   const who = await guardSession();
+  //   if (!who) return;
+  //   initSidebar('<key>', who);
+  //
+  // with:
+  //
+  //   const who = await Admin.bootPage('<key>');
+  //   if (!who) return;
+  async function bootPage(key) {
+    const who = await guardSession();
+    if (!who) return null;
+    initSidebar(key, who);
+    return who;
+  }
+
   // ---------------------------------------------------- copyToClipboard
   // Subscription-key cards use this for the Copy button; lives here so
   // the credentials page (future "copy credential name" button, etc.)
@@ -772,7 +793,7 @@
     escapeHtml, shortSha,
     accountLabel, accountLabelHTML, accountOption, resolveAccount, roleBadgeAttrs,
     renderTokenCard, syncTokenCardSummaryAbilities,
-    initSidebar, guardSession,
+    initSidebar, guardSession, bootPage,
     copyToClipboard,
   };
 })();

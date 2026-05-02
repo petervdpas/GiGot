@@ -5,7 +5,7 @@
 
 (function () {
   const Admin = window.Admin;
-  const { api, escapeHtml, initSidebar, guardSession, copyToClipboard, accountLabel } = Admin;
+  const { api, escapeHtml, copyToClipboard, accountLabel } = Admin;
 
   let repoInfoCache = [];
   let tokensCache = [];        // currently-visible subs (filtered by ?tag= chips)
@@ -878,9 +878,10 @@
   }
 
   (async function boot() {
-    const who = await guardSession();
-    if (!who) return;
-    initSidebar('subscriptions', who);
+    if (!(await Admin.bootPage('subscriptions'))) return;
+    GG.drawer.declareAll([
+      { name: 'issue-subscription', title: 'Issue subscription key' },
+    ]);
 
     // Mount the chip-filter controller. It binds the action button +
     // chip clicks itself; this page just feeds it data via the

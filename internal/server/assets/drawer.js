@@ -93,6 +93,55 @@
     return String(s).replace(/"/g, '\\"');
   }
 
+  // declareAll creates the <aside class="drawer"> markup for each
+  // spec at runtime, appending the asides to <body>. Replaces the
+  // ~6 lines of repeated HTML each admin page used to carry per
+  // drawer:
+  //
+  //   <aside class="drawer" data-drawer-name="...">
+  //     <div class="drawer-head">
+  //       <h2>...</h2>
+  //       <button type="button" class="drawer-close"
+  //               aria-label="Close">×</button>
+  //     </div>
+  //     <div class="drawer-body" data-lazy-tpl="..."
+  //          data-lazy-trigger="manual"></div>
+  //   </aside>
+  //
+  // Each spec: { name, title, tpl }. tpl defaults to name when
+  // omitted (matches the convention every page already uses).
+  // Idempotent — calling declareAll a second time with a name that
+  // already exists in the DOM is a no-op for that name.
+  function declareAll(specs) {
+    if (!Array.isArray(specs)) return;
+    for (const spec of specs) {
+      if (!spec || !spec.name) continue;
+      const existing = document.querySelector(
+        '.drawer[data-drawer-name="' + cssEscape(spec.name) + '"]',
+      );
+      if (existing) continue;
+      const aside = document.createElement('aside');
+      aside.className = 'drawer';
+      aside.dataset.drawerName = spec.name;
+      const tpl = spec.tpl || spec.name;
+      const title = spec.title || spec.name;
+      aside.innerHTML =
+        '<div class="drawer-head">' +
+          '<h2></h2>' +
+          '<button type="button" class="drawer-close" aria-label="Close">×</button>' +
+        '</div>' +
+        '<div class="drawer-body"></div>';
+      // Set title via textContent so caller-provided strings can't
+      // smuggle markup. Same protection the other admin code uses
+      // for user-controlled content.
+      aside.querySelector('.drawer-head h2').textContent = title;
+      const body = aside.querySelector('.drawer-body');
+      body.dataset.lazyTpl = tpl;
+      body.dataset.lazyTrigger = 'manual';
+      document.body.appendChild(aside);
+    }
+  }
+
   // attachAll walks the document for `[data-drawer-open]` open
   // buttons and `.drawer-close` close buttons and wires their
   // click handlers. Idempotent — re-running on a page with
@@ -211,5 +260,5 @@
   }
 
   window.GG = window.GG || {};
-  window.GG.drawer = { attachAll, open, close: closeAll, bindForm };
+  window.GG.drawer = { attachAll, declareAll, open, close: closeAll, bindForm };
 })();

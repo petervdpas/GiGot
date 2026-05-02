@@ -4,7 +4,7 @@
 // the same way every other admin page does.
 
 (function () {
-  const { api, escapeHtml, initSidebar, guardSession } = window.Admin;
+  const { api, escapeHtml } = window.Admin;
 
   let tagsCatalogueCache = [];
   let accountsCache = [];
@@ -277,9 +277,10 @@
   }
 
   (async function boot() {
-    const who = await guardSession();
-    if (!who) return;
-    initSidebar('accounts', who);
+    if (!(await Admin.bootPage('accounts'))) return;
+    GG.drawer.declareAll([
+      { name: 'create-account', title: 'Create account' },
+    ]);
 
     // Mount the tag filter — controller renders the chips, owns the
     // ?tag= URL state, and narrows the visible row list.

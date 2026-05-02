@@ -3,7 +3,7 @@
 // land in slice 2 — the catalogue page is independent of those.
 
 (function () {
-  const { api, escapeHtml, initSidebar, guardSession } = window.Admin;
+  const { api, escapeHtml } = window.Admin;
 
   // Page-level state. tagsCache is the full catalogue; filterCtl
   // narrows it via free-text search across name + creator across
@@ -119,9 +119,11 @@
   }
 
   (async function boot() {
-    const who = await guardSession();
-    if (!who) return;
-    initSidebar('tags', who);
+    if (!(await Admin.bootPage('tags'))) return;
+    GG.drawer.declareAll([
+      { name: 'create-tag', title: 'Add tag' },
+      { name: 'rename-tag', title: 'Rename tag' },
+    ]);
 
     // Free-text search across name + creator. Catalogues can grow
     // into the dozens with team:* / env:* / contractor:* etc — the

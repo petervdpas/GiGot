@@ -6,7 +6,7 @@
 
 (function () {
   const Admin = window.Admin;
-  const { api, escapeHtml, shortSha, initSidebar, guardSession } = Admin;
+  const { api, escapeHtml, shortSha } = Admin;
 
   let repoInfoCache = [];
   let tokensCache = [];
@@ -512,9 +512,10 @@
   }
 
   (async function boot() {
-    const who = await guardSession();
-    if (!who) return;
-    initSidebar('repositories', who);
+    if (!(await Admin.bootPage('repositories'))) return;
+    GG.drawer.declareAll([
+      { name: 'create-repository', title: 'Create repository' },
+    ]);
 
     // Mount the tag filter once — the controller owns the chip
     // rendering, URL state, and AND-filter computation. The page
