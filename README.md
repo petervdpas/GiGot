@@ -63,19 +63,6 @@ here. The items below do not overlap with Track B.
 
 Open work:
 
-- [ ] **Template inheritance for admin pages** (the third audit
-      item from the DRY pass). Each admin page repeats ~17 lines
-      of `<head>` boilerplate + identical `<body>` shell. Move
-      to a Go-template base + `{{define "page-content"}}` per
-      page; pass `PageData{Title, ExtraStyles, ExtraScripts}` as
-      the model. Saves ~80 lines of HTML, makes "add a script /
-      stylesheet to every admin page" a one-line change.
-- [ ] **Honest framing for the bulk-revoke confirm phrase.** The
-      `revoke <tags>` phrase is deterministic, so it's anti-typo,
-      not anti-script. Update `docs/design/tags.md` §5.6 + §6.3 to
-      say so explicitly — the security boundary is the admin
-      session, not the phrase. Avoid suggesting the phrase
-      "prevents scripted callers" anywhere.
 - [ ] **Benchmark the chip-filter fetch path.** At ≤15 subs per team
       it's free; at ~500 subs every chip toggle does an unfiltered
       fetch + a filtered fetch. Measure end-to-end latency at 100 /
@@ -90,6 +77,16 @@ Open work:
 
 Done and shipping:
 
+- [x] **Bulk-revoke confirm phrase reframed as anti-typo, not
+      anti-script.** `docs/design/tags.md` §5.6 / §6.3 / §10
+      now say plainly that `revoke <comma-joined-sorted-lower-tags>`
+      is deterministic from the request inputs, so it raises the
+      bar against typos and copy-paste-the-wrong-curl mistakes,
+      not against scripted callers. The auth boundary is the admin
+      session, same as every other `/api/admin/*` endpoint.
+      Swagger description on `POST /admin/subscriptions/revoke-by-tag`
+      updated to match. Behaviour unchanged — the phrase is still
+      checked server-side; only the docs got more honest.
 - [x] **Admin UI helper family + drawer pattern + DRY pass.**
       Six shared JS helpers under `window.GG` / `window.Admin` now
       own every admin-page pattern; pages are config, helpers are
@@ -158,6 +155,32 @@ Done and shipping:
       (use delete + re-add per credential-vault.md §3) are not
       editable through this flow.
 
+- [x] **Template inheritance for admin pages.** Seven admin
+      page templates (`repositories`, `subscriptions`,
+      `credentials`, `tags`, `accounts`, `auth`, `user`)
+      collapsed onto a single shared shell at
+      `templates/admin_base.html`. Each page strips down to four
+      `{{define}}` blocks: `title` (the segment that lands after
+      "GiGot vX.Y.Z " in the `<title>`), `styles` (extra
+      `<link>` tags beyond `admin.css`), `scripts` (extra
+      `<script>` tags beyond `ui.js`/`dialogs.js`/`admin_common.js`),
+      and `content` (everything inside the `.panel.active`
+      shell). The base template owns DOCTYPE, viewport meta,
+      version meta, theme bootstrap script (one source for the
+      pre-paint flash-prevention block, no longer copy-pasted
+      seven times), and the sidebar/main shell. Adding a new
+      admin page is now: one new HTML file with the four
+      defines + one line in `templates.go` calling
+      `parseAdminPage("name.html")`. Adding a script to every
+      admin page is now: one line in `admin_base.html`. Net
+      reduction: 438 → 286 lines of HTML across the templates
+      directory (152 lines saved). Existing
+      `tmpl.Execute(w, pageData)` handlers keep working
+      unchanged because `parseAdminPage` puts the base FIRST in
+      the parse order, making it the receiver template. The
+      `TestTagsPage_RendersShell` substring asserts continue
+      to pass — the shell renders the same DOM, just via a
+      different parse path.
 - [x] **Mirror-destination section migrated to GG.lazy.** Last
       imperative section on a repo card now rides three fragments
       (`dest-empty.html`, `dest-view.html`, `dest-edit.html`) on

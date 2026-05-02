@@ -280,9 +280,19 @@ Below the chip filter, when one or more chips are active, a destructive
 action button: **`Revoke all matching (N)`**. Clicking it shows a
 confirm dialog that lists every subscription about to be deleted (name,
 repo, account, abilities) and requires a typed-confirmation phrase
-before firing — same pattern we use for irreversible admin actions
-elsewhere. One click + one confirm sweeps the filtered set; nothing
-implicit, nothing silent.
+before firing.
+
+The phrase (`revoke <comma-joined-sorted-lower-tags>`) is **anti-typo
+friction, not an anti-script gate**. It's deterministic — any caller
+that can compute the tag list can compute the phrase — so it does
+not raise the bar for scripted callers. What it does buy: the admin
+has to look at the tag list, retype it, and ratify the destructive
+action against the same inputs the server is about to act on, which
+makes a copy-paste-the-wrong-curl mistake fall off the happy path.
+The actual security boundary on this endpoint is the admin session
+(§4) plus role-vs-ability fences elsewhere; the phrase is matched to
+blast radius the way `git push --force` is matched to a `--force`
+flag, not the way an MFA challenge is matched to authentication.
 
 ---
 
@@ -347,8 +357,12 @@ Body: {tags: ["team:marketing", "env:prod"], confirm: "<typed phrase>"}
 Response: {revoked: [{id, account, repo, abilities}, ...], count: N}
 ```
 
-The confirm-phrase requirement is server-side, not just UI — a buggy
-admin script can't accidentally fire it.
+The confirm-phrase check runs server-side as well as in the UI — see
+§5.6 for the framing. The server-side check stops a buggy callsite
+from omitting the phrase entirely (e.g. a malformed JSON body that
+drops the field), not a determined caller; the phrase is anti-typo
+friction, not an authentication gate. The auth gate is the admin
+session, same as every other `/api/admin/*` endpoint.
 
 ---
 
@@ -516,10 +530,12 @@ Three slices, each independently shippable. All three shipped 2026-05-02.
   `POST /api/admin/subscriptions/revoke-by-tag` body
   (`{tags, confirm}`) revokes every match in one call, gated by a
   deterministic typed phrase computed as
-  `revoke <comma-joined-sorted-lower-tags>` — checked server-side so
-  a scripted caller can't bypass the gate. Each revocation emits a
-  `tag.revoked.bulk` event on its repo's `refs/audit/main` (one new
-  event type extending §7.1). Prefix-grouped chip filter (§5.5) on
+  `revoke <comma-joined-sorted-lower-tags>` — checked server-side
+  so a buggy callsite can't omit the phrase by accident, but
+  emphatically NOT an anti-script gate (the phrase is deterministic
+  from the request inputs; see §5.6 framing). Each revocation
+  emits a `tag.revoked.bulk` event on its repo's `refs/audit/main`
+  (one new event type extending §7.1). Prefix-grouped chip filter (§5.5) on
   the subscription list, URL-driven (`?tag=` is the state of truth so
   deep-links / copy-pasted URLs hydrate the filter on load). The
   `Revoke all matching (N)` action enumerates each match (account,

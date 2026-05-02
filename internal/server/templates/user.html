@@ -1,52 +1,23 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GiGot{{if .Version}} {{.Version}}{{end}} - My subscriptions</title>
-<meta name="gigot-version" content="{{.Version}}">
-<link rel="stylesheet" href="/assets/admin.css">
-<script>
-  /* Apply stored theme before the body paints to avoid a flash on page
-     load. Same one-liner every other page uses. */
-  try {
-    var t = localStorage.getItem('gigot.theme');
-    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
-  } catch (e) { /* private-mode / disabled storage → stay on default dark */ }
-</script>
-</head>
-<body>
-
-<div id="app">
-  <div class="shell">
-    <aside id="admin-sidebar"></aside>
-    <main class="main">
-      <div class="panel active">
-        <div class="page-header">
-          <h1>My subscriptions</h1>
-        </div>
-
-        <div class="card">
-          <div id="server-url-host"></div>
-        </div>
-
-        <div class="card">
-          <h2>Subscription keys</h2>
-          <p class="muted">Paste each <strong>Repository</strong> + <strong>Subscription key</strong> pair into a Formidable profile. Treat the key like a password.</p>
-          <div id="sub-grid" class="card-grid sub-grid"></div>
-          <div id="sub-empty" class="muted hidden">
-            No subscription keys yet. Ask an administrator to issue one for your account.
-          </div>
-        </div>
-      </div>
-    </main>
-  </div>
-</div>
-
-<script src="/assets/ui.js"></script>
-<script src="/assets/dialogs.js"></script>
-<script src="/assets/admin_common.js"></script>
+{{define "title"}}- My subscriptions{{end}}
+{{define "scripts"}}
 <script src="/assets/lazy.js"></script>
 <script src="/assets/user.js"></script>
-</body>
-</html>
+{{end}}
+{{define "content"}}
+<div class="page-header">
+  <h1>My subscriptions</h1>
+</div>
+
+<div class="card">
+  <div id="server-url-host"></div>
+</div>
+
+<div class="card">
+  <h2>Subscription keys</h2>
+  <p class="muted">Paste each <strong>Repository</strong> + <strong>Subscription key</strong> pair into a Formidable profile. Treat the key like a password.</p>
+  <div id="sub-grid" class="card-grid sub-grid"></div>
+  <div id="sub-empty" class="muted hidden">
+    No subscription keys yet. Ask an administrator to issue one for your account.
+  </div>
+</div>
+{{end}}

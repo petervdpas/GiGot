@@ -22,9 +22,15 @@ import (
 // @Description
 // @Description  The Confirm field must match the deterministic phrase
 // @Description  `revoke <comma-joined-lower-tags>` (tags sorted, e.g.
-// @Description  `revoke contractor:acme,team:marketing`). Server-side
-// @Description  validation matches the UI typed-confirmation gate so a
-// @Description  scripted caller can't bypass it.
+// @Description  `revoke contractor:acme,team:marketing`). This is
+// @Description  anti-typo friction — same purpose as a `--force` flag
+// @Description  on a destructive command — not an anti-script gate
+// @Description  (the phrase is deterministic from the request inputs,
+// @Description  so any caller that can compute the tag list can compute
+// @Description  the phrase). Server-side validation runs alongside the
+// @Description  UI check so a buggy callsite can't omit the field by
+// @Description  accident. The auth boundary is the admin session,
+// @Description  same as every other `/api/admin/*` endpoint.
 // @Description
 // @Description  Each revoked subscription emits a `tag.revoked.bulk`
 // @Description  event on its repo's refs/audit/main with the matching

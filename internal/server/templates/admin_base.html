@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GiGot{{if .Version}} {{.Version}}{{end}} {{block "title" .}}{{end}}</title>
+<meta name="gigot-version" content="{{.Version}}">
+<link rel="stylesheet" href="/assets/admin.css">
+{{block "styles" .}}{{end}}
+<script>
+  /* Apply stored theme before the body paints to avoid a flash on
+     page load. Identical block on every admin page. */
+  try {
+    var t = localStorage.getItem('gigot.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) { /* private-mode / disabled storage → stay on default dark */ }
+</script>
+</head>
+<body>
+
+<div id="app">
+  <div class="shell">
+    <aside id="admin-sidebar"></aside>
+    <main class="main">
+      <div class="panel active">
+        {{block "content" .}}{{end}}
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="/assets/ui.js"></script>
+<script src="/assets/dialogs.js"></script>
+<script src="/assets/admin_common.js"></script>
+{{block "scripts" .}}{{end}}
+</body>
+</html>

@@ -1,56 +1,29 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GiGot{{if .Version}} {{.Version}}{{end}} Admin - Repositories</title>
-<meta name="gigot-version" content="{{.Version}}">
-<link rel="stylesheet" href="/assets/admin.css">
+{{define "title"}}Admin - Repositories{{end}}
+{{define "styles"}}
 <link rel="stylesheet" href="/assets/tags.css">
 <link rel="stylesheet" href="/assets/drawer.css">
-<script>
-  /* Apply stored theme before the body paints to avoid a flash on page
-     load. Identical block on every admin page. */
-  try {
-    var t = localStorage.getItem('gigot.theme');
-    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
-  } catch (e) { /* private-mode / disabled storage → stay on default dark */ }
-</script>
-</head>
-<body>
-
-<div id="app">
-  <div class="shell">
-    <aside id="admin-sidebar"></aside>
-    <main class="main">
-      <div class="panel active">
-        <div class="page-header with-add">
-          <h1>Repositories <span class="muted">(<span id="repo-count">0</span>)</span></h1>
-          <button class="btn-add" data-drawer-open="create-repository" aria-label="Create repository" title="Create repository">+</button>
-        </div>
-        <div class="card" id="tag-filter-card">
-          <h2>Filter by tag</h2>
-          <div id="tag-filter" class="tag-filter">
-            <div class="muted tag-filter-empty">No tags in use on any repository yet.</div>
-          </div>
-        </div>
-        <div class="card">
-          <h2>Existing repositories</h2>
-          <div id="repo-grid" class="card-grid"></div>
-          <div id="repo-empty" class="muted hidden">No repositories yet. Create one above.</div>
-        </div>
-      </div>
-    </main>
-  </div>
-</div>
-
-<script src="/assets/ui.js"></script>
-<script src="/assets/dialogs.js"></script>
-<script src="/assets/admin_common.js"></script>
+{{end}}
+{{define "scripts"}}
 <script src="/assets/lazy.js"></script>
 <script src="/assets/drawer.js"></script>
 <script src="/assets/tag_picker.js"></script>
 <script src="/assets/tag_filter.js"></script>
 <script src="/assets/repositories.js"></script>
-</body>
-</html>
+{{end}}
+{{define "content"}}
+<div class="page-header with-add">
+  <h1>Repositories <span class="muted">(<span id="repo-count">0</span>)</span></h1>
+  <button class="btn-add" data-drawer-open="create-repository" aria-label="Create repository" title="Create repository">+</button>
+</div>
+<div class="card" id="tag-filter-card">
+  <h2>Filter by tag</h2>
+  <div id="tag-filter" class="tag-filter">
+    <div class="muted tag-filter-empty">No tags in use on any repository yet.</div>
+  </div>
+</div>
+<div class="card">
+  <h2>Existing repositories</h2>
+  <div id="repo-grid" class="card-grid"></div>
+  <div id="repo-empty" class="muted hidden">No repositories yet. Create one above.</div>
+</div>
+{{end}}

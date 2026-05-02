@@ -25,12 +25,15 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // adminPageHandler returns an http.HandlerFunc that serves the given
-// template at exactly the given path(s). Used by the three peer admin
-// pages — each is a thin static shell; all behaviour lives in its JS
+// template at exactly the given path(s). Used by every peer admin
+// page (repositories, subscriptions, credentials, tags, accounts,
+// auth) — each is a thin static shell rendered through admin_base.html
+// with per-page `{{define}}` overrides; all behaviour lives in its JS
 // bundle, which guards the session on boot and bounces to /admin on a
-// 401. Kept as a small factory so adding a fourth page is one line.
-// Every page receives s.pageData() so the brand strip + JS sidebar
-// can render "GiGot vX.Y.Z" off one source.
+// 401. Kept as a small factory so adding a new page is one line here
+// plus one line in templates.go. Every page receives s.pageData()
+// so the brand strip + JS sidebar can render "GiGot vX.Y.Z" off one
+// source.
 func (s *Server) adminPageHandler(tmpl *template.Template, paths ...string) http.HandlerFunc {
 	allowed := make(map[string]struct{}, len(paths))
 	for _, p := range paths {
