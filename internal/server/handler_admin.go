@@ -162,9 +162,14 @@ func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *au
 // @Description  account's role is not entitled to hold (today: `mirror`
 // @Description  requires admin or maintainer role; granting it to a
 // @Description  regular returns 400). See accounts.md §6.1.
+// @Description
+// @Description  GET supports a repeating `?tag=` query parameter that filters
+// @Description  by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
+// @Description  values intersect (AND). Tag matching is case-insensitive.
 // @Tags         admin
 // @Accept       json
 // @Produce      json
+// @Param        tag   query     []string            false  "Filter by effective tag (repeatable; AND across values)" collectionFormat(multi)
 // @Param        body  body      TokenRequest        false  "Issue body (POST)"
 // @Param        body  body      UpdateTokenRequest  false  "Update body (PATCH) — repos and/or abilities"
 // @Param        body  body      RevokeTokenRequest  false  "Revoke body (DELETE)"
@@ -297,7 +302,13 @@ func (s *Server) adminUpdateToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, MessageResponse{Message: "token updated"})
 }
 
-func (s *Server) adminListTokens(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) adminListTokens(w http.ResponseWriter, r *http.Request) {
+	// ?tag=foo&tag=bar narrows the listing to tokens whose effective
+	// tag set covers every requested tag (AND). Empty/whitespace
+	// values are dropped — a stray `&tag=` from the UI shouldn't make
+	// the listing collapse to nothing.
+	wantLower := tagFilterFromQuery(r)
+
 	entries := s.tokenStrategy.List()
 	items := make([]TokenListItem, 0, len(entries))
 	for _, e := range entries {
@@ -312,6 +323,10 @@ func (s *Server) adminListTokens(w http.ResponseWriter, _ *http.Request) {
 		if has {
 			accountKey = provider + ":" + identifier
 		}
+		effective := s.tags.EffectiveSubscriptionTags(e.Token, e.Repo, accountKey)
+		if !effectiveCoversAll(effective, wantLower) {
+			continue
+		}
 		items = append(items, TokenListItem{
 			Token:         e.Token,
 			Username:      e.Username,
@@ -319,13 +334,56 @@ func (s *Server) adminListTokens(w http.ResponseWriter, _ *http.Request) {
 			Abilities:     e.Abilities,
 			HasAccount:    has,
 			Tags:          s.tags.TagsFor(tags.ScopeSubscription, e.Token),
-			EffectiveTags: s.tags.EffectiveSubscriptionTags(e.Token, e.Repo, accountKey),
+			EffectiveTags: effective,
 		})
 	}
 	writeJSON(w, http.StatusOK, TokenListResponse{
 		Tokens: items,
 		Count:  len(items),
 	})
+}
+
+// tagFilterFromQuery extracts ?tag= values from the URL, lower-cased
+// and de-duped. Returned slice may be empty (no filter active).
+func tagFilterFromQuery(r *http.Request) []string {
+	raw := r.URL.Query()["tag"]
+	if len(raw) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(raw))
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		v = strings.ToLower(strings.TrimSpace(v))
+		if v == "" {
+			continue
+		}
+		if _, dup := seen[v]; dup {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
+// effectiveCoversAll returns true when every name in wantLower (already
+// lower-cased) is present in the effective set. Used by the listing
+// filter and the bulk revoke matcher so the AND semantics live in one
+// place.
+func effectiveCoversAll(effective, wantLower []string) bool {
+	if len(wantLower) == 0 {
+		return true
+	}
+	have := make(map[string]struct{}, len(effective))
+	for _, n := range effective {
+		have[strings.ToLower(n)] = struct{}{}
+	}
+	for _, w := range wantLower {
+		if _, ok := have[w]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // handleAdminBindToken godoc

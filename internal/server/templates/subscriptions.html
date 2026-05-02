@@ -45,6 +45,16 @@
           </form>
           <div id="issue-msg" class="success"></div>
         </div>
+        <div class="card" id="tag-filter-card">
+          <h2>Filter by tag</h2>
+          <div id="tag-filter" class="tag-filter">
+            <div class="muted tag-filter-empty">No tags in the catalogue yet — create one on the Tags page or by typing it into a tag picker.</div>
+          </div>
+          <div id="tag-filter-actions" class="tag-filter-actions hidden">
+            <button type="button" id="btn-revoke-by-tag" class="danger btn-revoke-by-tag">Revoke all matching (0)</button>
+            <span id="tag-filter-summary" class="tag-filter-summary"></span>
+          </div>
+        </div>
         <div class="card">
           <h2>Active keys</h2>
           <div id="token-grid" class="card-grid"></div>

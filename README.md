@@ -61,23 +61,34 @@ is schema-aware publishing (records → Azure DevOps wiki, Confluence,
 etc.) which explicitly belongs in Formidable's WikiWonder plugin, not
 here. The items below do not overlap with Track B.
 
-Open work:
-
-- [ ] **Tags — slice 3 (design:
-      [`tags.md`](docs/design/tags.md) §5.5, §5.6, §6.3, §10).**
-      Grouped chip filter on `/admin/subscriptions` (chips clustered
-      by prefix-before-colon — `team:*`, `env:*`, `contractor:*`,
-      then "Other"). Multi-chip filter intersects (AND) and matches
-      the **effective** tag set so an admin filtering by `team:marketing`
-      finds subs tagged directly, subs that inherit it through their
-      repo, and subs that inherit it through their account. New
-      `POST /api/admin/subscriptions/revoke-by-tag` endpoint with a
-      typed-confirmation phrase (server-side gate, not just UI) and
-      an enumerate-then-confirm dialog that lists every match with
-      its source(s) before firing. Closes the slice plan in §10.
-
 Done and shipping:
 
+- [x] **Tags — slice 3 (design:
+      [`tags.md`](docs/design/tags.md) §5.5, §5.6, §6.3, §10).**
+      Grouped chip filter on `/admin/subscriptions` clusters chips
+      by prefix-before-colon (`team:*`, `env:*`, `contractor:*`,
+      then "Other"); selecting one or more chips intersects (AND)
+      against the **effective** tag set so an admin filtering by
+      `team:marketing` finds subs tagged directly, subs that
+      inherit through their repo, and subs that inherit through
+      their account. URL is the source of truth (`?tag=` repeating)
+      so deep-links and copy-pasted URLs hydrate the filter on
+      load. `GET /api/admin/tokens` accepts the same `?tag=`
+      params for the server-side cut. New
+      `POST /api/admin/subscriptions/revoke-by-tag` endpoint
+      revokes every effective-tag match in one call, gated by a
+      deterministic typed-confirmation phrase
+      (`revoke <comma-joined-lower-tags>`) checked **server-side**
+      so a scripted caller can't bypass it. Each revoked sub
+      emits a `tag.revoked.bulk` event on its repo's
+      `refs/audit/main`. The chip filter card collapses to an
+      empty-state hint when the catalogue is empty; the destructive
+      "Revoke all matching (N)" action only appears when chips are
+      active. Confirm dialog enumerates every sub (account, repo,
+      abilities) before firing. Swagger regenerated, integration
+      scenarios + nine handler tests cover happy path, AND
+      semantics, inherited-tag matches, missing/wrong/empty
+      confirm, auth fence, and audit-chain advance.
 - [x] **Tags — slice 2 (design:
       [`tags.md`](docs/design/tags.md) §6.2, §7.1, §10).**
       Assignment surfaces wired across all three taggable entities:

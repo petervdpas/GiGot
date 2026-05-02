@@ -170,3 +170,73 @@ Feature: Tag catalogue (admin)
     When I GET "/api/admin/repos/addresses/tags"
     # Repo side is now empty — the cascade swept the assignment.
     Then the response body should not contain "sweep-me"
+
+  Scenario: Slice 3 — listing tokens by tag filters on effective tag set
+    # Two subs on the same repo, one tagged directly. ?tag= narrows
+    # the listing to the tagged sub via the §6.3 effective-AND rule.
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a regular account "bob" exists
+    And a repository "addresses" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/tokens" with body '{"username":"alice","repo":"addresses"}'
+    And I save the JSON response "token" as "alice_tok"
+    And I POST "/api/admin/tokens" with body '{"username":"bob","repo":"addresses"}'
+    And I PATCH "/api/admin/tokens" with body '{"token":"${alice_tok}","tags":["team:marketing"]}'
+
+    When I GET "/api/admin/tokens?tag=team:marketing"
+    Then the response status should be 200
+    And the JSON response "count" should be 1
+    And the response body should contain "\"username\":\"alice\""
+    And the response body should not contain "\"username\":\"bob\""
+
+  Scenario: Slice 3 — bulk revoke requires the typed confirmation phrase
+    # Server-side phrase gate: a body without confirm 400s and the
+    # tagged sub stays alive. The phrase is deterministic from the
+    # request, so a UI-bypassing scripted caller can't sweep tokens
+    # without typing it.
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a repository "addresses" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/tokens" with body '{"username":"alice","repo":"addresses"}'
+    And I save the JSON response "token" as "alice_tok"
+    And I PATCH "/api/admin/tokens" with body '{"token":"${alice_tok}","tags":["team:marketing"]}'
+
+    When I POST "/api/admin/subscriptions/revoke-by-tag" with body '{"tags":["team:marketing"]}'
+    Then the response status should be 400
+    And the response body should contain "confirm phrase mismatch"
+
+    # Sub stayed alive.
+    When I GET "/api/admin/tokens?tag=team:marketing"
+    Then the JSON response "count" should be 1
+
+  Scenario: Slice 3 — bulk revoke sweeps every match when the phrase is correct
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a regular account "bob" exists
+    And a repository "addresses" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/tokens" with body '{"username":"alice","repo":"addresses"}'
+    And I save the JSON response "token" as "alice_tok"
+    And I POST "/api/admin/tokens" with body '{"username":"bob","repo":"addresses"}'
+    And I save the JSON response "token" as "bob_tok"
+    And I PATCH "/api/admin/tokens" with body '{"token":"${alice_tok}","tags":["team:marketing"]}'
+    And I PATCH "/api/admin/tokens" with body '{"token":"${bob_tok}","tags":["team:marketing"]}'
+
+    When I POST "/api/admin/subscriptions/revoke-by-tag" with body '{"tags":["team:marketing"],"confirm":"revoke team:marketing"}'
+    Then the response status should be 200
+    And the response body should contain "\"count\":2"
+
+    When I GET "/api/admin/tokens?tag=team:marketing"
+    Then the JSON response "count" should be 0
+
+  Scenario: Slice 3 — bulk revoke without tags is rejected
+    # §5.6 invariant: an empty tag set would match every subscription,
+    # so the API rejects it before the confirm gate is even evaluated.
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/subscriptions/revoke-by-tag" with body '{"tags":[],"confirm":"revoke "}'
+    Then the response status should be 400
+    And the response body should contain "tags is required"

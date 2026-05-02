@@ -284,6 +284,12 @@
           if (!lower.has(name.toLowerCase())) nextEffective.push(name);
         }
         t.effective_tags = nextEffective;
+        // Catalogue cache + filter chips must reflect tags the picker
+        // just auto-created server-side. Without this, typing a new
+        // name into the picker silently creates the catalogue row
+        // but the chip filter at the top of the page stays stale
+        // until a full reload — the user complaint that prompted this.
+        await refreshTagCatalogueAndFilter();
       },
     });
   }
@@ -407,6 +413,10 @@
     return t.username === scoped || (legacyLocal && t.username === legacyLocal);
   }
 
+  // renderTokensGrid paints the visible token cards into the grid.
+  // Filtering by ?user= happens here (client-side narrowing); the
+  // ?tag= filter is server-side, so tokensCache already contains the
+  // intersected set when chips are active.
   function renderTokensGrid() {
     const scoped = userFilter();
     const visible = scoped ? tokensCache.filter(t => tokenMatchesUser(t, scoped)) : tokensCache;
@@ -417,11 +427,261 @@
     empty.classList.toggle('hidden', visible.length !== 0);
   }
 
+  // ─────────────────────────────────────────────── tag filter (slice 3)
+
+  // selectedTagsFromURL parses the active filter set off `?tag=` query
+  // params (one per tag, repeating). The URL is the source of truth so
+  // a deep-link from the Tags page or a copy-pasted URL hydrates the
+  // filter state on load. Lower-cased + deduped.
+  function selectedTagsFromURL() {
+    const params = new URLSearchParams(location.search);
+    const raw = params.getAll('tag');
+    const seen = new Set();
+    const out = [];
+    for (const r of raw) {
+      const v = (r || '').trim().toLowerCase();
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      out.push(v);
+    }
+    return out;
+  }
+
+  // setSelectedTagsInURL writes the next filter state back to ?tag=
+  // params using replaceState so the browser back button doesn't fill
+  // up with one entry per chip click. Other params (?user=, ?repo=)
+  // are preserved.
+  function setSelectedTagsInURL(tagList) {
+    const params = new URLSearchParams(location.search);
+    params.delete('tag');
+    for (const t of tagList) params.append('tag', t);
+    const qs = params.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+  }
+
+  // groupTagsByPrefix splits ["team:marketing", "env:prod", "legacy"]
+  // into { "team": [...], "env": [...], "Other": ["legacy"] }. Pure
+  // function — same input → same shape, ordered keys come from the
+  // first appearance in the input. The "Other" bucket sorts last in
+  // the renderer, mirroring §5.5 of the design doc.
+  function groupTagsByPrefix(names) {
+    const groups = new Map();
+    const otherKey = 'Other';
+    for (const n of names) {
+      const idx = n.indexOf(':');
+      const key = idx > 0 ? n.slice(0, idx) : otherKey;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(n);
+    }
+    for (const arr of groups.values()) arr.sort((a, b) => a.localeCompare(b));
+    // Reorder so Other always renders last.
+    const ordered = [];
+    for (const [k, v] of groups) if (k !== otherKey) ordered.push([k, v]);
+    ordered.sort((a, b) => a[0].localeCompare(b[0]));
+    if (groups.has(otherKey)) ordered.push([otherKey, groups.get(otherKey)]);
+    return ordered;
+  }
+
+  // renderTagFilter paints the chip grid + the active-action row.
+  // tagsCatalogueCache is the source of truth for "what chips exist";
+  // selected pulls from the URL. Toggling a chip rewrites the URL,
+  // re-fetches the filtered listing, and repaints. Cards are painted
+  // through the existing renderTokensGrid path so abilities-collapse
+  // state on individual cards isn't disturbed by chip clicks.
+  function renderTagFilter() {
+    const host = document.getElementById('tag-filter');
+    const actionsRow = document.getElementById('tag-filter-actions');
+    const summary = document.getElementById('tag-filter-summary');
+    const button = document.getElementById('btn-revoke-by-tag');
+    if (!host || !actionsRow || !summary || !button) return;
+
+    const selected = new Set(selectedTagsFromURL());
+    const cataloguePresent = (tagsCatalogueCache || []).slice();
+    // Stale chips: a tag in the URL that isn't in the catalogue (was
+    // deleted, or arrived from a hand-edited URL). Surface them so
+    // the user can deselect, even though they'll never match anything.
+    for (const s of selected) {
+      if (!cataloguePresent.some(t => t.toLowerCase() === s)) {
+        cataloguePresent.push(s);
+      }
+    }
+
+    if (cataloguePresent.length === 0) {
+      host.innerHTML = '<div class="muted tag-filter-empty">No tags in the catalogue yet — create one on the Tags page or by typing it into a tag picker.</div>';
+      actionsRow.classList.add('hidden');
+      return;
+    }
+
+    const grouped = groupTagsByPrefix(cataloguePresent);
+    const rows = grouped.map(([groupName, tags]) => {
+      const chips = tags.map(name => {
+        const lower = name.toLowerCase();
+        const isSel = selected.has(lower);
+        return '<button type="button" class="tag-chip' + (isSel ? ' selected' : '') +
+               '" data-tag="' + escapeHtml(lower) + '">' + escapeHtml(name) + '</button>';
+      }).join('');
+      return '<div class="tag-filter-row">' +
+               '<div class="tag-filter-group-label">' + escapeHtml(groupName) + '</div>' +
+               '<div class="tag-filter-group-chips">' + chips + '</div>' +
+             '</div>';
+    }).join('');
+    host.innerHTML = rows;
+
+    host.querySelectorAll('.tag-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tag = btn.getAttribute('data-tag');
+        const next = new Set(selectedTagsFromURL());
+        if (next.has(tag)) next.delete(tag);
+        else next.add(tag);
+        setSelectedTagsInURL([...next].sort());
+        // After URL update, re-fetch + repaint. refreshTokens() reads
+        // the URL via tagFilterFromURL and hits the filtered listing.
+        refreshTokens();
+      });
+    });
+
+    // Action row visibility tracks "any chip selected." Counts come
+    // from the freshly fetched tokensCache (which is already
+    // server-side filtered, so .length is the AND-filtered count).
+    if (selected.size === 0) {
+      actionsRow.classList.add('hidden');
+    } else {
+      actionsRow.classList.remove('hidden');
+      const n = tokensCache.length;
+      button.textContent = 'Revoke all matching (' + n + ')';
+      button.disabled = n === 0;
+      summary.textContent = n === 0
+        ? 'No keys match the current filter.'
+        : 'Filter: ' + [...selected].sort().join(' AND ');
+    }
+  }
+
+  // tagFilterFromURL is the URL → server-query bridge: returns the
+  // ?tag= list as an array of lower-cased names. Empty array means
+  // "no filter active" — listTokensByTags falls through to the
+  // unfiltered list endpoint in that case.
+  function tagFilterFromURL() {
+    return selectedTagsFromURL();
+  }
+
+  // refreshTagCatalogueAndFilter pulls a fresh /api/admin/tags listing
+  // and re-renders the chip filter. Called after any tag-picker
+  // onChange on this page so a name the picker just auto-created
+  // (server-side, via PATCH) shows up as a chip immediately —
+  // without it, the catalogue cache stays stale until a full
+  // reload, which is exactly the "I added a tag and the filter
+  // didn't grow" complaint. Cheap enough to call on every change
+  // (one GET, one re-render of an at-most-N-chip grid).
+  async function refreshTagCatalogueAndFilter() {
+    try {
+      const tagData = await api.listTags();
+      tagsCatalogueCache = (tagData.tags || []).map(t => t.name);
+      renderTagFilter();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  // openRevokeByTagDialog enumerates the matching subs, asks the
+  // admin to type the deterministic phrase the server expects, and
+  // fires the bulk endpoint when the phrase matches. Server-side
+  // checks the same phrase, so a typo at this layer is recoverable
+  // — the call returns 400 instead of mass-revoking.
+  async function openRevokeByTagDialog(selectedLower) {
+    if (!selectedLower.length) return;
+    const phrase = 'revoke ' + selectedLower.slice().sort().join(',');
+    const matches = tokensCache.slice();
+    if (matches.length === 0) {
+      await GG.dialog.alert('Nothing to revoke', 'No keys match the current filter.');
+      return;
+    }
+    // Build the dialog manually via createElement so we can render the
+    // enumerate-then-confirm body with one card-list + one input. Pure
+    // GG.dialog.confirm wouldn't fit the typed-phrase gate.
+    const backdrop = document.createElement('div');
+    backdrop.className = 'ed-dlg-backdrop';
+    const dlg = document.createElement('div');
+    dlg.className = 'ed-dlg';
+    dlg.setAttribute('role', 'dialog');
+    dlg.setAttribute('aria-modal', 'true');
+
+    const rowsHTML = matches.map(t => {
+      const abil = (t.abilities || []).map(a =>
+        '<span class="ability-badge">' + escapeHtml(a) + '</span>').join('');
+      return '<div class="revoke-by-tag-row">' +
+        '<code>' + escapeHtml(t.username) + '</code> · ' +
+        '<code>' + escapeHtml(t.repo) + '</code>' +
+        (abil ? ' · ' + abil : '') +
+      '</div>';
+    }).join('');
+
+    dlg.innerHTML =
+      '<div class="ed-dlg-head">' +
+        '<div class="ed-dlg-title">Revoke ' + matches.length + ' subscription' + (matches.length === 1 ? '' : 's') + '?</div>' +
+      '</div>' +
+      '<div class="ed-dlg-body">' +
+        '<div class="ed-dlg-msg">' +
+          'These keys will be revoked. Holders lose access immediately and the keys cannot be restored.' +
+        '</div>' +
+        '<div class="revoke-by-tag-list">' + rowsHTML + '</div>' +
+        '<div class="ed-dlg-msg">' +
+          'Type the phrase <span class="revoke-by-tag-phrase">' + escapeHtml(phrase) + '</span> to confirm.' +
+        '</div>' +
+        '<input class="ed-dlg-input" type="text" autocomplete="off" placeholder="' + escapeHtml(phrase) + '">' +
+      '</div>' +
+      '<div class="ed-dlg-foot">' +
+        '<button type="button" class="ed-dlg-btn cancel">Cancel</button>' +
+        '<button type="button" class="ed-dlg-btn ok danger" disabled>Revoke ' + matches.length + '</button>' +
+      '</div>';
+
+    backdrop.appendChild(dlg);
+    document.body.appendChild(backdrop);
+    const input = dlg.querySelector('.ed-dlg-input');
+    const okBtn = dlg.querySelector('button.ok');
+    const cancelBtn = dlg.querySelector('button.cancel');
+    function close() {
+      document.removeEventListener('keydown', onKey);
+      backdrop.remove();
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') close();
+    }
+    backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) close(); });
+    cancelBtn.addEventListener('click', close);
+    input.addEventListener('input', () => {
+      okBtn.disabled = input.value.trim() !== phrase;
+    });
+    document.addEventListener('keydown', onKey);
+    setTimeout(() => input.focus(), 0);
+
+    okBtn.addEventListener('click', async () => {
+      okBtn.disabled = true;
+      okBtn.textContent = 'Revoking…';
+      try {
+        await api.revokeTokensByTag(selectedLower, phrase);
+      } catch (e) {
+        close();
+        await GG.dialog.alert('Revoke failed', e.message || String(e));
+        return;
+      }
+      close();
+      await refreshAll();
+    });
+  }
+
+
+  // refreshTokens hits the filtered listing endpoint when chips are
+  // active so the AND-by-effective-tag rule is enforced server-side
+  // (one source of truth for filter semantics; the chip + bulk-revoke
+  // flows can't disagree). With no chips selected it's the plain
+  // unfiltered listing — same call cost.
   async function refreshTokens() {
     try {
-      const data = await api.listTokens();
+      const tagList = tagFilterFromURL();
+      const data = await api.listTokensByTags(tagList);
       tokensCache = data.tokens || [];
       renderTokensGrid();
+      renderTagFilter();
     } catch (e) {
       console.error(e);
     }
@@ -455,9 +715,10 @@
   // boot and after issue/revoke/edit so every picker stays in sync.
   async function refreshAll() {
     try {
+      const tagList = tagFilterFromURL();
       const [repoData, tokenData, credData, acctData, tagData] = await Promise.all([
         api.listRepos().catch(() => ({ repos: [] })),
-        api.listTokens().catch(() => ({ tokens: [] })),
+        api.listTokensByTags(tagList).catch(() => ({ tokens: [] })),
         api.listCredentials().catch(() => ({ credentials: [] })),
         api.listAccounts().catch(() => ({ accounts: [] })),
         api.listTags().catch(() => ({ tags: [] })),
@@ -468,6 +729,7 @@
       accountsCache = acctData.accounts || [];
       tagsCatalogueCache = (tagData.tags || []).map(t => t.name);
       renderTokensGrid();
+      renderTagFilter();
 
       // ?user= pre-selects the account picker. ?repo= pre-selects the
       // repo in the single-select picker. Both live behind the same
@@ -494,6 +756,17 @@
     const who = await guardSession();
     if (!who) return;
     initSidebar('subscriptions', who);
+
+    // Wire the bulk-revoke button. The button's enabled-when-non-empty
+    // guard already lives in renderTagFilter; this listener just opens
+    // the dialog with the current selection.
+    const revokeBtn = document.getElementById('btn-revoke-by-tag');
+    if (revokeBtn) {
+      revokeBtn.addEventListener('click', () => {
+        const sel = selectedTagsFromURL();
+        if (sel.length) openRevokeByTagDialog(sel);
+      });
+    }
 
     document.getElementById('issue-form').addEventListener('submit', async e => {
       e.preventDefault();

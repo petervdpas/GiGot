@@ -99,6 +99,29 @@
       });
       if (!r.ok) throw new Error('revoke failed');
     },
+    // listTokensByTags hits the existing /api/admin/tokens with one
+    // ?tag= parameter per tag. Tags are AND-ed server-side; pass an
+    // empty array to get the unfiltered list (same as listTokens).
+    async listTokensByTags(tagsArr) {
+      const qs = (tagsArr || [])
+        .filter(Boolean)
+        .map(t => 'tag=' + encodeURIComponent(t))
+        .join('&');
+      const url = '/api/admin/tokens' + (qs ? '?' + qs : '');
+      const r = await fetch(url, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('list failed');
+      return r.json();
+    },
+    async revokeTokensByTag(tagsArr, confirm) {
+      const r = await fetch('/api/admin/subscriptions/revoke-by-tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ tags: tagsArr, confirm }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'revoke-by-tag failed');
+      return r.json();
+    },
     async listDestinations(repo) {
       const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/destinations', {
         credentials: 'same-origin',
@@ -312,11 +335,26 @@
     return obj.display_name || obj.identifier || obj.username || '';
   }
 
-  // roleBadgeClass picks the .badge variant for a role chip.
-  // Centralised in admin_common so the accounts table, sidebar
-  // identity strip, and any future role-display surface render the
-  // same colour for the same role. Empty string for `regular` so the
-  // chip falls through to the default neutral palette.
+  // roleBadgeAttrs returns the HTML attribute fragment for a role
+  // badge — `data-role="<role>"`. CSS in admin.css resolves the
+  // palette off the attribute (`.badge[data-role="admin"]` etc), so
+  // a future role addition is one CSS rule + zero JS branches. The
+  // empty string is returned for unknown roles so the badge falls
+  // through to the default chip palette without contaminating the
+  // markup with `data-role=""`.
+  //
+  // The tiny shim is the one shared affordance: the accounts table,
+  // the sidebar identity strip, and any future role-display surface
+  // all build their badge HTML through this helper, so renaming
+  // "regular" → "viewer" later is a one-line change.
+  function roleBadgeAttrs(role) {
+    if (!role) return '';
+    return ' data-role="' + escapeHtml(role) + '"';
+  }
+  // Back-compat alias kept for any caller that still composes badge
+  // HTML the old way (class-driven). New call sites prefer
+  // roleBadgeAttrs. The only role that mapped to a class before was
+  // "admin" → "formidable"; the CSS keeps that selector live too.
   function roleBadgeClass(role) {
     if (role === 'admin') return 'formidable';
     if (role === 'maintainer') return 'maintainer';
@@ -584,7 +622,7 @@
           '<div class="me-name-row">' +
             '<strong id="me-name">' + escapeHtml(label) + '</strong>' +
             (realRole
-              ? '<span class="badge me-role ' + roleBadgeClass(realRole) + '">' +
+              ? '<span class="badge me-role"' + roleBadgeAttrs(realRole) + '>' +
                   escapeHtml(realRole) + '</span>'
               : '') +
           '</div>' +
@@ -672,7 +710,7 @@
   window.Admin = {
     api,
     escapeHtml, shortSha,
-    accountLabel, accountLabelHTML, accountOption, resolveAccount, roleBadgeClass,
+    accountLabel, accountLabelHTML, accountOption, resolveAccount, roleBadgeClass, roleBadgeAttrs,
     renderTokenCard,
     initSidebar, guardSession,
     copyToClipboard,

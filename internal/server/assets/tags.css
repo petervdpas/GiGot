@@ -7,22 +7,25 @@
    on repo + subscription + account detail pages, with extra
    modifier classes for inherited-vs-explicit display. */
 
+/* Tag pills + filter chips share the green family from theme.css.
+   Distinct from repos (orange), roles (blue), and subscriptions
+   (purple) so the eye can sort the chip soup on a card at a glance. */
 .tag-pill {
   display: inline-block;
-  background: var(--chip);
-  border: 1px solid var(--line);
+  background: var(--tag-bg);
+  border: 1px solid var(--tag-line);
   border-radius: 12px;
   padding: 2px 10px;
   font-size: 0.85rem;
   font-family: ui-monospace, monospace;
-  color: var(--text);
+  color: var(--tag-fg);
 }
 
 .tag-usage-pill {
   display: inline-block;
-  background: var(--accent-bg);
-  color: var(--accent);
-  border: 1px solid var(--accent-line, transparent);
+  background: var(--tag-bg);
+  color: var(--tag-fg);
+  border: 1px solid var(--tag-line);
   border-radius: 10px;
   padding: 1px 8px;
   font-size: 0.75rem;
@@ -57,9 +60,10 @@
    so they read as "from somewhere else." Source label sits inline
    inside the pill itself, deliberately small. */
 .tag-pill-inherited {
-  background: var(--modal-highlight-bg, var(--chip));
-  color: var(--muted);
+  background: transparent;
+  color: var(--tag-fg);
   border-style: dashed;
+  opacity: 0.75;
 }
 .tag-pill-source {
   font-size: 0.7rem;
@@ -213,4 +217,125 @@
 .acct-detail-table th:last-child,
 .acct-detail-table td:last-child {
   width: 100%;          /* Tags column expands to fill remaining width */
+}
+
+/* Slice 3 — grouped chip filter on /admin/subscriptions. The filter
+   bar lives in its own .card above the active-keys grid. Chips are
+   grouped by prefix-before-colon (team:, env:, contractor:, …) with
+   a "Other" bucket for tags that have no colon. The chip itself is
+   a small pressable button that toggles selected / deselected; the
+   selected state intentionally matches the .tag-pill family so the
+   visual vocabulary stays consistent across the admin surface. */
+
+.tag-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.tag-filter-empty {
+  font-size: 0.85rem;
+}
+.tag-filter-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, max-content) 1fr;
+  gap: 0.4rem 1rem;
+  align-items: baseline;
+}
+.tag-filter-group-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tag-filter-group-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--tag-bg);
+  border: 1px solid var(--tag-line);
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 0.85rem;
+  font-family: ui-monospace, monospace;
+  color: var(--tag-fg);
+  cursor: pointer;
+}
+.tag-chip:hover {
+  filter: brightness(1.15);
+}
+/* Selected chip uses the stronger green tint so the active filter
+   set is unambiguous at a glance — same family, different weight. */
+.tag-chip.selected {
+  background: var(--tag-bg-strong);
+  border-color: var(--tag-fg);
+  color: var(--tag-fg);
+  font-weight: 600;
+}
+.tag-chip.selected:hover {
+  filter: brightness(1.1);
+}
+
+/* Action row: "Revoke all matching" button + selected-count summary.
+   Only shown when at least one chip is active so the destructive
+   button isn't a permanent fixture. */
+.tag-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed var(--line);
+}
+/* `.hidden` is the global "display: none" toggle in admin.css; without
+   this override the more-specific `.tag-filter-actions { display: flex }`
+   rule would defeat it whenever both classes are on the same node. */
+.tag-filter-actions.hidden {
+  display: none;
+}
+.tag-filter-actions .btn-revoke-by-tag {
+  /* Reuse global .danger button styling — no override here. */
+}
+.tag-filter-summary {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* Bulk revoke confirm dialog: enumerates each subscription that will
+   be revoked, then asks the admin to type the deterministic phrase.
+   Subs render as compact rows so 20+ matches still fit on screen
+   without scrolling becoming the only affordance. */
+.revoke-by-tag-list {
+  max-height: 18rem;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  margin: 0.4rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: var(--modal-highlight-bg, var(--chip));
+}
+.revoke-by-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
+.revoke-by-tag-row code {
+  font-family: ui-monospace, monospace;
+}
+.revoke-by-tag-phrase {
+  font-family: ui-monospace, monospace;
+  background: var(--chip);
+  border: 1px solid var(--line);
+  padding: 1px 6px;
+  border-radius: 4px;
 }

@@ -51,3 +51,35 @@ type UpdateTokenRequest struct {
 	Abilities *[]string `json:"abilities,omitempty"`
 	Tags      *[]string `json:"tags,omitempty"`
 }
+
+// RevokeByTagRequest is the body of POST /api/admin/subscriptions/revoke-by-tag.
+// Tags is the AND-set of effective tag names that select which
+// subscriptions get revoked. Confirm must equal the deterministic
+// phrase the server expects (`revoke <comma-joined-lower-tags>`); the
+// UI computes it identically and shows it to the admin to type.
+// Server-side check makes the gate impossible to bypass from a
+// scripted client.
+type RevokeByTagRequest struct {
+	Tags    []string `json:"tags"    example:"team:marketing,env:prod"`
+	Confirm string   `json:"confirm" example:"revoke env:prod,team:marketing"`
+}
+
+// RevokedSubscription is one row in the bulk-revoke response. Token is
+// included because it has been revoked by the time the response is
+// written — the value is no longer a live bearer credential, so logging
+// it back is a forensic aid (the audit trail can correlate to the same
+// string), not a leak. Account / Repo / Abilities mirror the listing
+// item so the admin UI can render a "revoked these" summary without a
+// follow-up fetch.
+type RevokedSubscription struct {
+	Token     string   `json:"token"`
+	Username  string   `json:"username"`
+	Repo      string   `json:"repo"`
+	Abilities []string `json:"abilities,omitempty"`
+}
+
+// RevokeByTagResponse is what bulk-revoke returns.
+type RevokeByTagResponse struct {
+	Revoked []RevokedSubscription `json:"revoked"`
+	Count   int                   `json:"count"`
+}

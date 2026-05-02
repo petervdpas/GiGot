@@ -38,11 +38,12 @@
   // top where an admin looks first.
   const ROLE_RANK = { admin: 0, maintainer: 1, regular: 2 };
 
-  // roleBadgeClass is shared with the sidebar identity strip via
-  // Admin.roleBadgeClass — one source of truth for "what colour is
+  // roleBadgeAttrs is shared with the sidebar identity strip via
+  // Admin.roleBadgeAttrs — one source of truth for "what colour is
   // this role" so the table, sidebar, and any future role display
-  // never drift apart.
-  const roleBadgeClass = Admin.roleBadgeClass;
+  // never drift apart. Returns the `data-role="..."` fragment;
+  // CSS in admin.css resolves the palette off the attribute.
+  const roleBadgeAttrs = Admin.roleBadgeAttrs;
   function sortAccounts(a, b) {
     const ra = ROLE_RANK[a.role] ?? 99;
     const rb = ROLE_RANK[b.role] ?? 99;
@@ -78,7 +79,7 @@
       '<td data-label="Identifier"><code class="acct-identifier" title="' + escapeHtml(a.identifier) + '">' +
         escapeHtml(a.identifier) + '</code></td>' +
       '<td data-label="Display name">' + escapeHtml(a.display_name || '') + '</td>' +
-      '<td data-label="Role"><span class="badge ' + roleBadgeClass(a.role) + '">' +
+      '<td data-label="Role"><span class="badge"' + roleBadgeAttrs(a.role) + '>' +
         escapeHtml(a.role) + '</span></td>' +
       '<td class="row-actions"></td>';
 

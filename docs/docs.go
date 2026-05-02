@@ -1586,6 +1586,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/subscriptions/revoke-by-tag": {
+            "post": {
+                "description": "Revokes every subscription whose effective tag set\n(sub.tags ∪ repo.tags ∪ account.tags) covers every\ntag in the request body. Multiple tag values intersect\n(AND). Empty tag list is a 400 — bulk-revoke without a\nfilter would clear the whole catalogue, which has\nenough blast radius to deserve a different endpoint.\n\nThe Confirm field must match the deterministic phrase\n` + "`" + `revoke \u003ccomma-joined-lower-tags\u003e` + "`" + ` (tags sorted, e.g.\n` + "`" + `revoke contractor:acme,team:marketing` + "`" + `). Server-side\nvalidation matches the UI typed-confirmation gate so a\nscripted caller can't bypass it.\n\nEach revoked subscription emits a ` + "`" + `tag.revoked.bulk` + "`" + `\nevent on its repo's refs/audit/main with the matching\ntag set, so the audit chain answers \"why was sub-77\nrevoked?\" six months later. Session-cookie auth.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Bulk revoke subscriptions by effective tag (admin only)",
+                "parameters": [
+                    {
+                        "description": "Tag set + typed confirmation",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.RevokeByTagRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.RevokeByTagResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/tags": {
             "get": {
                 "description": "GET lists every tag with direct usage counts; POST\ncreates a new tag. Names are case-insensitive unique.\nSession-cookie authenticated.",
@@ -1850,7 +1902,7 @@ const docTemplate = `{
         },
         "/admin/tokens": {
             "get": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1862,6 +1914,16 @@ const docTemplate = `{
                 ],
                 "summary": "Manage subscription keys (admin only)",
                 "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by effective tag (repeatable; AND across values)",
+                        "name": "tag",
+                        "in": "query"
+                    },
                     {
                         "description": "Issue body (POST)",
                         "name": "body",
@@ -1927,7 +1989,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1939,6 +2001,16 @@ const docTemplate = `{
                 ],
                 "summary": "Manage subscription keys (admin only)",
                 "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by effective tag (repeatable; AND across values)",
+                        "name": "tag",
+                        "in": "query"
+                    },
                     {
                         "description": "Issue body (POST)",
                         "name": "body",
@@ -2004,7 +2076,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2016,6 +2088,16 @@ const docTemplate = `{
                 ],
                 "summary": "Manage subscription keys (admin only)",
                 "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by effective tag (repeatable; AND across values)",
+                        "name": "tag",
+                        "in": "query"
+                    },
                     {
                         "description": "Issue body (POST)",
                         "name": "body",
@@ -2081,7 +2163,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2093,6 +2175,16 @@ const docTemplate = `{
                 ],
                 "summary": "Manage subscription keys (admin only)",
                 "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by effective tag (repeatable; AND across values)",
+                        "name": "tag",
+                        "in": "query"
+                    },
                     {
                         "description": "Issue body (POST)",
                         "name": "body",
@@ -5075,12 +5167,65 @@ const docTemplate = `{
                 }
             }
         },
+        "server.RevokeByTagRequest": {
+            "type": "object",
+            "properties": {
+                "confirm": {
+                    "type": "string",
+                    "example": "revoke env:prod,team:marketing"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "team:marketing",
+                        "env:prod"
+                    ]
+                }
+            }
+        },
+        "server.RevokeByTagResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "revoked": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.RevokedSubscription"
+                    }
+                }
+            }
+        },
         "server.RevokeTokenRequest": {
             "type": "object",
             "properties": {
                 "token": {
                     "type": "string",
                     "example": "a1b2c3d4..."
+                }
+            }
+        },
+        "server.RevokedSubscription": {
+            "type": "object",
+            "properties": {
+                "abilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "repo": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
                 }
             }
         },

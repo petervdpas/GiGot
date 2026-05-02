@@ -274,13 +274,22 @@ form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 
 .repo-list { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
 .repo-chip {
-  background: var(--chip);
-  border: 1px solid var(--line);
+  background: var(--repo-bg);
+  border: 1px solid var(--repo-line);
   border-radius: 12px;
   padding: 2px 8px;
   font-size: 0.8rem;
+  color: var(--repo-fg);
 }
-.repo-chip.none { color: var(--muted); font-style: italic; }
+/* Unbound fallback keeps the neutral chip tint so the orange
+   palette doesn't promote a "missing repo" state into something
+   that visually reads as a real binding. */
+.repo-chip.none {
+  background: var(--chip);
+  border-color: var(--line);
+  color: var(--muted);
+  font-style: italic;
+}
 
 .ability-picker {
   display: flex;
@@ -542,13 +551,37 @@ a:hover { text-decoration: underline; }
   font-weight: 600;
   border: 1px solid transparent;
 }
-.badge.formidable { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-line); }
+/* Status variants stay class-driven — they label a state (empty repo,
+ * warning) rather than carrying semantic identity, so a class is the
+ * right shape. */
 .badge.empty { background: var(--chip); color: var(--muted); border-color: var(--line); }
 .badge.warn { background: #9e6a0322; color: #e3b341; border-color: #9e6a0366; }
-/* Maintainer role — between admin (.formidable) and regular (default).
- * Cool/teal palette so it reads as "elevated but not full admin" at a
- * glance on the accounts table. */
-.badge.maintainer { background: #0e7a8722; color: #5dd9e6; border-color: #0e7a8766; }
+
+/* Role badges drive their palette off `data-role` instead of a class
+ * proliferation (.formidable / .maintainer / .regular). The attribute
+ * carries the actual semantic — "this badge represents an admin role"
+ * — so a future role addition is one CSS rule + one JS branch, never
+ * a class-name invention. All three live in the blue family by
+ * design (theme.css §"Semantic palette families"); intensity tracks
+ * authority so the eye reads admin > maintainer > regular at a
+ * glance. .badge.formidable is kept as a back-compat alias for any
+ * non-role caller that still wants the accent-blue chip skin. */
+.badge.formidable,
+.badge[data-role="admin"] {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+.badge[data-role="maintainer"] {
+  background: #0e7a8722;
+  color: #5dd9e6;
+  border-color: #0e7a8766;
+}
+.badge[data-role="regular"] {
+  background: var(--role-regular-bg);
+  color: var(--role-regular-fg);
+  border-color: var(--role-regular-line);
+}
 
 /* Email suffix rendered after a display name in subscription chips
  * and token-card titles. Visually secondary so the name still reads
@@ -587,13 +620,14 @@ button.badge:hover:not(:disabled) { filter: brightness(1.15); }
 button.badge:disabled { opacity: 0.5; cursor: default; }
 
 /* Subscription-count badge on the Accounts page — an <a> rendered as
- * a chip, pointing at /admin/subscriptions?user=<scoped>. Same
- * palette as .badge.formidable but underlined on hover so it reads
- * as a link, not just decoration. */
+ * a chip, pointing at /admin/subscriptions?user=<scoped>. Uses the
+ * subscription palette (purple/lavender) so any "this is a key"
+ * surface reads consistently across the admin (chips, sidebar nav
+ * highlight, token-card accents). */
 a.sub-badge {
-  background: var(--accent-bg);
-  color: var(--accent);
-  border-color: var(--accent-line);
+  background: var(--sub-bg);
+  color: var(--sub-fg);
+  border-color: var(--sub-line);
   text-decoration: none;
   cursor: pointer;
 }

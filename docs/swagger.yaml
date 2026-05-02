@@ -676,10 +676,45 @@ definitions:
         example: my-templates
         type: string
     type: object
+  server.RevokeByTagRequest:
+    properties:
+      confirm:
+        example: revoke env:prod,team:marketing
+        type: string
+      tags:
+        example:
+        - team:marketing
+        - env:prod
+        items:
+          type: string
+        type: array
+    type: object
+  server.RevokeByTagResponse:
+    properties:
+      count:
+        type: integer
+      revoked:
+        items:
+          $ref: '#/definitions/server.RevokedSubscription'
+        type: array
+    type: object
   server.RevokeTokenRequest:
     properties:
       token:
         example: a1b2c3d4...
+        type: string
+    type: object
+  server.RevokedSubscription:
+    properties:
+      abilities:
+        items:
+          type: string
+        type: array
+      repo:
+        type: string
+      token:
+        type: string
+      username:
         type: string
     type: object
   server.ServerPubKeyResponse:
@@ -2039,6 +2074,57 @@ paths:
       summary: Current admin session
       tags:
       - admin
+  /admin/subscriptions/revoke-by-tag:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Revokes every subscription whose effective tag set
+        (sub.tags ∪ repo.tags ∪ account.tags) covers every
+        tag in the request body. Multiple tag values intersect
+        (AND). Empty tag list is a 400 — bulk-revoke without a
+        filter would clear the whole catalogue, which has
+        enough blast radius to deserve a different endpoint.
+
+        The Confirm field must match the deterministic phrase
+        `revoke <comma-joined-lower-tags>` (tags sorted, e.g.
+        `revoke contractor:acme,team:marketing`). Server-side
+        validation matches the UI typed-confirmation gate so a
+        scripted caller can't bypass it.
+
+        Each revoked subscription emits a `tag.revoked.bulk`
+        event on its repo's refs/audit/main with the matching
+        tag set, so the audit chain answers "why was sub-77
+        revoked?" six months later. Session-cookie auth.
+      parameters:
+      - description: Tag set + typed confirmation
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.RevokeByTagRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.RevokeByTagResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Bulk revoke subscriptions by effective tag (admin only)
+      tags:
+      - admin
   /admin/tags:
     get:
       consumes:
@@ -2237,7 +2323,18 @@ paths:
         account's role is not entitled to hold (today: `mirror`
         requires admin or maintainer role; granting it to a
         regular returns 400). See accounts.md §6.1.
+
+        GET supports a repeating `?tag=` query parameter that filters
+        by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
+        values intersect (AND). Tag matching is case-insensitive.
       parameters:
+      - collectionFormat: multi
+        description: Filter by effective tag (repeatable; AND across values)
+        in: query
+        items:
+          type: string
+        name: tag
+        type: array
       - description: Issue body (POST)
         in: body
         name: body
@@ -2294,7 +2391,18 @@ paths:
         account's role is not entitled to hold (today: `mirror`
         requires admin or maintainer role; granting it to a
         regular returns 400). See accounts.md §6.1.
+
+        GET supports a repeating `?tag=` query parameter that filters
+        by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
+        values intersect (AND). Tag matching is case-insensitive.
       parameters:
+      - collectionFormat: multi
+        description: Filter by effective tag (repeatable; AND across values)
+        in: query
+        items:
+          type: string
+        name: tag
+        type: array
       - description: Issue body (POST)
         in: body
         name: body
@@ -2351,7 +2459,18 @@ paths:
         account's role is not entitled to hold (today: `mirror`
         requires admin or maintainer role; granting it to a
         regular returns 400). See accounts.md §6.1.
+
+        GET supports a repeating `?tag=` query parameter that filters
+        by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
+        values intersect (AND). Tag matching is case-insensitive.
       parameters:
+      - collectionFormat: multi
+        description: Filter by effective tag (repeatable; AND across values)
+        in: query
+        items:
+          type: string
+        name: tag
+        type: array
       - description: Issue body (POST)
         in: body
         name: body
@@ -2408,7 +2527,18 @@ paths:
         account's role is not entitled to hold (today: `mirror`
         requires admin or maintainer role; granting it to a
         regular returns 400). See accounts.md §6.1.
+
+        GET supports a repeating `?tag=` query parameter that filters
+        by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
+        values intersect (AND). Tag matching is case-insensitive.
       parameters:
+      - collectionFormat: multi
+        description: Filter by effective tag (repeatable; AND across values)
+        in: query
+        items:
+          type: string
+        name: tag
+        type: array
       - description: Issue body (POST)
         in: body
         name: body

@@ -417,6 +417,7 @@ Event-type table with destinations:
 | `tag.unassigned.subscription` | sub's repo's `refs/audit/main`               | `PATCH /api/admin/tokens` (body diff on `tags`) |
 | `tag.assigned.account`        | `audit_system.enc`                           | `POST /api/admin/accounts/{id}/tags/{tag}` (and via PUT diff) |
 | `tag.unassigned.account`      | `audit_system.enc`                           | `DELETE /api/admin/accounts/{id}/tags/{tag}` (and via PUT diff) |
+| `tag.revoked.bulk`            | sub's repo's `refs/audit/main`               | `POST /api/admin/subscriptions/revoke-by-tag` (one event per revoked sub) |
 
 PUT (replace-the-set) emits one event per actually-changed assignment,
 not one per call — diffing the new set against the existing one keeps
@@ -490,7 +491,7 @@ answers — kept here as rationale for future readers.
 
 ## 10. Slice plan
 
-Three slices, each independently shippable:
+Three slices, each independently shippable. All three shipped 2026-05-02.
 
 - **Slice 1 — Storage + admin API + Tags page.** Four tables (tags,
   repo_tags, subscription_tags, account_tags). Endpoints from §6.1
@@ -508,9 +509,19 @@ Three slices, each independently shippable:
   (`tag.assigned.{repo,subscription,account}` and the matching
   unassigned variants, §7.1).
 - **Slice 3 — Grouped chip filter + bulk revoke.** §6.3 endpoints.
-  Prefix-grouped chip filter (§5.5) + `Revoke all matching` action on
-  the subscription list, with the enumerate-then-confirm dialog and
-  the typed-confirmation phrase gate.
+  `GET /api/admin/tokens?tag=` accepts repeating tag values that
+  intersect (AND) on the **effective** tag set. New
+  `POST /api/admin/subscriptions/revoke-by-tag` body
+  (`{tags, confirm}`) revokes every match in one call, gated by a
+  deterministic typed phrase computed as
+  `revoke <comma-joined-sorted-lower-tags>` — checked server-side so
+  a scripted caller can't bypass the gate. Each revocation emits a
+  `tag.revoked.bulk` event on its repo's `refs/audit/main` (one new
+  event type extending §7.1). Prefix-grouped chip filter (§5.5) on
+  the subscription list, URL-driven (`?tag=` is the state of truth so
+  deep-links / copy-pasted URLs hydrate the filter on load). The
+  `Revoke all matching (N)` action enumerates each match (account,
+  repo, abilities) before firing.
 
 ---
 

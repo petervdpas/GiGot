@@ -41,6 +41,28 @@ html[data-theme="light"] { color-scheme: light; }
   --radius:     6px;
   --radius-sm:  4px;
   --shadow-md:  0 12px 32px rgba(0,0,0,0.4);
+
+  /* Semantic palette families for the admin chips. Four distinct
+     hues so the eye can tell them apart at a glance:
+       - tags          → green   (organisational metadata)
+       - repos         → orange  (the bound resource)
+       - roles         → blue    (authority / who-can-do-what)
+       - subscriptions → purple  (the key itself)
+     Each family carries a -bg / -fg / -line trio so the same chip
+     skin works under any theme. Light-theme overrides below. */
+  --tag-bg:     #1a3522;
+  --tag-fg:     #7ee787;
+  --tag-line:   #2ea04366;
+  --tag-bg-strong: #1f6f3855;
+  --repo-bg:    #3a200c;
+  --repo-fg:    #ffa657;
+  --repo-line:  #b8721c66;
+  --role-regular-bg:   #14304a;
+  --role-regular-fg:   #79c0ff;
+  --role-regular-line: #1f6feb55;
+  --sub-bg:     #2d2150;
+  --sub-fg:     #c8a2ff;
+  --sub-line:   #8957e566;
 }
 html[data-theme="light"] {
   --bg:         #f6f8fa;
@@ -62,6 +84,24 @@ html[data-theme="light"] {
   --field-bg:   #ffffff;
   --ring:       0 0 0 3px rgba(9,105,218,0.22);
   --shadow-md:  0 14px 34px rgba(16,19,37,0.16);
+
+  /* Light-theme variants of the four semantic chip families. Each
+     pair maps to its dark counterpart above so the same .tag-pill /
+     .repo-chip / .badge.regular / .sub-badge skin reads correctly
+     under both themes without per-component conditionals. */
+  --tag-bg:     #ddf4e0;
+  --tag-fg:     #1a7f37;
+  --tag-line:   #2da44e66;
+  --tag-bg-strong: #aff5b9;
+  --repo-bg:    #fff1d6;
+  --repo-fg:    #9a6700;
+  --repo-line:  #bf871f66;
+  --role-regular-bg:   #ddf4ff;
+  --role-regular-fg:   #0550ae;
+  --role-regular-line: #0969da55;
+  --sub-bg:     #f1e6ff;
+  --sub-fg:     #6638b3;
+  --sub-line:   #8957e566;
 }
 
 /* Flip-toggle switch (GG.toggle_switch). Same markup on every page —
