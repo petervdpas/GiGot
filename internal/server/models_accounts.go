@@ -16,6 +16,7 @@ type AccountView struct {
 	Email             string    `json:"email,omitempty"`
 	HasPassword       bool      `json:"has_password"`
 	SubscriptionCount int       `json:"subscription_count"`
+	Tags              []string  `json:"tags,omitempty"`
 	CreatedAt         time.Time `json:"created_at"`
 }
 

@@ -31,6 +31,15 @@ type TokenListItem struct {
 	Repo       string   `json:"repo"`
 	Abilities  []string `json:"abilities,omitempty"`
 	HasAccount bool     `json:"has_account"`
+	// Tags is the subscription's *direct* tag list (assignments
+	// stored on the sub itself, not inherited).
+	Tags []string `json:"tags,omitempty"`
+	// EffectiveTags unions Tags with the subscription's repo's tags
+	// and the subscription's account's tags, computed at read time
+	// (design §2). The subscription detail UI renders these alongside
+	// the explicit ones with `↩ from repo` / `👤 from account`
+	// source labels (design §5.4).
+	EffectiveTags []string `json:"effective_tags,omitempty"`
 }
 
 // TokenListResponse is the body of GET /api/admin/tokens.

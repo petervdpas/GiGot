@@ -6,6 +6,7 @@
 <title>GiGot{{if .Version}} {{.Version}}{{end}} Admin - Accounts</title>
 <meta name="gigot-version" content="{{.Version}}">
 <link rel="stylesheet" href="/assets/admin.css">
+<link rel="stylesheet" href="/assets/tags.css">
 <script>
   try {
     var t = localStorage.getItem('gigot.theme');
@@ -42,7 +43,7 @@
         <div class="card">
           <h2>Existing accounts</h2>
           <table class="responsive-table">
-            <thead><tr><th>Provider</th><th>Identifier</th><th>Display name</th><th>Role</th><th>Password</th><th>Subscriptions</th><th>Created</th><th></th></tr></thead>
+            <thead><tr><th>Provider</th><th>Identifier</th><th>Display name</th><th>Role</th><th></th></tr></thead>
             <tbody id="acct-rows"></tbody>
           </table>
         </div>
@@ -54,6 +55,7 @@
 <script src="/assets/ui.js"></script>
 <script src="/assets/dialogs.js"></script>
 <script src="/assets/admin_common.js"></script>
+<script src="/assets/tag_picker.js"></script>
 <script src="/assets/accounts.js"></script>
 </body>
 </html>

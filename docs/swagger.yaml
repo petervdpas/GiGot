@@ -234,6 +234,10 @@ definitions:
         type: string
       subscription_count:
         type: integer
+      tags:
+        items:
+          type: string
+        type: array
     type: object
   server.AdminLoginRequest:
     properties:
@@ -469,6 +473,13 @@ definitions:
       server_public_key:
         type: string
     type: object
+  server.EntityTagsResponse:
+    properties:
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
   server.ErrorResponse:
     properties:
       error:
@@ -624,6 +635,10 @@ definitions:
       path:
         example: repos/my-templates.git
         type: string
+      tags:
+        items:
+          type: string
+        type: array
     type: object
   server.RepoListResponse:
     properties:
@@ -673,6 +688,13 @@ definitions:
         example: base64-encoded-32-byte-key
         type: string
     type: object
+  server.SetEntityTagsRequest:
+    properties:
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
   server.TagDeleteResponse:
     properties:
       deleted:
@@ -717,10 +739,25 @@ definitions:
         items:
           type: string
         type: array
+      effective_tags:
+        description: "EffectiveTags unions Tags with the subscription's repo's tags\nand
+          the subscription's account's tags, computed at read time\n(design §2). The
+          subscription detail UI renders these alongside\nthe explicit ones with `↩
+          from repo` / `\U0001F464 from account`\nsource labels (design §5.4)."
+        items:
+          type: string
+        type: array
       has_account:
         type: boolean
       repo:
         type: string
+      tags:
+        description: |-
+          Tags is the subscription's *direct* tag list (assignments
+          stored on the sub itself, not inherited).
+        items:
+          type: string
+        type: array
       token:
         type: string
       username:
@@ -805,6 +842,10 @@ definitions:
         type: array
       repo:
         type: string
+      tags:
+        items:
+          type: string
+        type: array
       token:
         type: string
     type: object
@@ -1047,6 +1088,111 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       summary: Manage one account by (provider, identifier) (admin only)
+      tags:
+      - admin
+  /admin/accounts/{provider}/{identifier}/tags:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the direct tag list; PUT replaces it.
+        Account tags propagate to every subscription the
+        account holds (effective_tags on the token list
+        responses unions account + repo + sub tags).
+        Catalogue + assignment diffs land in the system
+        audit log. Session-cookie authenticated.
+      parameters:
+      - description: Account provider
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Account identifier
+        in: path
+        name: identifier
+        required: true
+        type: string
+      - description: PUT body
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.SetEntityTagsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.EntityTagsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage tags on one account (admin only)
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the direct tag list; PUT replaces it.
+        Account tags propagate to every subscription the
+        account holds (effective_tags on the token list
+        responses unions account + repo + sub tags).
+        Catalogue + assignment diffs land in the system
+        audit log. Session-cookie authenticated.
+      parameters:
+      - description: Account provider
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Account identifier
+        in: path
+        name: identifier
+        required: true
+        type: string
+      - description: PUT body
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.SetEntityTagsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.EntityTagsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage tags on one account (admin only)
       tags:
       - admin
   /admin/auth:
@@ -1776,6 +1922,101 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       summary: Convert a plain repo to a Formidable context (admin only)
+      tags:
+      - admin
+  /admin/repos/{name}/tags:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the direct tag list; PUT replaces it
+        wholesale. Unknown tag names in the PUT body are
+        auto-created in the catalogue. Each diff is recorded
+        on the repo's refs/audit/main as one
+        tag.assigned.repo / tag.unassigned.repo event per
+        changed assignment. Session-cookie authenticated.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: PUT body
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.SetEntityTagsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.EntityTagsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage tags on one repo (admin only)
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the direct tag list; PUT replaces it
+        wholesale. Unknown tag names in the PUT body are
+        auto-created in the catalogue. Each diff is recorded
+        on the repo's refs/audit/main as one
+        tag.assigned.repo / tag.unassigned.repo event per
+        changed assignment. Session-cookie authenticated.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: PUT body
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.SetEntityTagsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.EntityTagsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Manage tags on one repo (admin only)
       tags:
       - admin
   /admin/session:

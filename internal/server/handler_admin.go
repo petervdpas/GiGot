@@ -10,6 +10,7 @@ import (
 
 	"github.com/petervdpas/GiGot/internal/accounts"
 	"github.com/petervdpas/GiGot/internal/auth"
+	"github.com/petervdpas/GiGot/internal/tags"
 )
 
 // handleAdminLogin godoc
@@ -207,8 +208,8 @@ func (s *Server) adminUpdateToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "token is required")
 		return
 	}
-	if req.Repo == nil && req.Abilities == nil {
-		writeError(w, http.StatusBadRequest, "at least one of repo, abilities must be provided")
+	if req.Repo == nil && req.Abilities == nil && req.Tags == nil {
+		writeError(w, http.StatusBadRequest, "at least one of repo, abilities, tags must be provided")
 		return
 	}
 
@@ -257,6 +258,42 @@ func (s *Server) adminUpdateToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.Tags != nil {
+		// Resolve the entry once for both the audit-event payload and
+		// the per-repo audit-ref target. Missing tokens 404 here
+		// instead of failing inside SetSubscriptionTags with a less
+		// specific error.
+		entry := s.tokenStrategy.Get(req.Token)
+		if entry == nil {
+			writeError(w, http.StatusNotFound, "token not found")
+			return
+		}
+		caller := s.requireAdminSession(w, r)
+		if caller == nil {
+			return
+		}
+		res, err := s.tags.SetSubscriptionTags(req.Token, *req.Tags, caller.Username)
+		if err != nil {
+			if errors.Is(err, tags.ErrNameRequired) || errors.Is(err, tags.ErrNameInvalid) {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.recordTagCreations(caller, res.CreatedTags)
+		// Per design §7.1, subscription assignment events ride the
+		// subscription's repo's audit ref — so a `git fetch
+		// refs/audit/main` from a mirror still tells the whole repo
+		// story, including who got tagged when.
+		for _, name := range res.Added {
+			s.recordRepoAssignmentAudit(entry.Repo, "tag.assigned.subscription", caller, name)
+		}
+		for _, name := range res.Removed {
+			s.recordRepoAssignmentAudit(entry.Repo, "tag.unassigned.subscription", caller, name)
+		}
+	}
+
 	writeJSON(w, http.StatusOK, MessageResponse{Message: "token updated"})
 }
 
@@ -271,12 +308,18 @@ func (s *Server) adminListTokens(w http.ResponseWriter, _ *http.Request) {
 		// action on the subscriptions UI.
 		provider, identifier, perr := parseTokenUsername(e.Username)
 		has := perr == nil && s.accounts.Has(provider, identifier)
+		accountKey := ""
+		if has {
+			accountKey = provider + ":" + identifier
+		}
 		items = append(items, TokenListItem{
-			Token:      e.Token,
-			Username:   e.Username,
-			Repo:       e.Repo,
-			Abilities:  e.Abilities,
-			HasAccount: has,
+			Token:         e.Token,
+			Username:      e.Username,
+			Repo:          e.Repo,
+			Abilities:     e.Abilities,
+			HasAccount:    has,
+			Tags:          s.tags.TagsFor(tags.ScopeSubscription, e.Token),
+			EffectiveTags: s.tags.EffectiveSubscriptionTags(e.Token, e.Repo, accountKey),
 		})
 	}
 	writeJSON(w, http.StatusOK, TokenListResponse{

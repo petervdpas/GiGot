@@ -11,6 +11,7 @@
   let tokensCache = [];
   let credentialsCache = [];
   let accountsCache = [];
+  let tagsCatalogueCache = [];
 
   function repoNames() { return repoInfoCache.map(r => r.name); }
 
@@ -228,8 +229,63 @@
     });
 
     const card = Admin.renderTokenCard(t, { titleHTML, subtitle, leftChips, actions });
+    installTagsSection(card, t);
     installAbilitiesSection(card, t);
     return card;
+  }
+
+  // installTagsSection adds a tag pill cluster between the chips row
+  // and the abilities section. Pills come from t.tags (explicit) and
+  // t.effective_tags - t.tags (inherited from repo + account). The
+  // tag_picker mounts inline; saving calls api.updateToken with a
+  // tags field, which mutates the in-memory token cache so a
+  // subsequent re-render reflects state without a global refresh.
+  function installTagsSection(card, t) {
+    const explicit = t.tags || [];
+    const explicitLower = new Set(explicit.map(s => s.toLowerCase()));
+    const inheritedNames = (t.effective_tags || []).filter(
+      n => !explicitLower.has(n.toLowerCase())
+    );
+    const inherited = inheritedNames.map(n => ({
+      name: n,
+      // Slice 2: source attribution is "inherited" without
+      // distinguishing repo vs account. The pill carries the muted
+      // styling so the admin sees it differs from explicit; clicking
+      // through to the parent entity (repo or account) shows where
+      // the tag lives.
+      source: 'inherited',
+    }));
+
+    const tokenField = card.querySelector('.token-field');
+    if (!tokenField) return;
+
+    const section = document.createElement('div');
+    section.className = 'ic-tags-section';
+    section.innerHTML =
+      '<div class="ic-section-label muted">Tags</div>' +
+      '<div class="ic-tags-host"></div>';
+    tokenField.parentNode.insertBefore(section, tokenField);
+
+    GG.tag_picker.mount(section.querySelector('.ic-tags-host'), {
+      tags: explicit.slice(),
+      inherited,
+      allTags: tagsCatalogueCache,
+      onChange: async (next) => {
+        await api.updateToken(t.token, { tags: next });
+        // Mutate the in-memory snapshot so the next render of this
+        // card sees the new state. Effective tags must be
+        // recomputed — the picker re-mounts on its own using the
+        // updated explicit list, but the inherited slice depends on
+        // the difference, so we rewrite both arrays.
+        t.tags = next.slice();
+        const lower = new Set(next.map(s => s.toLowerCase()));
+        const nextEffective = next.slice();
+        for (const name of (t.effective_tags || [])) {
+          if (!lower.has(name.toLowerCase())) nextEffective.push(name);
+        }
+        t.effective_tags = nextEffective;
+      },
+    });
   }
 
   // installAbilitiesSection drops the flat chip row that
@@ -399,16 +455,18 @@
   // boot and after issue/revoke/edit so every picker stays in sync.
   async function refreshAll() {
     try {
-      const [repoData, tokenData, credData, acctData] = await Promise.all([
+      const [repoData, tokenData, credData, acctData, tagData] = await Promise.all([
         api.listRepos().catch(() => ({ repos: [] })),
         api.listTokens().catch(() => ({ tokens: [] })),
         api.listCredentials().catch(() => ({ credentials: [] })),
         api.listAccounts().catch(() => ({ accounts: [] })),
+        api.listTags().catch(() => ({ tags: [] })),
       ]);
       repoInfoCache = repoData.repos || [];
       tokensCache = tokenData.tokens || [];
       credentialsCache = credData.credentials || [];
       accountsCache = acctData.accounts || [];
+      tagsCatalogueCache = (tagData.tags || []).map(t => t.name);
       renderTokensGrid();
 
       // ?user= pre-selects the account picker. ?repo= pre-selects the

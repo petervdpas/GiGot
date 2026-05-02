@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -368,6 +369,279 @@ type UsageCounts struct {
 	Repos         int `json:"repos"`
 	Subscriptions int `json:"subscriptions"`
 	Accounts      int `json:"accounts"`
+}
+
+// AssignmentScope picks one of the three join sets so the helpers
+// don't repeat themselves once per entity type.
+type AssignmentScope int
+
+const (
+	ScopeRepo AssignmentScope = iota
+	ScopeSubscription
+	ScopeAccount
+)
+
+// SetResult reports what changed in a SetXxxTags call. Callers (the
+// handlers) iterate these to emit one audit event per affected
+// catalogue row + assignment row, matching the §7.1 contract.
+type SetResult struct {
+	// CreatedTags is the catalogue-level diff: tag names that were
+	// not in the catalogue before this call and were auto-created
+	// to satisfy it. Each lands in the system audit log as a
+	// tag.created event before the assignment events fire.
+	CreatedTags []*Tag
+	// Added is the names of tags newly attached to the entity.
+	// Each lands as a tag.assigned.<scope> event.
+	Added []string
+	// Removed is the names of tags newly detached from the entity.
+	// Each lands as a tag.unassigned.<scope> event.
+	Removed []string
+}
+
+// SetRepoTags replaces the direct tag set on a repo. Unknown tag
+// names are auto-created in the catalogue (created_by recorded as
+// taggedBy). Returns a SetResult describing every catalogue +
+// assignment delta so the caller can emit per-change audit events.
+func (s *Store) SetRepoTags(repoName string, tagNames []string, taggedBy string) (SetResult, error) {
+	return s.setTags(ScopeRepo, repoName, tagNames, taggedBy)
+}
+
+// SetSubscriptionTags replaces the direct tag set on a subscription
+// keyed by its opaque token. Same auto-create + diff semantics as
+// SetRepoTags.
+func (s *Store) SetSubscriptionTags(subID string, tagNames []string, taggedBy string) (SetResult, error) {
+	return s.setTags(ScopeSubscription, subID, tagNames, taggedBy)
+}
+
+// SetAccountTags replaces the direct tag set on an account keyed by
+// "<provider>:<identifier>". Same auto-create + diff semantics as
+// SetRepoTags.
+func (s *Store) SetAccountTags(accountKey string, tagNames []string, taggedBy string) (SetResult, error) {
+	return s.setTags(ScopeAccount, accountKey, tagNames, taggedBy)
+}
+
+// setTags is the shared replace-the-set implementation. It locks the
+// store once for the entire operation so a concurrent rename or
+// delete can't race a half-applied set update.
+func (s *Store) setTags(scope AssignmentScope, entityID string, names []string, taggedBy string) (SetResult, error) {
+	if entityID == "" {
+		return SetResult{}, fmt.Errorf("tags: entity id required")
+	}
+
+	// Validate + canonicalise every input name *before* mutating any
+	// state. Trim whitespace, dedupe (case-insensitive), and reject
+	// the call if any single name is malformed — partial application
+	// is the worst possible outcome here.
+	wantLower := make(map[string]string, len(names))
+	for _, raw := range names {
+		clean, err := validateName(raw)
+		if err != nil {
+			return SetResult{}, err
+		}
+		lower := strings.ToLower(clean)
+		if _, dup := wantLower[lower]; !dup {
+			wantLower[lower] = clean
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Snapshot for rollback. Cheap — the slices share underlying
+	// arrays with the originals; we replace them wholesale on
+	// success or restore them on persist failure.
+	prevAssignments := s.assignmentsFor(scope)
+	prevTags := make(map[string]*Tag, len(s.tags))
+	for k, v := range s.tags {
+		cp := *v
+		prevTags[k] = &cp
+	}
+	prevNameIndex := make(map[string]string, len(s.nameIndex))
+	for k, v := range s.nameIndex {
+		prevNameIndex[k] = v
+	}
+
+	// Auto-create any tag that doesn't exist yet, recording the new
+	// rows so the caller can emit tag.created audit events for them.
+	var created []*Tag
+	wantTagIDs := make(map[string]struct{}, len(wantLower))
+	for lower, display := range wantLower {
+		if id, ok := s.nameIndex[lower]; ok {
+			wantTagIDs[id] = struct{}{}
+			continue
+		}
+		id, err := newID()
+		if err != nil {
+			return SetResult{}, fmt.Errorf("tags: id: %w", err)
+		}
+		t := &Tag{
+			ID:        id,
+			Name:      display,
+			CreatedAt: time.Now().UTC(),
+			CreatedBy: taggedBy,
+		}
+		s.tags[id] = t
+		s.nameIndex[lower] = id
+		wantTagIDs[id] = struct{}{}
+		cp := *t
+		created = append(created, &cp)
+	}
+
+	// Diff the existing assignment set for this entity against the
+	// desired set, building the kept/removed/added partition.
+	var keptOther []*Assignment
+	haveTagIDs := make(map[string]struct{})
+	for _, a := range prevAssignments {
+		if a.EntityID != entityID {
+			keptOther = append(keptOther, a)
+			continue
+		}
+		haveTagIDs[a.TagID] = struct{}{}
+		if _, want := wantTagIDs[a.TagID]; want {
+			keptOther = append(keptOther, a)
+		}
+	}
+
+	var addedNames, removedNames []string
+	now := time.Now().UTC()
+	newAssignments := keptOther
+	for tagID := range wantTagIDs {
+		if _, have := haveTagIDs[tagID]; have {
+			continue
+		}
+		newAssignments = append(newAssignments, &Assignment{
+			EntityID: entityID,
+			TagID:    tagID,
+			TaggedAt: now,
+			TaggedBy: taggedBy,
+		})
+		addedNames = append(addedNames, s.tags[tagID].Name)
+	}
+	for tagID := range haveTagIDs {
+		if _, want := wantTagIDs[tagID]; want {
+			continue
+		}
+		removedNames = append(removedNames, s.tags[tagID].Name)
+	}
+
+	s.setAssignmentsFor(scope, newAssignments)
+
+	if err := s.persist(); err != nil {
+		// Roll back the catalogue and the join set wholesale.
+		s.tags = prevTags
+		s.nameIndex = prevNameIndex
+		s.setAssignmentsFor(scope, prevAssignments)
+		return SetResult{}, err
+	}
+
+	return SetResult{
+		CreatedTags: created,
+		Added:       addedNames,
+		Removed:     removedNames,
+	}, nil
+}
+
+func (s *Store) assignmentsFor(scope AssignmentScope) []*Assignment {
+	switch scope {
+	case ScopeRepo:
+		return s.repoAssignments
+	case ScopeSubscription:
+		return s.subscriptionAssignments
+	case ScopeAccount:
+		return s.accountAssignments
+	}
+	return nil
+}
+
+func (s *Store) setAssignmentsFor(scope AssignmentScope, list []*Assignment) {
+	switch scope {
+	case ScopeRepo:
+		s.repoAssignments = list
+	case ScopeSubscription:
+		s.subscriptionAssignments = list
+	case ScopeAccount:
+		s.accountAssignments = list
+	}
+}
+
+// TagsFor returns the tag names directly assigned to one entity,
+// sorted for deterministic output. Inheritance is *not* applied —
+// callers that need the effective set use EffectiveSubscriptionTags.
+func (s *Store) TagsFor(scope AssignmentScope, entityID string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.tagsForLocked(scope, entityID)
+}
+
+func (s *Store) tagsForLocked(scope AssignmentScope, entityID string) []string {
+	out := []string{}
+	for _, a := range s.assignmentsFor(scope) {
+		if a.EntityID != entityID {
+			continue
+		}
+		if t, ok := s.tags[a.TagID]; ok {
+			out = append(out, t.Name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// EffectiveSubscriptionTags returns the union of a subscription's
+// own tags, its repo's tags, and its account's tags — the §2 model
+// computed read-side. Names are case-folded for the union (so the
+// repo's `Team:Marketing` and the account's `team:marketing`
+// collapse) but the returned strings preserve the catalogue's
+// canonical display casing.
+func (s *Store) EffectiveSubscriptionTags(subID, repoName, accountKey string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	seen := make(map[string]string) // lower → display
+	pull := func(scope AssignmentScope, id string) {
+		if id == "" {
+			return
+		}
+		for _, a := range s.assignmentsFor(scope) {
+			if a.EntityID != id {
+				continue
+			}
+			if t, ok := s.tags[a.TagID]; ok {
+				lower := strings.ToLower(t.Name)
+				if _, dup := seen[lower]; !dup {
+					seen[lower] = t.Name
+				}
+			}
+		}
+	}
+	pull(ScopeSubscription, subID)
+	pull(ScopeRepo, repoName)
+	pull(ScopeAccount, accountKey)
+
+	out := make([]string, 0, len(seen))
+	for _, display := range seen {
+		out = append(out, display)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// EntitiesTagged returns the EntityIDs of all entities under scope
+// that have at least one tag assigned. Used by callers that want to
+// pre-populate a tag picker without iterating every entity.
+func (s *Store) EntitiesTagged(scope AssignmentScope) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	seen := map[string]struct{}{}
+	for _, a := range s.assignmentsFor(scope) {
+		seen[a.EntityID] = struct{}{}
+	}
+	out := make([]string, 0, len(seen))
+	for k := range seen {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Usage returns counts keyed by tag ID. Missing tags from the

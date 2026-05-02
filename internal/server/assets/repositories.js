@@ -13,6 +13,7 @@
   let credentialsCache = [];
   let destinationsByRepo = {};
   let accountsCache = [];
+  let tagsCatalogueCache = [];
 
   // subsOpenState: same pattern as destOpenState — preserves
   // expand/collapse per repo across refreshes so re-rendering the
@@ -60,12 +61,27 @@
         '<div class="ic-chips">' + badges.join('') + '</div>' +
       '</div>' +
       '<div class="ic-stats">' + stats.join('') + '</div>' +
+      '<div class="ic-section ic-tags-section">' +
+        '<div class="ic-section-label muted">Tags</div>' +
+        '<div class="ic-tags-host"></div>' +
+      '</div>' +
       '<div class="ic-section" data-section="subs"></div>' +
       '<div class="ic-section" data-section="dest"></div>' +
       '<div class="ic-actions">' +
         convertBtn +
         '<button class="small danger delete-btn">Delete</button>' +
       '</div>';
+
+    GG.tag_picker.mount(card.querySelector('.ic-tags-host'), {
+      tags: r.tags || [],
+      allTags: tagsCatalogueCache,
+      onChange: async (next) => {
+        const resp = await api.setRepoTags(r.name, next);
+        // Mutate the cached row so a subsequent re-render reflects
+        // the new state; no global refresh needed for a tag flip.
+        r.tags = resp.tags || [];
+      },
+    });
 
     renderSubscriptionsSection(card.querySelector('[data-section="subs"]'), r.name);
     renderDestinationSection(card.querySelector('[data-section="dest"]'), r.name);
@@ -416,16 +432,18 @@
 
   async function refreshRepos() {
     try {
-      const [repoData, tokenData, credData, acctData] = await Promise.all([
+      const [repoData, tokenData, credData, acctData, tagData] = await Promise.all([
         api.listRepos(),
         api.listTokens().catch(() => ({ tokens: [], count: 0 })),
         api.listCredentials().catch(() => ({ credentials: [], count: 0 })),
         api.listAccounts().catch(() => ({ accounts: [] })),
+        api.listTags().catch(() => ({ tags: [] })),
       ]);
       repoInfoCache = repoData.repos || [];
       tokensCache = tokenData.tokens || [];
       credentialsCache = credData.credentials || [];
       accountsCache = acctData.accounts || [];
+      tagsCatalogueCache = (tagData.tags || []).map(t => t.name);
 
       // Destinations are admin-scoped per-repo — one fetch per repo is
       // fine at admin workloads, and keeps the public /api/repos

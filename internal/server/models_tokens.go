@@ -40,9 +40,14 @@ type RevokeTokenRequest struct {
 // when non-nil and non-empty, rebinds the key to a different repo
 // (subject to the "one key per (account, repo)" uniqueness rule).
 // Abilities, when non-nil, replaces the list wholesale (pass an
-// empty array to clear). A nil field is not touched.
+// empty array to clear). Tags, when non-nil, replaces the
+// subscription's direct tag set (auto-creating unknown tag names);
+// inherited tags from the bound repo or account are not editable
+// here — manage those on the parent entity. A nil field is not
+// touched.
 type UpdateTokenRequest struct {
 	Token     string    `json:"token"`
 	Repo      *string   `json:"repo,omitempty"`
 	Abilities *[]string `json:"abilities,omitempty"`
+	Tags      *[]string `json:"tags,omitempty"`
 }

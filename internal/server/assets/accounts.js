@@ -6,9 +6,20 @@
 (function () {
   const { api, escapeHtml, initSidebar, guardSession } = window.Admin;
 
+  let tagsCatalogueCache = [];
+  // Per-account expand state, keyed by "provider:identifier". Persisted
+  // across refresh() calls so a tag-edit (which triggers a re-render)
+  // doesn't snap every open detail row shut. Same pattern as the
+  // subsOpenState / destOpenState maps on /admin/repositories.
+  const acctOpenState = Object.create(null);
+
   async function refresh() {
     try {
-      const data = await api.listAccounts();
+      const [data, tagData] = await Promise.all([
+        api.listAccounts(),
+        api.listTags().catch(() => ({ tags: [] })),
+      ]);
+      tagsCatalogueCache = (tagData.tags || []).map(t => t.name);
       const rows = data.accounts || [];
       document.getElementById('acct-count').textContent = rows.length;
       const tbody = document.getElementById('acct-rows');
@@ -57,17 +68,63 @@
     // data-label drives the mobile card-list rendering — see
     // .responsive-table in admin.css. One source of column names
     // for both the table <th> and the mobile pseudo-label.
+    const accountKey = a.provider + ':' + a.identifier;
+    const tagCount = (a.tags || []).length;
     tr.innerHTML =
-      '<td data-label="Provider"><code>' + escapeHtml(a.provider) + '</code></td>' +
+      '<td data-label="Provider">' +
+        '<button type="button" class="acct-row-toggle" aria-label="Show account detail" title="Show details">▶</button>' +
+        '<code>' + escapeHtml(a.provider) + '</code>' +
+      '</td>' +
       '<td data-label="Identifier"><code class="acct-identifier" title="' + escapeHtml(a.identifier) + '">' +
         escapeHtml(a.identifier) + '</code></td>' +
       '<td data-label="Display name">' + escapeHtml(a.display_name || '') + '</td>' +
       '<td data-label="Role"><span class="badge ' + roleBadgeClass(a.role) + '">' +
         escapeHtml(a.role) + '</span></td>' +
-      '<td data-label="Password">' + (a.has_password ? 'yes' : '<span class="muted">dormant</span>') + '</td>' +
-      '<td data-label="Subscriptions">' + subsCell + '</td>' +
-      '<td data-label="Created" class="muted">' + escapeHtml((a.created_at || '').slice(0, 10)) + '</td>' +
       '<td class="row-actions"></td>';
+
+    // The detail row sits directly below the main row. It collapses
+    // by default; the toggle button above flips display: '' / 'none'.
+    // colspan covers every visible column. The keep-visible columns
+    // are identity-shaped (provider / identifier / display name /
+    // role) — everything that's metadata about the account moves
+    // here so the table stays scannable.
+    const detailTr = document.createElement('tr');
+    detailTr.className = 'acct-detail-row';
+    detailTr.style.display = 'none';
+    detailTr.innerHTML =
+      '<td colspan="5">' +
+        '<div class="acct-detail-content">' +
+          '<dl class="acct-detail-grid">' +
+            '<dt>Password</dt><dd>' + (a.has_password ? 'yes' : '<span class="muted">dormant</span>') + '</dd>' +
+            '<dt>Subscriptions</dt><dd>' + subsCell + '</dd>' +
+            '<dt>Created</dt><dd class="muted">' + escapeHtml((a.created_at || '').slice(0, 10)) + '</dd>' +
+          '</dl>' +
+          '<div class="ic-section-label muted">Tags' +
+            (tagCount ? ' <span class="muted">(' + tagCount + ')</span>' : '') +
+          '</div>' +
+          '<div class="acct-tags-host"></div>' +
+        '</div>' +
+      '</td>';
+
+    GG.tag_picker.mount(detailTr.querySelector('.acct-tags-host'), {
+      tags: a.tags || [],
+      allTags: tagsCatalogueCache,
+      onChange: async (next) => {
+        const resp = await api.setAccountTags(a.provider, a.identifier, next);
+        a.tags = resp.tags || [];
+      },
+    });
+
+    const toggleBtn = tr.querySelector('.acct-row-toggle');
+    function applyOpen(open) {
+      detailTr.style.display = open ? '' : 'none';
+      toggleBtn.classList.toggle('open', open);
+      toggleBtn.textContent = open ? '▼' : '▶';
+      toggleBtn.setAttribute('aria-label', open ? 'Hide account detail' : 'Show account detail');
+      acctOpenState[accountKey] = open;
+    }
+    toggleBtn.addEventListener('click', () => applyOpen(!acctOpenState[accountKey]));
+    if (acctOpenState[accountKey]) applyOpen(true);
 
     const actions = tr.querySelector('.row-actions');
 
@@ -138,7 +195,14 @@
       { label: 'Delete', onClick: deleteAccount, danger: true },
     ]);
 
-    return tr;
+    // Return both rows as a fragment so the caller's appendChild
+    // adds the data row + the (initially hidden) detail row in
+    // order. tbody renders one logical record as two physical
+    // rows, which is the standard table-with-collapsible pattern.
+    const frag = document.createDocumentFragment();
+    frag.appendChild(tr);
+    frag.appendChild(detailTr);
+    return frag;
   }
 
   (async function boot() {

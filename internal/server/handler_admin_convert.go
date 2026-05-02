@@ -65,6 +65,8 @@ func (s *Server) handleAdminRepoSub(w http.ResponseWriter, r *http.Request) {
 		s.handleAdminRepoDestinations(w, r)
 	case "formidable":
 		s.handleAdminConvertFormidable(w, r)
+	case "tags":
+		s.handleAdminRepoTags(w, r)
 	default:
 		writeError(w, http.StatusNotFound, "unknown repo subroute")
 	}

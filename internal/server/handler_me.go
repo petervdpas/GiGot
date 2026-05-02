@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/petervdpas/GiGot/internal/accounts"
+	"github.com/petervdpas/GiGot/internal/tags"
 )
 
 // MeResponse is the body of GET /api/me — the self-serve equivalent
@@ -66,12 +67,15 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		if prov != id.AccountProvider || ident != id.Username {
 			continue
 		}
+		accountKey := prov + ":" + ident
 		resp.Subscriptions = append(resp.Subscriptions, TokenListItem{
-			Token:      tok.Token,
-			Username:   tok.Username,
-			Repo:       tok.Repo,
-			Abilities:  tok.Abilities,
-			HasAccount: s.accounts.Has(prov, ident),
+			Token:         tok.Token,
+			Username:      tok.Username,
+			Repo:          tok.Repo,
+			Abilities:     tok.Abilities,
+			HasAccount:    s.accounts.Has(prov, ident),
+			Tags:          s.tags.TagsFor(tags.ScopeSubscription, tok.Token),
+			EffectiveTags: s.tags.EffectiveSubscriptionTags(tok.Token, tok.Repo, accountKey),
 		})
 	}
 

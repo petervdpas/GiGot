@@ -12,6 +12,7 @@ import (
 	"github.com/petervdpas/GiGot/internal/auth"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
 	"github.com/petervdpas/GiGot/internal/policy"
+	"github.com/petervdpas/GiGot/internal/tags"
 )
 
 // handleRepos godoc
@@ -101,6 +102,7 @@ func (s *Server) repoInfo(name string) RepoInfo {
 		info.Commits = n
 	}
 	info.DestinationCount = len(s.destinations.All(name))
+	info.Tags = s.tags.TagsFor(tags.ScopeRepo, name)
 	return info
 }
 

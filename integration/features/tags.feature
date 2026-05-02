@@ -98,3 +98,75 @@ Feature: Tag catalogue (admin)
     And I log in as admin "alice" with password "hunter2"
     And I GET "/api/admin/tags"
     Then the JSON response "count" should be 1
+
+  Scenario: PUT repo tags creates and assigns
+    # Slice 2 wire contract: a fresh repo with no tags accepts a PUT
+    # of unknown tag names, auto-creates them in the catalogue, and
+    # the GET returns them on the next call. The catalogue grows by
+    # the number of new tag names, not by the number of assignments.
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a repository "addresses" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I PUT "/api/admin/repos/addresses/tags" with body '{"tags":["team:marketing","env:prod"]}'
+    Then the response status should be 200
+    And the response body should contain "team:marketing"
+
+    When I GET "/api/admin/tags"
+    Then the JSON response "count" should be 2
+
+    When I GET "/api/admin/repos/addresses/tags"
+    Then the response status should be 200
+    And the response body should contain "team:marketing"
+    And the response body should contain "env:prod"
+
+  Scenario: PUT repo tags is idempotent
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a repository "addresses" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I PUT "/api/admin/repos/addresses/tags" with body '{"tags":["env:prod"]}'
+    And I PUT "/api/admin/repos/addresses/tags" with body '{"tags":["env:prod"]}'
+    Then the response status should be 200
+
+    When I GET "/api/admin/tags"
+    # Catalogue stays at 1 — the second PUT does not create a duplicate.
+    Then the JSON response "count" should be 1
+
+  Scenario: Account tag PUT roundtrips and surfaces in the list
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I PUT "/api/admin/accounts/local/alice/tags" with body '{"tags":["contractor:acme"]}'
+    Then the response status should be 200
+
+    When I GET "/api/admin/accounts/local/alice/tags"
+    Then the response status should be 200
+    And the response body should contain "contractor:acme"
+
+  Scenario: Cascade delete sweeps assignments across all three sets
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a repository "addresses" exists
+    # Create the tag explicitly so the response carries its id at the
+    # top level (the integration test save-step only supports flat
+    # keys, not nested {tags[0].id} paths).
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/tags" with body '{"name":"sweep-me"}'
+    And I save the JSON response "id" as "sweep_id"
+    And I PUT "/api/admin/repos/addresses/tags" with body '{"tags":["sweep-me"]}'
+    And I PUT "/api/admin/accounts/local/alice/tags" with body '{"tags":["sweep-me"]}'
+
+    When I DELETE "/api/admin/tags/${sweep_id}"
+    Then the response status should be 200
+    # 1 repo + 1 account assignment swept. Subscription side stays
+    # at zero — issuing a key would require a bound account flow
+    # orthogonal to the cascade contract; the per-repo-audit
+    # advance for sub assignments is exercised by the dedicated
+    # TestAdminTokens_PatchTagsIdempotentNoAuditChurn handler test.
+    And the response body should contain "\"repos\":1"
+    And the response body should contain "\"accounts\":1"
+
+    When I GET "/api/admin/repos/addresses/tags"
+    # Repo side is now empty — the cascade swept the assignment.
+    Then the response body should not contain "sweep-me"

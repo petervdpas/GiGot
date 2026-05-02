@@ -302,6 +302,146 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/accounts/{provider}/{identifier}/tags": {
+            "get": {
+                "description": "GET returns the direct tag list; PUT replaces it.\nAccount tags propagate to every subscription the\naccount holds (effective_tags on the token list\nresponses unions account + repo + sub tags).\nCatalogue + assignment diffs land in the system\naudit log. Session-cookie authenticated.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage tags on one account (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account provider",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "identifier",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "PUT body",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.SetEntityTagsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.EntityTagsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "GET returns the direct tag list; PUT replaces it.\nAccount tags propagate to every subscription the\naccount holds (effective_tags on the token list\nresponses unions account + repo + sub tags).\nCatalogue + assignment diffs land in the system\naudit log. Session-cookie authenticated.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage tags on one account (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Account provider",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Account identifier",
+                        "name": "identifier",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "PUT body",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.SetEntityTagsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.EntityTagsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/auth": {
             "get": {
                 "description": "GET returns the current allow_local + OAuth + gateway\nconfig snapshot. PATCH applies a new snapshot: the\nOAuth registry and gateway strategy are rebuilt,\natomically swapped into place on success, and the\nchange is persisted to the config file. Rejects with\n400 when a secret ref fails to resolve or a provider\ndiscovery URL is unreachable — old state stays live.",
@@ -1287,6 +1427,132 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "Empty repo — nothing to stamp on top of",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/repos/{name}/tags": {
+            "get": {
+                "description": "GET returns the direct tag list; PUT replaces it\nwholesale. Unknown tag names in the PUT body are\nauto-created in the catalogue. Each diff is recorded\non the repo's refs/audit/main as one\ntag.assigned.repo / tag.unassigned.repo event per\nchanged assignment. Session-cookie authenticated.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage tags on one repo (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "PUT body",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.SetEntityTagsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.EntityTagsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "GET returns the direct tag list; PUT replaces it\nwholesale. Unknown tag names in the PUT body are\nauto-created in the catalogue. Each diff is recorded\non the repo's refs/audit/main as one\ntag.assigned.repo / tag.unassigned.repo event per\nchanged assignment. Session-cookie authenticated.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Manage tags on one repo (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "PUT body",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.SetEntityTagsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.EntityTagsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -4171,6 +4437,12 @@ const docTemplate = `{
                 },
                 "subscription_count": {
                     "type": "integer"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -4528,6 +4800,17 @@ const docTemplate = `{
                 }
             }
         },
+        "server.EntityTagsResponse": {
+            "type": "object",
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "server.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -4730,6 +5013,12 @@ const docTemplate = `{
                 "path": {
                     "type": "string",
                     "example": "repos/my-templates.git"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -4804,6 +5093,17 @@ const docTemplate = `{
                 }
             }
         },
+        "server.SetEntityTagsRequest": {
+            "type": "object",
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "server.TagDeleteResponse": {
             "type": "object",
             "properties": {
@@ -4872,11 +5172,25 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "effective_tags": {
+                    "description": "EffectiveTags unions Tags with the subscription's repo's tags\nand the subscription's account's tags, computed at read time\n(design §2). The subscription detail UI renders these alongside\nthe explicit ones with ` + "`" + `↩ from repo` + "`" + ` / ` + "`" + `👤 from account` + "`" + `\nsource labels (design §5.4).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "has_account": {
                     "type": "boolean"
                 },
                 "repo": {
                     "type": "string"
+                },
+                "tags": {
+                    "description": "Tags is the subscription's *direct* tag list (assignments\nstored on the sub itself, not inherited).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "token": {
                     "type": "string"
@@ -5004,6 +5318,12 @@ const docTemplate = `{
                 },
                 "repo": {
                     "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "token": {
                     "type": "string"

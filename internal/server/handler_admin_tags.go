@@ -148,7 +148,7 @@ func (s *Server) adminCreateTag(w http.ResponseWriter, r *http.Request, id *auth
 		}
 		return
 	}
-	s.recordTagAudit("tag.created", id, map[string]any{
+	s.recordSystemAudit("tag.created", id, map[string]any{
 		"id":   created.ID,
 		"name": created.Name,
 	})
@@ -186,7 +186,7 @@ func (s *Server) adminRenameTag(w http.ResponseWriter, r *http.Request, id *auth
 		}
 		return
 	}
-	s.recordTagAudit("tag.renamed", id, map[string]any{
+	s.recordSystemAudit("tag.renamed", id, map[string]any{
 		"id":       renamed.ID,
 		"old_name": before.Name,
 		"new_name": renamed.Name,
@@ -214,7 +214,7 @@ func (s *Server) adminDeleteTag(w http.ResponseWriter, _ *http.Request, id *auth
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.recordTagAudit("tag.deleted", id, map[string]any{
+	s.recordSystemAudit("tag.deleted", id, map[string]any{
 		"id":   before.ID,
 		"name": before.Name,
 		"swept": map[string]int{
@@ -233,22 +233,3 @@ func (s *Server) adminDeleteTag(w http.ResponseWriter, _ *http.Request, id *auth
 	})
 }
 
-// recordTagAudit writes one event to the system audit log. Failures
-// are logged but never block the user-facing operation — an audit-log
-// write error means the action still happened, the operator just lost
-// the trail. Surfacing the error to the admin would frame a successful
-// action as failed, which is the wrong default.
-func (s *Server) recordTagAudit(eventType string, id *auth.Identity, payload map[string]any) {
-	if s.systemAudit == nil {
-		return
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return
-	}
-	_, _ = s.systemAudit.Append(audit.Event{
-		Type:    eventType,
-		Actor:   auditActorFromIdentity(id),
-		Payload: body,
-	})
-}

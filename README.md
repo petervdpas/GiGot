@@ -63,7 +63,38 @@ here. The items below do not overlap with Track B.
 
 Open work:
 
-- [ ] **Tags — slice 1 (design:
+- [ ] **Tags — slice 3 (design:
+      [`tags.md`](docs/design/tags.md) §5.5, §5.6, §6.3, §10).**
+      Grouped chip filter on `/admin/subscriptions` (chips clustered
+      by prefix-before-colon — `team:*`, `env:*`, `contractor:*`,
+      then "Other"). Multi-chip filter intersects (AND) and matches
+      the **effective** tag set so an admin filtering by `team:marketing`
+      finds subs tagged directly, subs that inherit it through their
+      repo, and subs that inherit it through their account. New
+      `POST /api/admin/subscriptions/revoke-by-tag` endpoint with a
+      typed-confirmation phrase (server-side gate, not just UI) and
+      an enumerate-then-confirm dialog that lists every match with
+      its source(s) before firing. Closes the slice plan in §10.
+
+Done and shipping:
+
+- [x] **Tags — slice 2 (design:
+      [`tags.md`](docs/design/tags.md) §6.2, §7.1, §10).**
+      Assignment surfaces wired across all three taggable entities:
+      `PUT /api/admin/repos/{name}/tags`, `PUT /api/admin/accounts/{provider}/{identifier}/tags`,
+      and the existing `PATCH /api/admin/tokens` body extended with
+      `tags *[]string` for subscription assignments (token rides in
+      the body, never in the URL — design §6.2 refinement). Each
+      diff emits per-change audit events: repo + subscription
+      events to that repo's `refs/audit/main`; account events to
+      the system audit log. Token list / `/api/me` responses now
+      carry both `tags` (direct) and `effective_tags` (the §2
+      three-way union). Reusable `GG.tag_picker` (assets/tag_picker.js)
+      mounted on each repo card, account row, and subscription card —
+      explicit pills are removable, inherited pills render muted with
+      a source label. Swagger regenerated, Cucumber coverage extended,
+      handler + unit tests across each layer green.
+- [x] **Tags — slice 1 (design:
       [`tags.md`](docs/design/tags.md) §3, §6.1, §10).**
       Storage scaffold for the four-table tag model: `tags` catalogue
       plus `repo_tags` / `subscription_tags` / `account_tags`
@@ -82,8 +113,6 @@ Open work:
       tag.renamed / tag.deleted events per §7.1; repo-bound and
       account-level assignment events come with slice 2. Swagger
       annotations + unit + handler + Cucumber coverage.
-
-Done and shipping:
 
 - [x] **Docker image — slice 3 (design:
       [`docker-image.md`](docs/design/docker-image.md) §8, §12).**

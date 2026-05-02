@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/petervdpas/GiGot/internal/accounts"
+	"github.com/petervdpas/GiGot/internal/tags"
 )
 
 // accountView projects a stored Account onto its wire shape. Password
@@ -38,6 +39,7 @@ func accountView(a accounts.Account) AccountView {
 func (s *Server) accountView(a accounts.Account) AccountView {
 	v := accountView(a)
 	v.SubscriptionCount = s.countSubscriptionsFor(a.Provider, a.Identifier)
+	v.Tags = s.tags.TagsFor(tags.ScopeAccount, a.Provider+":"+a.Identifier)
 	return v
 }
 
@@ -128,6 +130,14 @@ func (s *Server) handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
 // @Router       /admin/accounts/{provider}/{identifier} [patch]
 // @Router       /admin/accounts/{provider}/{identifier} [delete]
 func (s *Server) handleAdminAccount(w http.ResponseWriter, r *http.Request) {
+	// Sub-resource dispatch happens before the generic
+	// /accounts/{provider}/{identifier} path parse, so requests like
+	// .../tags route to their dedicated handler instead of trying to
+	// PATCH/DELETE an account named "identifier/tags".
+	if strings.HasSuffix(r.URL.Path, "/tags") {
+		s.handleAdminAccountTags(w, r)
+		return
+	}
 	if s.requireAdminSession(w, r) == nil {
 		return
 	}

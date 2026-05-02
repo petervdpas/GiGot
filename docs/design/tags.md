@@ -316,10 +316,13 @@ entity that owns the assignment:
 | POST   | `/api/admin/repos/{name}/tags/{tag}`           | Assign a single tag (idempotent). Creates the tag if unknown. |
 | DELETE | `/api/admin/repos/{name}/tags/{tag}`           | Unassign (does not delete the tag from the catalogue). |
 
-| GET    | `/api/admin/subscriptions/{id}/tags`           | List tags directly assigned to this subscription. Inherited tags are NOT included here — they belong to the repo or the account. |
-| PUT    | `/api/admin/subscriptions/{id}/tags`           | Replace the explicit set. Inherited tags cannot be added or removed here; attempting to remove one is a no-op. |
-| POST   | `/api/admin/subscriptions/{id}/tags/{tag}`     | Assign explicitly. |
-| DELETE | `/api/admin/subscriptions/{id}/tags/{tag}`     | Unassign. 400 if `tag` is only present via inheritance — the action would silently no-op, so we surface the mistake instead. The error body names the source (repo vs account) so the admin knows where to go. |
+Subscription tags are managed via the **existing** `PATCH /api/admin/tokens` endpoint, not via a dedicated path:
+
+| Method | Path                            | What it does |
+| ------ | ------------------------------- | ------------ |
+| PATCH  | `/api/admin/tokens`             | Body extends the existing repo + abilities patch with `tags *[]string`. When non-nil, the server diffs the new set against the sub's current explicit tags and emits one `tag.assigned.subscription` / `tag.unassigned.subscription` event per actually-changed assignment. The token rides in the body (matching the existing PATCH shape), never in the URL — so the bearer never lands in access logs / browser history. |
+
+The token list response (`GET /api/admin/tokens`) gains two new fields per row: `tags` (the sub's direct tags) and `effective_tags` (the §2 union — `sub.tags ∪ repo.tags ∪ account.tags`). Inherited tags are read-only on the subscription side; to remove one, untag the parent repo or account.
 
 | GET    | `/api/admin/accounts/{id}/tags`                | List tags directly assigned to this account. |
 | PUT    | `/api/admin/accounts/{id}/tags`                | Replace the tag set. Body: `{tags: ["..."]}`. Creates unknown tags as a side effect. Every subscription this account holds picks up the change immediately. |
@@ -410,8 +413,8 @@ Event-type table with destinations:
 | `tag.deleted`                 | `audit_system.enc` — payload: swept counts (repos/subs/accounts) | `DELETE /api/admin/tags/{name}` |
 | `tag.assigned.repo`           | repo's `refs/audit/main`                     | `POST /api/admin/repos/{name}/tags/{tag}` (and via PUT diff) |
 | `tag.unassigned.repo`         | repo's `refs/audit/main`                     | `DELETE /api/admin/repos/{name}/tags/{tag}` (and via PUT diff) |
-| `tag.assigned.subscription`   | sub's repo's `refs/audit/main`               | `POST /api/admin/subscriptions/{id}/tags/{tag}` (and via PUT diff) |
-| `tag.unassigned.subscription` | sub's repo's `refs/audit/main`               | `DELETE /api/admin/subscriptions/{id}/tags/{tag}` (and via PUT diff) |
+| `tag.assigned.subscription`   | sub's repo's `refs/audit/main`               | `PATCH /api/admin/tokens` (body diff on `tags`) |
+| `tag.unassigned.subscription` | sub's repo's `refs/audit/main`               | `PATCH /api/admin/tokens` (body diff on `tags`) |
 | `tag.assigned.account`        | `audit_system.enc`                           | `POST /api/admin/accounts/{id}/tags/{tag}` (and via PUT diff) |
 | `tag.unassigned.account`      | `audit_system.enc`                           | `DELETE /api/admin/accounts/{id}/tags/{tag}` (and via PUT diff) |
 

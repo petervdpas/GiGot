@@ -3,6 +3,7 @@ package tags
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/petervdpas/GiGot/internal/crypto"
@@ -224,6 +225,180 @@ func TestRoundtrip_AcrossOpen(t *testing.T) {
 	if got.Name != "team:marketing" {
 		t.Fatalf("Name after reopen = %q", got.Name)
 	}
+}
+
+func TestSetRepoTags_AssignsAndCreates(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	res, err := s.SetRepoTags("addresses", []string{"team:marketing", "env:prod"}, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both tags were unknown → both auto-created.
+	if len(res.CreatedTags) != 2 {
+		t.Fatalf("CreatedTags = %d, want 2", len(res.CreatedTags))
+	}
+	if len(res.Added) != 2 {
+		t.Fatalf("Added = %v, want 2 entries", res.Added)
+	}
+	if len(res.Removed) != 0 {
+		t.Fatalf("Removed = %v, want empty", res.Removed)
+	}
+	got := s.TagsFor(ScopeRepo, "addresses")
+	if len(got) != 2 {
+		t.Fatalf("TagsFor = %v, want 2", got)
+	}
+}
+
+func TestSetRepoTags_IdempotentNoOp(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	if _, err := s.SetRepoTags("addresses", []string{"team:marketing"}, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.SetRepoTags("addresses", []string{"team:marketing"}, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Added) != 0 || len(res.Removed) != 0 || len(res.CreatedTags) != 0 {
+		t.Fatalf("idempotent set should be a no-op, got %+v", res)
+	}
+}
+
+func TestSetRepoTags_DiffsAddsAndRemoves(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	if _, err := s.SetRepoTags("addresses", []string{"team:marketing", "env:prod"}, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.SetRepoTags("addresses", []string{"team:marketing", "env:staging"}, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsString(res.Added, "env:staging") {
+		t.Errorf("Added = %v, want env:staging", res.Added)
+	}
+	if !containsString(res.Removed, "env:prod") {
+		t.Errorf("Removed = %v, want env:prod", res.Removed)
+	}
+}
+
+func TestSetRepoTags_RejectsInvalidName(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	if _, err := s.SetRepoTags("addresses", []string{"valid", "with/slash"}, "alice"); !errors.Is(err, ErrNameInvalid) {
+		t.Fatalf("got %v, want ErrNameInvalid", err)
+	}
+	// Validation must happen before mutation — the valid tag should
+	// not have landed.
+	if got := s.TagsFor(ScopeRepo, "addresses"); len(got) != 0 {
+		t.Fatalf("partial application: %v", got)
+	}
+}
+
+func TestSetRepoTags_DedupesCaseInsensitive(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	res, err := s.SetRepoTags("addresses", []string{"Team:Marketing", "team:marketing"}, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.CreatedTags) != 1 {
+		t.Fatalf("CreatedTags = %d, want 1 (deduped)", len(res.CreatedTags))
+	}
+}
+
+func TestSetSubscriptionTags_AndAccountTags(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	if _, err := s.SetSubscriptionTags("token-xyz", []string{"project:redesign"}, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetAccountTags("github:bob", []string{"contractor:acme"}, "alice"); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := s.TagsFor(ScopeSubscription, "token-xyz"); len(got) != 1 || got[0] != "project:redesign" {
+		t.Fatalf("sub tags = %v", got)
+	}
+	if got := s.TagsFor(ScopeAccount, "github:bob"); len(got) != 1 || got[0] != "contractor:acme" {
+		t.Fatalf("account tags = %v", got)
+	}
+}
+
+func TestEffectiveSubscriptionTags_UnionsThreeSources(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	_, _ = s.SetRepoTags("addresses", []string{"team:marketing", "env:prod"}, "alice")
+	_, _ = s.SetAccountTags("github:bob", []string{"contractor:acme"}, "alice")
+	_, _ = s.SetSubscriptionTags("token-xyz", []string{"project:redesign"}, "alice")
+
+	got := s.EffectiveSubscriptionTags("token-xyz", "addresses", "github:bob")
+	want := []string{"contractor:acme", "env:prod", "project:redesign", "team:marketing"}
+	if len(got) != len(want) {
+		t.Fatalf("len = %d, want %d (got %v)", len(got), len(want), got)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("got[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+func TestEffectiveSubscriptionTags_SameTagFromTwoSources(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	_, _ = s.SetRepoTags("addresses", []string{"team:marketing"}, "alice")
+	_, _ = s.SetAccountTags("github:bob", []string{"team:marketing"}, "alice")
+
+	got := s.EffectiveSubscriptionTags("token-x", "addresses", "github:bob")
+	if len(got) != 1 || got[0] != "team:marketing" {
+		t.Fatalf("got %v, want exactly [team:marketing]", got)
+	}
+}
+
+func TestSetRepoTags_RoundtripAcrossOpen(t *testing.T) {
+	s, enc, path := newTestStore(t)
+	if _, err := s.SetRepoTags("addresses", []string{"team:marketing"}, "alice"); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(path, enc)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got := reopened.TagsFor(ScopeRepo, "addresses"); len(got) != 1 || got[0] != "team:marketing" {
+		t.Fatalf("after reopen got %v", got)
+	}
+}
+
+func TestDelete_CascadesAcrossSetTags(t *testing.T) {
+	// Slice 1's TestDelete_CascadesAssignments pokes the slices
+	// directly to simulate slice 2; this scenario uses the public
+	// SetRepoTags / SetSubscriptionTags / SetAccountTags surface,
+	// then deletes the tag from the catalogue and confirms every
+	// downstream entity has lost it.
+	s, _, _ := newTestStore(t)
+	_, _ = s.SetRepoTags("addresses", []string{"sweep-me"}, "alice")
+	_, _ = s.SetSubscriptionTags("token-x", []string{"sweep-me"}, "alice")
+	_, _ = s.SetAccountTags("github:bob", []string{"sweep-me"}, "alice")
+
+	tag, err := s.GetByName("sweep-me")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.Delete(tag.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.RepoAssignments != 1 || res.SubscriptionAssignments != 1 || res.AccountAssignments != 1 {
+		t.Fatalf("sweep counts = %+v, want 1/1/1", res)
+	}
+	if got := s.TagsFor(ScopeRepo, "addresses"); len(got) != 0 {
+		t.Errorf("repo tag survived cascade: %v", got)
+	}
+	if got := s.TagsFor(ScopeSubscription, "token-x"); len(got) != 0 {
+		t.Errorf("sub tag survived cascade: %v", got)
+	}
+	if got := s.TagsFor(ScopeAccount, "github:bob"); len(got) != 0 {
+		t.Errorf("account tag survived cascade: %v", got)
+	}
+}
+
+func containsString(haystack []string, want string) bool {
+	return slices.Contains(haystack, want)
 }
 
 func TestUsage_ReportsZeroForFreshTag(t *testing.T) {

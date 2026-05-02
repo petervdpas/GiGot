@@ -170,8 +170,8 @@ func TestAdminTokens_PatchRejectsUnknownAbility(t *testing.T) {
 }
 
 // TestAdminTokens_PatchEmptyBody rejects a PATCH that specifies neither
-// repos nor abilities — otherwise the admin would get a 200 for what
-// amounts to a no-op call, which is a confusing API contract.
+// repos nor abilities nor tags — otherwise the admin would get a 200
+// for what amounts to a no-op call, which is a confusing API contract.
 func TestAdminTokens_PatchEmptyBody(t *testing.T) {
 	srv, sess := adminTestServer(t)
 
@@ -184,5 +184,86 @@ func TestAdminTokens_PatchEmptyBody(t *testing.T) {
 		map[string]any{"token": token}, sess)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("want 400 for no-op patch, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestAdminTokens_PatchSetsTagsAndListSurfacesEffective verifies the
+// slice-2 contract: PATCH with tags writes them, the next list call
+// returns them on the matching TokenListItem, and effective_tags on
+// that row unions the sub's tags with its repo's tags.
+func TestAdminTokens_PatchSetsTagsAndListSurfacesEffective(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	if err := srv.git.InitBare("addresses"); err != nil {
+		t.Fatal(err)
+	}
+
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Tag the repo so effective_tags has a non-trivial union to test.
+	if rec := do(t, srv, http.MethodPut, "/api/admin/repos/addresses/tags",
+		map[string]any{"tags": []string{"team:marketing"}}, sess); rec.Code != http.StatusOK {
+		t.Fatalf("repo tag PUT failed: %d", rec.Code)
+	}
+
+	rec := do(t, srv, http.MethodPatch, "/api/admin/tokens",
+		map[string]any{
+			"token": token,
+			"tags":  []string{"project:redesign"},
+		}, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH tags want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	rec = do(t, srv, http.MethodGet, "/api/admin/tokens", nil, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list: want 200, got %d", rec.Code)
+	}
+	var resp TokenListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	var found *TokenListItem
+	for i := range resp.Tokens {
+		if resp.Tokens[i].Token == token {
+			found = &resp.Tokens[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("issued token missing from list")
+	}
+	if len(found.Tags) != 1 || found.Tags[0] != "project:redesign" {
+		t.Errorf("Tags = %v, want [project:redesign]", found.Tags)
+	}
+	if len(found.EffectiveTags) != 2 {
+		t.Errorf("EffectiveTags = %v, want both sub + repo tags", found.EffectiveTags)
+	}
+}
+
+// TestAdminTokens_PatchTagsIdempotentNoAuditChurn pins the design Q3
+// nuance: PUT-the-same-set is a no-op, so no per-assignment audit
+// events fire (no diff = no event).
+func TestAdminTokens_PatchTagsIdempotentNoAuditChurn(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	if err := srv.git.InitBare("addresses"); err != nil {
+		t.Fatal(err)
+	}
+	token, _ := srv.tokenStrategy.Issue("alice", "addresses", nil)
+
+	if rec := do(t, srv, http.MethodPatch, "/api/admin/tokens",
+		map[string]any{"token": token, "tags": []string{"project:redesign"}}, sess); rec.Code != http.StatusOK {
+		t.Fatalf("first PATCH: %d", rec.Code)
+	}
+	auditBefore, _ := srv.git.AuditHead("addresses")
+
+	if rec := do(t, srv, http.MethodPatch, "/api/admin/tokens",
+		map[string]any{"token": token, "tags": []string{"project:redesign"}}, sess); rec.Code != http.StatusOK {
+		t.Fatalf("idempotent PATCH: %d", rec.Code)
+	}
+	auditAfter, _ := srv.git.AuditHead("addresses")
+	if auditAfter != auditBefore {
+		t.Fatalf("idempotent PATCH advanced audit ref: before=%q after=%q", auditBefore, auditAfter)
 	}
 }

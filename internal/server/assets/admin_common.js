@@ -207,6 +207,26 @@
       if (!r.ok) throw new Error((await r.json()).error || 'delete failed');
       return r.json();
     },
+    async setRepoTags(repo, tags) {
+      const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/tags', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ tags }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'set repo tags failed');
+      return r.json();
+    },
+    async setAccountTags(provider, identifier, tags) {
+      const r = await fetch('/api/admin/accounts/' + encodeURIComponent(provider) + '/' + encodeURIComponent(identifier) + '/tags', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ tags }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'set account tags failed');
+      return r.json();
+    },
     async listAccounts() {
       const r = await fetch('/api/admin/accounts', { credentials: 'same-origin' });
       if (!r.ok) throw new Error('list accounts failed');
