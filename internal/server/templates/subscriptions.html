@@ -7,6 +7,7 @@
 <meta name="gigot-version" content="{{.Version}}">
 <link rel="stylesheet" href="/assets/admin.css">
 <link rel="stylesheet" href="/assets/tags.css">
+<link rel="stylesheet" href="/assets/drawer.css">
 <script>
   /* Apply stored theme before the body paints to avoid a flash on page
      load. Identical block on every admin page. */
@@ -23,27 +24,9 @@
     <aside id="admin-sidebar"></aside>
     <main class="main">
       <div class="panel active">
-        <div class="page-header">
+        <div class="page-header with-add">
           <h1>Subscription keys <span class="muted">(<span id="count">0</span>)</span></h1>
-        </div>
-        <div class="card">
-          <h2>Issue subscription key</h2>
-          <form id="issue-form" class="row issue-form-row">
-            <div>
-              <div class="muted issue-repos-label">Account this key is issued to:</div>
-              <span id="issue-account-host"></span>
-            </div>
-            <div>
-              <div class="muted issue-repos-label">Repo this key binds to:</div>
-              <span id="issue-repo-host"></span>
-            </div>
-            <div id="issue-abilities-wrap" class="hidden">
-              <div class="muted issue-repos-label">Abilities:</div>
-              <div id="issue-abilities" class="ability-picker"></div>
-            </div>
-            <button type="submit">Issue key</button>
-          </form>
-          <div id="issue-msg" class="success"></div>
+          <button class="btn-add" data-drawer-open="issue-subscription" aria-label="Issue subscription key" title="Issue subscription key">+</button>
         </div>
         <div class="card" id="tag-filter-card">
           <h2>Filter by tag</h2>
@@ -65,10 +48,19 @@
   </div>
 </div>
 
+<aside class="drawer" data-drawer-name="issue-subscription">
+  <div class="drawer-head">
+    <h2>Issue subscription key</h2>
+    <button type="button" class="drawer-close" aria-label="Close">×</button>
+  </div>
+  <div class="drawer-body" data-lazy-tpl="issue-subscription" data-lazy-trigger="manual"></div>
+</aside>
+
 <script src="/assets/ui.js"></script>
 <script src="/assets/dialogs.js"></script>
 <script src="/assets/admin_common.js"></script>
 <script src="/assets/lazy.js"></script>
+<script src="/assets/drawer.js"></script>
 <script src="/assets/tag_picker.js"></script>
 <script src="/assets/tag_filter.js"></script>
 <script src="/assets/subscriptions.js"></script>

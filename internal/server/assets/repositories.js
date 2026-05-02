@@ -506,31 +506,36 @@
       },
     });
 
-    // Render the Formidable-scaffold toggle into its placeholder on the
-    // create form. Consistent with the other "toggle markup lives in
-    // one JS helper" touchpoints.
-    const scaffoldHost = document.getElementById('scaffold-host');
-    if (scaffoldHost) {
-      scaffoldHost.innerHTML =
-        GG.toggle_switch.html({ name: 'scaffold', ariaLabel: 'Scaffold as Formidable context' }) +
-        '<span class="control-label">Scaffold as Formidable context</span>';
-    }
-
-    document.getElementById('create-repo-form').addEventListener('submit', async e => {
-      e.preventDefault();
-      const f = e.target;
-      const msg = document.getElementById('repo-msg');
-      msg.textContent = '';
-      msg.className = 'muted';
-      try {
-        await api.createRepo(f.name.value, f.scaffold.checked, f.source_url.value.trim());
-        f.reset();
-        await refreshRepos();
-      } catch (ex) {
-        msg.textContent = ex.message;
-        msg.className = 'error';
-      }
+    // Create-repository form lives in a fragment rendered into the
+    // create-repository drawer. GG.drawer.bindForm wires lazy +
+    // submit + close + error-into-#repo-msg in one shot. The
+    // Formidable-scaffold toggle is mounted in onRendered because
+    // it's a GG.toggle_switch placeholder that needs imperative
+    // initialisation after each render.
+    GG.drawer.bindForm('create-repository', {
+      onRendered: host => {
+        // Just the toggle pill — the surrounding .switch-row chrome
+        // (label + hint) lives in the fragment so the markup matches
+        // the .switch-row pattern used by the abilities picker on
+        // /admin/subscriptions. Same look for every "labeled toggle
+        // in a drawer row" surface.
+        const scaffoldHost = host.querySelector('#scaffold-host');
+        if (scaffoldHost) {
+          scaffoldHost.innerHTML = GG.toggle_switch.html({
+            name: 'scaffold',
+            ariaLabel: 'Scaffold as Formidable context',
+          });
+        }
+      },
+      submit: async data => {
+        const name = (data.name || '').trim();
+        if (!name) throw new Error('Name is required.');
+        // collectFormData returns single checkboxes as booleans.
+        return api.createRepo(name, data.scaffold === true, (data.source_url || '').trim());
+      },
+      onSuccess: refreshRepos,
     });
+    GG.drawer.attachAll();
 
     await refreshRepos();
   })();

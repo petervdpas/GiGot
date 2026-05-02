@@ -177,18 +177,32 @@
   }
 
   // collectFormData walks the form's [name] inputs and packages them
-  // into a plain JSON object. Checkbox groups (multiple inputs with
-  // the same name) collapse into arrays of the checked values, so a
-  // shape like {abilities: ["mirror", "audit"]} falls out naturally.
-  // Mirror's the existing selectedAbilitiesFromPicker shape, which
-  // is what the API expects.
+  // into a plain JSON object with intuitive types per field shape:
+  //
+  //   - Single checkbox of a given name        → boolean (checked)
+  //   - Multiple checkboxes sharing a name     → array of checked values
+  //   - Text / password / select / textarea    → string value
+  //
+  // The dual-mode checkbox handling is what makes the helper natural
+  // for both standalone toggles (`<input type="checkbox" name="scaffold">`
+  // → data.scaffold === true) and group pickers (multiple `name="ability"`
+  // → data.ability === ["mirror"]). Two-pass: count first so each name
+  // resolves to a single mode, then collect.
   function collectFormData(form) {
     const data = {};
+    const nameCounts = {};
+    for (const el of form.querySelectorAll('[name]')) {
+      nameCounts[el.name] = (nameCounts[el.name] || 0) + 1;
+    }
     for (const el of form.querySelectorAll('[name]')) {
       const name = el.name;
       if (el.type === 'checkbox') {
-        if (!Array.isArray(data[name])) data[name] = [];
-        if (el.checked) data[name].push(el.value);
+        if (nameCounts[name] > 1) {
+          if (!Array.isArray(data[name])) data[name] = [];
+          if (el.checked) data[name].push(el.value);
+        } else {
+          data[name] = el.checked;
+        }
       } else {
         data[name] = el.value;
       }

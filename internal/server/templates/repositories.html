@@ -7,6 +7,7 @@
 <meta name="gigot-version" content="{{.Version}}">
 <link rel="stylesheet" href="/assets/admin.css">
 <link rel="stylesheet" href="/assets/tags.css">
+<link rel="stylesheet" href="/assets/drawer.css">
 <script>
   /* Apply stored theme before the body paints to avoid a flash on page
      load. Identical block on every admin page. */
@@ -23,22 +24,9 @@
     <aside id="admin-sidebar"></aside>
     <main class="main">
       <div class="panel active">
-        <div class="page-header">
+        <div class="page-header with-add">
           <h1>Repositories <span class="muted">(<span id="repo-count">0</span>)</span></h1>
-        </div>
-        <div class="card">
-          <h2>Create repository</h2>
-          <form id="create-repo-form" class="row">
-            <input name="name" placeholder="New repo name" required>
-            <input name="source_url" placeholder="Clone from URL (optional)" class="create-repo-source">
-            <span class="create-repo-scaffold switch-row" id="scaffold-host"></span>
-            <button type="submit">Create repo</button>
-          </form>
-          <div class="muted create-repo-hint">
-            Leave URL empty to create an empty bare repo. URL + scaffold clones and stamps the Formidable marker on top.
-            On a Formidable-first server (server.formidable_first) every create stamps by default.
-          </div>
-          <div id="repo-msg" class="muted"></div>
+          <button class="btn-add" data-drawer-open="create-repository" aria-label="Create repository" title="Create repository">+</button>
         </div>
         <div class="card" id="tag-filter-card">
           <h2>Filter by tag</h2>
@@ -56,9 +44,19 @@
   </div>
 </div>
 
+<aside class="drawer" data-drawer-name="create-repository">
+  <div class="drawer-head">
+    <h2>Create repository</h2>
+    <button type="button" class="drawer-close" aria-label="Close">×</button>
+  </div>
+  <div class="drawer-body" data-lazy-tpl="create-repository" data-lazy-trigger="manual"></div>
+</aside>
+
 <script src="/assets/ui.js"></script>
 <script src="/assets/dialogs.js"></script>
 <script src="/assets/admin_common.js"></script>
+<script src="/assets/lazy.js"></script>
+<script src="/assets/drawer.js"></script>
 <script src="/assets/tag_picker.js"></script>
 <script src="/assets/tag_filter.js"></script>
 <script src="/assets/repositories.js"></script>

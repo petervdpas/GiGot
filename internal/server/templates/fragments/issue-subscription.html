@@ -1,0 +1,24 @@
+<div class="drawer-form-info">
+  Subscription keys bind one account to one repository. Holders can read
+  and write that repo through their key. Abilities (like
+  <code class="code-chip">mirror</code>) are extra capabilities you grant
+  on top, fenced by the account's role.
+</div>
+<form id="issue-form" class="drawer-form">
+  <label>
+    <span class="field-label">Account</span>
+    <span id="issue-account-host"></span>
+  </label>
+  <label>
+    <span class="field-label">Repo</span>
+    <span id="issue-repo-host"></span>
+  </label>
+  <label class="drawer-form-row-tall" id="issue-abilities-wrap" style="display:none">
+    <span class="field-label">Abilities</span>
+    <div id="issue-abilities" class="ability-picker"></div>
+  </label>
+  <div id="issue-msg" class="muted"></div>
+  <div class="drawer-form-actions">
+    <button type="submit">Issue key</button>
+  </div>
+</form>

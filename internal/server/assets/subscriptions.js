@@ -185,12 +185,16 @@
   function syncIssueAbilities() {
     const wrap = document.getElementById('issue-abilities-wrap');
     const picker = document.getElementById('issue-abilities');
+    if (!wrap || !picker) return; // drawer not currently rendered
     const usernameEl = document.querySelector(
       '#issue-account-host input[name="username"]'
     );
     const scoped = usernameEl ? usernameEl.value : '';
     const any = relevantAbilities(scoped).length > 0;
-    wrap.classList.toggle('hidden', !any);
+    // Toggle via inline style (not .hidden) because the drawer-form
+    // grid layout has higher specificity than .hidden's display:none
+    // and we'd lose to it. style attribute beats both.
+    wrap.style.display = any ? '' : 'none';
     if (any) renderAbilityPicker(picker, [], scoped);
   }
 
@@ -811,26 +815,34 @@
       accountsCache = acctData.accounts || [];
       tagsCatalogueCache = (tagData.tags || []).map(t => t.name);
       await applyPrunedFilteredFetch();
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
-      // ?user= pre-selects the account picker. ?repo= pre-selects the
-      // repo in the single-select picker. Both live behind the same
-      // "I arrived via a link on another page" pattern.
-      const params = new URLSearchParams(location.search);
-      const preUser = params.get('user');
-      renderAccountPicker(preUser || '');
-      const preRepo = params.get('repo');
-      const repoHost = document.getElementById('issue-repo-host');
+  // mountIssueDrawerChrome runs every time the issue-subscription
+  // drawer's lazy body re-renders. Mounts the Account + Repo
+  // pickers, wires the cross-field reactivity (changing account
+  // re-evaluates which abilities are relevant for that account's
+  // role), and applies any ?user= / ?repo= URL prefill so deep-
+  // links from other pages continue to seed the form.
+  function mountIssueDrawerChrome() {
+    const params = new URLSearchParams(location.search);
+    const preUser = params.get('user');
+    renderAccountPicker(preUser || '');
+    const preRepo = params.get('repo');
+    const repoHost = document.getElementById('issue-repo-host');
+    if (repoHost) {
       renderRepoSelect(
         repoHost,
         preRepo && repoNames().includes(preRepo) ? preRepo : '',
         () => syncIssueAbilities(),
       );
-      // Run once after the picker is rendered — the onChange hook
-      // only fires on user interaction, not the initial value.
-      syncIssueAbilities();
-    } catch (e) {
-      console.error(e);
     }
+    // Initial sync after the pickers exist. The onChange hook only
+    // fires on user interaction, so this seeds the abilities row for
+    // the prefilled account.
+    syncIssueAbilities();
   }
 
   (async function boot() {
@@ -844,40 +856,31 @@
     // refresh + revoke hooks.
     mountTagFilter();
 
-    document.getElementById('issue-form').addEventListener('submit', async e => {
-      e.preventDefault();
-      const msg = document.getElementById('issue-msg');
-      msg.textContent = '';
-      const repoHost = document.getElementById('issue-repo-host');
-      const repo = selectedRepoFromHost(repoHost);
-      const abilities = selectedAbilitiesFromPicker(document.getElementById('issue-abilities'));
-      // Read the picker's hidden input — GG.select projects its value
-      // onto an <input name="username"> inside the host span.
-      const usernameEl = document.querySelector('#issue-account-host input[name="username"]');
-      const scoped = usernameEl ? usernameEl.value : '';
-      if (!scoped) {
-        msg.textContent = 'Pick an account to issue the key to.';
-        msg.className = 'error';
-        return;
-      }
-      if (!repo) {
-        msg.textContent = 'Pick a repo the key should bind to.';
-        msg.className = 'error';
-        return;
-      }
-      try {
-        const t = await api.issueToken(scoped, repo, abilities);
-        msg.textContent = 'Issued: ' + t.token;
-        // Reset the repo + ability pickers but leave the account
-        // picker alone — issuing several keys for the same holder is
-        // a common pattern and retyping would be annoying.
-        renderRepoSelect(repoHost, '');
-        refreshAll();
-      } catch (ex) {
-        msg.textContent = ex.message;
-        msg.className = 'error';
-      }
+    // Issue-subscription form lives in a fragment rendered into the
+    // issue-subscription drawer. GG.drawer.bindForm wires lazy +
+    // submit + close + error-into-#issue-msg; this page only
+    // declares the picker mounts (onRendered) and the API call
+    // shape (submit). On success the page list refreshes and the
+    // drawer closes; the new key shows up as a card with its own
+    // Copy button, so the admin doesn't lose track of the token.
+    GG.drawer.bindForm('issue-subscription', {
+      onRendered: mountIssueDrawerChrome,
+      submit: async data => {
+        // GG.select projects its value onto a hidden input so
+        // collectFormData picks it up by name. Multiple
+        // [name="ability"] checkboxes collapse into an array.
+        const scoped = data.username;
+        const repo = data.repo;
+        const abilities = Array.isArray(data.ability)
+          ? data.ability
+          : (data.ability ? [data.ability] : []);
+        if (!scoped) throw new Error('Pick an account to issue the key to.');
+        if (!repo) throw new Error('Pick a repo the key should bind to.');
+        return api.issueToken(scoped, repo, abilities);
+      },
+      onSuccess: refreshAll,
     });
+    GG.drawer.attachAll();
 
     await refreshAll();
   })();

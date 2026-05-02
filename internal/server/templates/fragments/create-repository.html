@@ -1,0 +1,29 @@
+<div class="drawer-form-info">
+  Leave the URL empty to create an empty bare repo. URL plus scaffold
+  clones from the source and stamps the Formidable marker on top.
+  On a Formidable-first server (<code class="code-chip">server.formidable_first</code>)
+  every create stamps by default.
+</div>
+<form id="create-repo-form" class="drawer-form">
+  <label>
+    <span class="field-label">Name</span>
+    <input name="name" placeholder="new-repo" required>
+  </label>
+  <label>
+    <span class="field-label">Source URL</span>
+    <input name="source_url" placeholder="optional, https://github.com/owner/repo.git">
+  </label>
+  <label>
+    <span class="field-label">Scaffold</span>
+    <div class="ability-picker">
+      <div class="switch-row">
+        <span id="scaffold-host"></span>
+        <span class="control-label">stamp Formidable marker</span>
+      </div>
+    </div>
+  </label>
+  <div id="repo-msg" class="muted"></div>
+  <div class="drawer-form-actions">
+    <button type="submit">Create repo</button>
+  </div>
+</form>

@@ -141,14 +141,20 @@
   gap: 0.7rem;
   width: 100%;
 }
-.drawer-form label {
+/* Direct-child selector is critical: nested `<label>` elements
+   (e.g. the GG.toggle_switch chrome that wraps each ability
+   checkbox in `<label class="switch">`) must NOT pick up this
+   grid layout, or every ability toggle blows up to fill the
+   row width. Only top-level form rows get the [label][control]
+   grid. */
+.drawer-form > label {
   display: grid;
   grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
   align-items: center;
   gap: 0.7rem;
   width: 100%;
 }
-.drawer-form label .field-label {
+.drawer-form > label > .field-label {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -191,21 +197,30 @@
 /* Tall-row variant for fields that benefit from the label sitting
    at the top of the control (textarea, multi-line picker) rather
    than vertically centred against a single-line input. Used by
-   adding `.drawer-form-row-tall` on the `<label>`. */
-.drawer-form label.drawer-form-row-tall {
+   adding `.drawer-form-row-tall` on a direct-child `<label>`. */
+.drawer-form > label.drawer-form-row-tall {
   align-items: start;
 }
-.drawer-form label.drawer-form-row-tall .field-label {
+.drawer-form > label.drawer-form-row-tall > .field-label {
   /* Nudge the label down a hair so it visually aligns with the
      first line of text in the textarea (which has its own padding). */
   padding-top: 0.45rem;
 }
 
 /* GG.select renders a `.gsel` div as its outer host; make sure it
-   fills the control column without overflowing on narrow drawers. */
-.drawer-form label .gsel {
+   fills the control column without overflowing on narrow drawers.
+   Direct-child scoping again: `.gsel` lives inside a top-level
+   row label, never nested deeper. */
+.drawer-form > label > .gsel {
   width: 100%;
   min-width: 0;
+}
+/* Ability picker has a `min-width: 260px` baseline that fights the
+   grid 1fr column on narrow drawers. Override here so it follows
+   the column width like the other controls. */
+.drawer-form .ability-picker {
+  min-width: 0;
+  width: 100%;
 }
 
 /* Primary action at bottom-LEFT of the drawer (per accounts-page
