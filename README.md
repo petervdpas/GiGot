@@ -63,14 +63,34 @@ here. The items below do not overlap with Track B.
 
 Open work:
 
-- [ ] **Benchmark the chip-filter fetch path.** At ≤15 subs per team
-      it's free; at ~500 subs every chip toggle does an unfiltered
-      fetch + a filtered fetch. Measure end-to-end latency at 100 /
-      500 / 1000 subs and decide whether to (a) cache the
-      unfiltered list per session, (b) collapse to one fetch, or
-      (c) leave it. Either way, document the budget.
+(none — all Track A items above shipped or retired.)
+
 Done and shipping:
 
+- [x] **Server-side benchmark suite at `/admin/benchmark`.** New
+      admin page with toggles for **scale** (10 / 100 / 500 /
+      1000 synthetic subs), **mode** (Sequential / Concurrent),
+      and **topics** (token list, token list filtered, repo list,
+      account list, tag catalogue, effective-tags-per-sub) plus
+      an iterations input and a Run button. Each run spins up a
+      fresh sandbox `*Server` against a temp directory, seeds it
+      with N synthetic accounts + subs + 5 tags with a realistic
+      distribution (50/30/15/7/3 % across the five tags + every
+      seventh account inheriting one extra), runs the selected
+      topics, tears down the sandbox, returns per-topic median /
+      p95 / p99 / total. Always synthetic — the point is to
+      characterise THIS hardware (latency, contention, sealed-
+      store crypto cost) so an operator can decide when to
+      upgrade tier, independent of whatever data the production
+      instance happens to hold. Concurrent mode runs all selected
+      topics in parallel goroutines so the timings reflect
+      cross-topic contention. Result table sorts by p95 so the
+      slowest operation floats to the top with an inline bar for
+      at-a-glance comparison. Five handler tests pin the contract:
+      happy path (sequential), concurrent mode, six bad-input
+      gates, auth fence, method-not-allowed. Sandboxes use
+      `os.MkdirTemp` + `defer RemoveAll`, so concurrent admin
+      requests don't collide. Swagger regenerated.
 - [x] **Tag chip filter switched from AND (intersection) to
       OR (union).** Chips are inclusion filters; the natural
       mental model is "show me rows in any of these categories,"

@@ -288,6 +288,53 @@ definitions:
         example: Alice
         type: string
     type: object
+  server.BenchmarkRequest:
+    properties:
+      iterations:
+        description: per-topic call count
+        type: integer
+      mode:
+        description: '"sequential" | "concurrent"'
+        type: string
+      scale:
+        description: 10 | 100 | 500 | 1000
+        type: integer
+      topics:
+        description: names from benchmarkTopics
+        items:
+          type: string
+        type: array
+    type: object
+  server.BenchmarkResponse:
+    properties:
+      iterations:
+        type: integer
+      mode:
+        type: string
+      results:
+        items:
+          $ref: '#/definitions/server.BenchmarkTopicResult'
+        type: array
+      scale:
+        type: integer
+      setup_ms:
+        type: number
+    type: object
+  server.BenchmarkTopicResult:
+    properties:
+      iterations:
+        type: integer
+      median_ms:
+        type: number
+      p95_ms:
+        type: number
+      p99_ms:
+        type: number
+      topic:
+        type: string
+      total_ms:
+        type: number
+    type: object
   server.BindTokenRequest:
     properties:
       token:
@@ -1329,6 +1376,51 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       summary: Read or reload auth runtime state (admin only)
+      tags:
+      - admin
+  /admin/benchmark:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Spins up a fresh sandbox `*Server` against a temp
+        directory, seeds it with N synthetic accounts + subs +
+        tags, runs the requested topics for the requested
+        iteration count, tears down the sandbox, and returns
+        per-topic timing summaries (median / p95 / p99 / total).
+
+        Always runs against synthetic data — the point is to
+        characterise the host hardware, not the live dataset.
+        Mode "sequential" runs each topic in turn; "concurrent"
+        runs all selected topics in parallel goroutines so the
+        timings include cross-topic contention.
+      parameters:
+      - description: Benchmark request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.BenchmarkRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.BenchmarkResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Run a server-side micro-benchmark suite (admin only)
       tags:
       - admin
   /admin/credentials:

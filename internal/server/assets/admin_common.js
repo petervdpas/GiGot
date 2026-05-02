@@ -611,6 +611,7 @@
     { key: 'tags',          label: 'Tags',              href: '/admin/tags',          adminOnly: true },
     { key: 'accounts',      label: 'Accounts',          href: '/admin/accounts',      adminOnly: true },
     { key: 'auth',          label: 'Authentication',    href: '/admin/auth',          adminOnly: true },
+    { key: 'benchmark',     label: 'Benchmark',         href: '/admin/benchmark',     adminOnly: true },
   ];
 
   function visibleFor(role, item) {

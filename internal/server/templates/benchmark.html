@@ -1,0 +1,65 @@
+{{define "title"}}Admin - Benchmark{{end}}
+{{define "scripts"}}
+<script src="/assets/benchmark.js"></script>
+{{end}}
+{{define "content"}}
+<div class="page-header">
+  <h1>Benchmark</h1>
+</div>
+<p class="muted bench-lede">
+  Trigger a server-side micro-benchmark against a fresh synthetic
+  sandbox so you can see how this hardware holds up at growth scale.
+  Always sandboxed; live data is never touched. Use the result to
+  decide when to upgrade tier.
+</p>
+
+<details class="card bench-card" open>
+  <summary><span class="card-chevron" aria-hidden="true">▶</span><h2>Scale</h2></summary>
+  <div class="bench-radio-row" id="bench-scale-row">
+    <label><input type="radio" name="bench-scale" value="10" checked> 10 subs</label>
+    <label><input type="radio" name="bench-scale" value="100"> 100 subs</label>
+    <label><input type="radio" name="bench-scale" value="500"> 500 subs</label>
+    <label><input type="radio" name="bench-scale" value="1000"> 1000 subs</label>
+  </div>
+</details>
+
+<details class="card bench-card" open>
+  <summary><span class="card-chevron" aria-hidden="true">▶</span><h2>Mode</h2></summary>
+  <div class="bench-radio-row" id="bench-mode-row">
+    <label><input type="radio" name="bench-mode" value="sequential" checked> Sequential <span class="muted">(each topic in turn, isolated timings)</span></label>
+    <label><input type="radio" name="bench-mode" value="concurrent"> Concurrent <span class="muted">(all topics in parallel, contention shows up)</span></label>
+  </div>
+</details>
+
+<details class="card bench-card" open>
+  <summary><span class="card-chevron" aria-hidden="true">▶</span><h2>Topics</h2></summary>
+  <div class="bench-topic-list" id="bench-topic-list">
+    <label><input type="checkbox" name="bench-topic" value="token-list" checked> <strong>Token list</strong> <span class="muted">— full subscription list, no filter</span></label>
+    <label><input type="checkbox" name="bench-topic" value="token-list-filtered" checked> <strong>Token list filtered</strong> <span class="muted">— effective-tag union match against one synthetic chip</span></label>
+    <label><input type="checkbox" name="bench-topic" value="repo-list"> <strong>Repo list</strong> <span class="muted">— directory walk of bare repos</span></label>
+    <label><input type="checkbox" name="bench-topic" value="account-list"> <strong>Account list</strong> <span class="muted">— accounts store snapshot</span></label>
+    <label><input type="checkbox" name="bench-topic" value="tag-catalogue"> <strong>Tag catalogue</strong> <span class="muted">— tags store snapshot</span></label>
+    <label><input type="checkbox" name="bench-topic" value="effective-tags-per-sub"> <strong>Effective tags per sub</strong> <span class="muted">— inner loop of the chip filter, isolated</span></label>
+  </div>
+</details>
+
+<div class="card bench-card bench-run-card">
+  <div class="bench-run-row">
+    <label class="bench-iter-label">Iterations
+      <input type="number" id="bench-iterations" value="100" min="1" max="10000">
+    </label>
+    <button type="button" id="bench-run-btn" class="primary">Run benchmark</button>
+    <button type="button" id="bench-cancel-btn" class="danger hidden">Cancel</button>
+    <span id="bench-status" class="muted bench-status"></span>
+  </div>
+</div>
+
+<div class="card bench-card hidden" id="bench-results-card">
+  <h2>Results</h2>
+  <div class="bench-meta muted" id="bench-meta"></div>
+  <table class="responsive-table bench-results-table">
+    <thead><tr><th>Topic</th><th>Iter</th><th>Median (ms)</th><th>p95 (ms)</th><th>p99 (ms)</th><th>Total (ms)</th><th></th></tr></thead>
+    <tbody id="bench-results-rows"></tbody>
+  </table>
+</div>
+{{end}}

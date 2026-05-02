@@ -74,6 +74,15 @@ func (s *Server) handleAuthPage(w http.ResponseWriter, r *http.Request) {
 	s.adminPageHandler(authPageTmpl, "/admin/auth", "/admin/auth/")(w, r)
 }
 
+// handleBenchmarkPage serves the /admin/benchmark console — the UI
+// for triggering server-side micro-benchmarks against synthetic
+// sandboxes. Same static-shell-plus-JS pattern as the other admin
+// sections; all behaviour lives in benchmark.js, which guards the
+// session on boot and bounces to /admin on a 401.
+func (s *Server) handleBenchmarkPage(w http.ResponseWriter, r *http.Request) {
+	s.adminPageHandler(benchmarkPageTmpl, "/admin/benchmark", "/admin/benchmark/")(w, r)
+}
+
 // handleUserPage serves the /user self-serve account page. Public
 // path (no server-side session gate) — user.js calls /api/me and
 // bounces to /admin on a 401. Same pattern as the admin pages.

@@ -542,6 +542,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/benchmark": {
+            "post": {
+                "description": "Spins up a fresh sandbox ` + "`" + `*Server` + "`" + ` against a temp\ndirectory, seeds it with N synthetic accounts + subs +\ntags, runs the requested topics for the requested\niteration count, tears down the sandbox, and returns\nper-topic timing summaries (median / p95 / p99 / total).\n\nAlways runs against synthetic data — the point is to\ncharacterise the host hardware, not the live dataset.\nMode \"sequential\" runs each topic in turn; \"concurrent\"\nruns all selected topics in parallel goroutines so the\ntimings include cross-topic contention.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Run a server-side micro-benchmark suite (admin only)",
+                "parameters": [
+                    {
+                        "description": "Benchmark request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.BenchmarkRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.BenchmarkResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/credentials": {
             "get": {
                 "description": "GET lists credential metadata; POST creates a new credential.\nThe secret is write-only — it is never returned on any\nresponse. Session-cookie authenticated.",
@@ -4694,6 +4746,76 @@ const docTemplate = `{
                 "name": {
                     "type": "string",
                     "example": "Alice"
+                }
+            }
+        },
+        "server.BenchmarkRequest": {
+            "type": "object",
+            "properties": {
+                "iterations": {
+                    "description": "per-topic call count",
+                    "type": "integer"
+                },
+                "mode": {
+                    "description": "\"sequential\" | \"concurrent\"",
+                    "type": "string"
+                },
+                "scale": {
+                    "description": "10 | 100 | 500 | 1000",
+                    "type": "integer"
+                },
+                "topics": {
+                    "description": "names from benchmarkTopics",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "server.BenchmarkResponse": {
+            "type": "object",
+            "properties": {
+                "iterations": {
+                    "type": "integer"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.BenchmarkTopicResult"
+                    }
+                },
+                "scale": {
+                    "type": "integer"
+                },
+                "setup_ms": {
+                    "type": "number"
+                }
+            }
+        },
+        "server.BenchmarkTopicResult": {
+            "type": "object",
+            "properties": {
+                "iterations": {
+                    "type": "integer"
+                },
+                "median_ms": {
+                    "type": "number"
+                },
+                "p95_ms": {
+                    "type": "number"
+                },
+                "p99_ms": {
+                    "type": "number"
+                },
+                "topic": {
+                    "type": "string"
+                },
+                "total_ms": {
+                    "type": "number"
                 }
             }
         },
