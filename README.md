@@ -77,6 +77,28 @@ Open work:
 
 Done and shipping:
 
+- [x] **Tag chip filter switched from AND (intersection) to
+      OR (union).** Chips are inclusion filters; the natural
+      mental model is "show me rows in any of these categories,"
+      not "show me rows that carry every category." With the old
+      AND, selecting two chips on `/admin/accounts` could collapse
+      to zero results when the tags were mutually exclusive on a
+      row (e.g. `dormant` and `local` are never both on the same
+      account) — every "select all chips → see everything" attempt
+      failed silently. Now selecting all chips shows every tagged
+      row, exactly what users expect. Affects all three taggable
+      pages (`/admin/repositories`, `/admin/subscriptions`,
+      `/admin/accounts`) plus the server-side `?tag=` query and
+      the `revoke-by-tag` matcher (one Go helper renamed
+      `effectiveCoversAll` → `effectiveCoversAny`). The two JS
+      copies of the predicate consolidated into one shared
+      `GG.tag_filter.matches(rowTags, selectedLower)` exposed on
+      the helper module — chip-row selection logic now has
+      exactly one in-process definition; subscriptions.js's
+      `visibleFromFilter` calls through it instead of carrying
+      its own copy. Two existing tests that pinned AND
+      semantics rewritten for OR. Design doc (§5.5, §6.3, §10)
+      and Swagger annotations updated.
 - [x] **Bulk-revoke confirm phrase reframed as anti-typo, not
       anti-script.** `docs/design/tags.md` §5.6 / §6.3 / §10
       now say plainly that `revoke <comma-joined-sorted-lower-tags>`

@@ -1582,7 +1582,7 @@
         },
         "/admin/subscriptions/revoke-by-tag": {
             "post": {
-                "description": "Revokes every subscription whose effective tag set\n(sub.tags ∪ repo.tags ∪ account.tags) covers every\ntag in the request body. Multiple tag values intersect\n(AND). Empty tag list is a 400 — bulk-revoke without a\nfilter would clear the whole catalogue, which has\nenough blast radius to deserve a different endpoint.\n\nThe Confirm field must match the deterministic phrase\n`revoke \u003ccomma-joined-lower-tags\u003e` (tags sorted, e.g.\n`revoke contractor:acme,team:marketing`). This is\nanti-typo friction — same purpose as a `--force` flag\non a destructive command — not an anti-script gate\n(the phrase is deterministic from the request inputs,\nso any caller that can compute the tag list can compute\nthe phrase). Server-side validation runs alongside the\nUI check so a buggy callsite can't omit the field by\naccident. The auth boundary is the admin session,\nsame as every other `/api/admin/*` endpoint.\n\nEach revoked subscription emits a `tag.revoked.bulk`\nevent on its repo's refs/audit/main with the matching\ntag set, so the audit chain answers \"why was sub-77\nrevoked?\" six months later. Session-cookie auth.",
+                "description": "Revokes every subscription whose effective tag set\n(sub.tags ∪ repo.tags ∪ account.tags) carries at least\none of the tags in the request body. Multiple tag\nvalues union (OR — same inclusion semantics as the\nchip UI; selecting more chips widens the match).\nEmpty tag list is a 400 — bulk-revoke without a\nfilter would clear the catalogue, which has enough\nblast radius to deserve a different endpoint.\n\nThe Confirm field must match the deterministic phrase\n`revoke \u003ccomma-joined-lower-tags\u003e` (tags sorted, e.g.\n`revoke contractor:acme,team:marketing`). This is\nanti-typo friction — same purpose as a `--force` flag\non a destructive command — not an anti-script gate\n(the phrase is deterministic from the request inputs,\nso any caller that can compute the tag list can compute\nthe phrase). Server-side validation runs alongside the\nUI check so a buggy callsite can't omit the field by\naccident. The auth boundary is the admin session,\nsame as every other `/api/admin/*` endpoint.\n\nEach revoked subscription emits a `tag.revoked.bulk`\nevent on its repo's refs/audit/main with the matching\ntag set, so the audit chain answers \"why was sub-77\nrevoked?\" six months later. Session-cookie auth.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1928,7 +1928,7 @@
         },
         "/admin/tokens": {
             "get": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: `mirror`\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating `?tag=` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.\n\nPATCH bodies that include a `tags` field receive an\nUpdateTokenResponse echoing the canonical post-update\n`tags` (direct) and `effective_tags` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: `mirror`\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating `?tag=` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues union (OR — chips are inclusion filters; selecting\nmore chips widens the match). Tag matching is case-insensitive.\n\nPATCH bodies that include a `tags` field receive an\nUpdateTokenResponse echoing the canonical post-update\n`tags` (direct) and `effective_tags` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1946,7 +1946,7 @@
                             "type": "string"
                         },
                         "collectionFormat": "multi",
-                        "description": "Filter by effective tag (repeatable; AND across values)",
+                        "description": "Filter by effective tag (repeatable; OR across values)",
                         "name": "tag",
                         "in": "query"
                     },
@@ -2015,7 +2015,7 @@
                 }
             },
             "post": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: `mirror`\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating `?tag=` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.\n\nPATCH bodies that include a `tags` field receive an\nUpdateTokenResponse echoing the canonical post-update\n`tags` (direct) and `effective_tags` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: `mirror`\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating `?tag=` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues union (OR — chips are inclusion filters; selecting\nmore chips widens the match). Tag matching is case-insensitive.\n\nPATCH bodies that include a `tags` field receive an\nUpdateTokenResponse echoing the canonical post-update\n`tags` (direct) and `effective_tags` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2033,7 +2033,7 @@
                             "type": "string"
                         },
                         "collectionFormat": "multi",
-                        "description": "Filter by effective tag (repeatable; AND across values)",
+                        "description": "Filter by effective tag (repeatable; OR across values)",
                         "name": "tag",
                         "in": "query"
                     },
@@ -2102,7 +2102,7 @@
                 }
             },
             "delete": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: `mirror`\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating `?tag=` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.\n\nPATCH bodies that include a `tags` field receive an\nUpdateTokenResponse echoing the canonical post-update\n`tags` (direct) and `effective_tags` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: `mirror`\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating `?tag=` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues union (OR — chips are inclusion filters; selecting\nmore chips widens the match). Tag matching is case-insensitive.\n\nPATCH bodies that include a `tags` field receive an\nUpdateTokenResponse echoing the canonical post-update\n`tags` (direct) and `effective_tags` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2120,7 +2120,7 @@
                             "type": "string"
                         },
                         "collectionFormat": "multi",
-                        "description": "Filter by effective tag (repeatable; AND across values)",
+                        "description": "Filter by effective tag (repeatable; OR across values)",
                         "name": "tag",
                         "in": "query"
                     },
@@ -2189,7 +2189,7 @@
                 }
             },
             "patch": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: `mirror`\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating `?tag=` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.\n\nPATCH bodies that include a `tags` field receive an\nUpdateTokenResponse echoing the canonical post-update\n`tags` (direct) and `effective_tags` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: `mirror`\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating `?tag=` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues union (OR — chips are inclusion filters; selecting\nmore chips widens the match). Tag matching is case-insensitive.\n\nPATCH bodies that include a `tags` field receive an\nUpdateTokenResponse echoing the canonical post-update\n`tags` (direct) and `effective_tags` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2207,7 +2207,7 @@
                             "type": "string"
                         },
                         "collectionFormat": "multi",
-                        "description": "Filter by effective tag (repeatable; AND across values)",
+                        "description": "Filter by effective tag (repeatable; OR across values)",
                         "name": "tag",
                         "in": "query"
                     },

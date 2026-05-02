@@ -2102,11 +2102,13 @@ paths:
       - application/json
       description: |-
         Revokes every subscription whose effective tag set
-        (sub.tags ∪ repo.tags ∪ account.tags) covers every
-        tag in the request body. Multiple tag values intersect
-        (AND). Empty tag list is a 400 — bulk-revoke without a
-        filter would clear the whole catalogue, which has
-        enough blast radius to deserve a different endpoint.
+        (sub.tags ∪ repo.tags ∪ account.tags) carries at least
+        one of the tags in the request body. Multiple tag
+        values union (OR — same inclusion semantics as the
+        chip UI; selecting more chips widens the match).
+        Empty tag list is a 400 — bulk-revoke without a
+        filter would clear the catalogue, which has enough
+        blast radius to deserve a different endpoint.
 
         The Confirm field must match the deterministic phrase
         `revoke <comma-joined-lower-tags>` (tags sorted, e.g.
@@ -2382,7 +2384,8 @@ paths:
 
         GET supports a repeating `?tag=` query parameter that filters
         by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
-        values intersect (AND). Tag matching is case-insensitive.
+        values union (OR — chips are inclusion filters; selecting
+        more chips widens the match). Tag matching is case-insensitive.
 
         PATCH bodies that include a `tags` field receive an
         UpdateTokenResponse echoing the canonical post-update
@@ -2392,7 +2395,7 @@ paths:
         PATCH bodies still receive the simpler MessageResponse.
       parameters:
       - collectionFormat: multi
-        description: Filter by effective tag (repeatable; AND across values)
+        description: Filter by effective tag (repeatable; OR across values)
         in: query
         items:
           type: string
@@ -2457,7 +2460,8 @@ paths:
 
         GET supports a repeating `?tag=` query parameter that filters
         by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
-        values intersect (AND). Tag matching is case-insensitive.
+        values union (OR — chips are inclusion filters; selecting
+        more chips widens the match). Tag matching is case-insensitive.
 
         PATCH bodies that include a `tags` field receive an
         UpdateTokenResponse echoing the canonical post-update
@@ -2467,7 +2471,7 @@ paths:
         PATCH bodies still receive the simpler MessageResponse.
       parameters:
       - collectionFormat: multi
-        description: Filter by effective tag (repeatable; AND across values)
+        description: Filter by effective tag (repeatable; OR across values)
         in: query
         items:
           type: string
@@ -2532,7 +2536,8 @@ paths:
 
         GET supports a repeating `?tag=` query parameter that filters
         by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
-        values intersect (AND). Tag matching is case-insensitive.
+        values union (OR — chips are inclusion filters; selecting
+        more chips widens the match). Tag matching is case-insensitive.
 
         PATCH bodies that include a `tags` field receive an
         UpdateTokenResponse echoing the canonical post-update
@@ -2542,7 +2547,7 @@ paths:
         PATCH bodies still receive the simpler MessageResponse.
       parameters:
       - collectionFormat: multi
-        description: Filter by effective tag (repeatable; AND across values)
+        description: Filter by effective tag (repeatable; OR across values)
         in: query
         items:
           type: string
@@ -2607,7 +2612,8 @@ paths:
 
         GET supports a repeating `?tag=` query parameter that filters
         by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
-        values intersect (AND). Tag matching is case-insensitive.
+        values union (OR — chips are inclusion filters; selecting
+        more chips widens the match). Tag matching is case-insensitive.
 
         PATCH bodies that include a `tags` field receive an
         UpdateTokenResponse echoing the canonical post-update
@@ -2617,7 +2623,7 @@ paths:
         PATCH bodies still receive the simpler MessageResponse.
       parameters:
       - collectionFormat: multi
-        description: Filter by effective tag (repeatable; AND across values)
+        description: Filter by effective tag (repeatable; OR across values)
         in: query
         items:
           type: string

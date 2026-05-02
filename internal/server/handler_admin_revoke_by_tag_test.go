@@ -120,14 +120,16 @@ func TestRevokeByTag_RejectsEmptyTags(t *testing.T) {
 	}
 }
 
-// TestRevokeByTag_AndSemantics two tags must both be present (effective
-// AND) for a sub to be in scope. A sub with one of the two tags
-// survives.
-func TestRevokeByTag_AndSemantics(t *testing.T) {
+// TestRevokeByTag_OrSemantics — chips are inclusion filters (union /
+// OR), so a sub is in scope iff its effective-tag set carries at least
+// one of the requested tags. A sub with both tags matches; a sub with
+// one of them matches; an untagged sub does NOT.
+func TestRevokeByTag_OrSemantics(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	srv.git.InitBare("addresses")
 	bothTok, _ := srv.tokenStrategy.Issue("alice", "addresses", nil)
 	oneTok, _ := srv.tokenStrategy.Issue("bob", "addresses", nil)
+	noneTok, _ := srv.tokenStrategy.Issue("carol", "addresses", nil)
 
 	do(t, srv, http.MethodPatch, "/api/admin/tokens",
 		map[string]any{"token": bothTok, "tags": []string{"team:marketing", "env:prod"}}, sess)
@@ -145,11 +147,15 @@ func TestRevokeByTag_AndSemantics(t *testing.T) {
 	}
 	var resp RevokeByTagResponse
 	json.Unmarshal(rec.Body.Bytes(), &resp)
-	if resp.Count != 1 || resp.Revoked[0].Token != bothTok {
-		t.Fatalf("expected only %s revoked (both tags), got %+v", bothTok, resp)
+	if resp.Count != 2 {
+		t.Fatalf("want 2 revoked (both-and-one), got %d: %+v", resp.Count, resp)
 	}
-	if srv.tokenStrategy.Get(oneTok) == nil {
-		t.Errorf("partial-match token swept incorrectly")
+	revoked := map[string]bool{resp.Revoked[0].Token: true, resp.Revoked[1].Token: true}
+	if !revoked[bothTok] || !revoked[oneTok] {
+		t.Errorf("expected bothTok + oneTok revoked, got %+v", resp.Revoked)
+	}
+	if srv.tokenStrategy.Get(noneTok) == nil {
+		t.Errorf("untagged token was swept; OR filter should leave untagged subs alone")
 	}
 }
 
@@ -187,8 +193,9 @@ func TestRevokeByTag_MatchesInheritedTags(t *testing.T) {
 
 // TestRevokeByTag_TagListFilter pins the GET ?tag= filter as the
 // counterpart to the bulk action. Two tokens, only one with the tag,
-// listing with ?tag=team:marketing returns only the tagged one. AND
-// across multiple ?tag= params shrinks further.
+// listing with ?tag=team:marketing returns only the tagged one. OR
+// across multiple ?tag= params widens (union); a non-existent tag
+// added alongside a real one DOESN'T narrow the result.
 func TestRevokeByTag_TagListFilter(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	srv.git.InitBare("addresses")
@@ -207,11 +214,11 @@ func TestRevokeByTag_TagListFilter(t *testing.T) {
 		t.Fatalf("filter returned %+v, want only %s", resp.Tokens, tagged)
 	}
 
-	// AND with a tag nothing carries → empty.
+	// OR with a tag nothing carries → still includes the tagged sub.
 	rec = do(t, srv, http.MethodGet, "/api/admin/tokens?tag=team:marketing&tag=missing", nil, sess)
 	json.Unmarshal(rec.Body.Bytes(), &resp)
-	if resp.Count != 0 {
-		t.Errorf("AND with non-existent tag should be empty, got %d", resp.Count)
+	if resp.Count != 1 || resp.Tokens[0].Token != tagged {
+		t.Errorf("OR with extra non-existent tag should still match the tagged sub, got %+v", resp)
 	}
 }
 

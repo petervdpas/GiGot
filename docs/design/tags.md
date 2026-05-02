@@ -268,7 +268,14 @@ Filter:  Team:        [marketing] [platform] [design]
 Selecting one or more chips filters by the **effective** tag set, so
 `team:marketing` finds directly tagged subs, subs that inherit it
 through their repo, and subs that inherit it through their account.
-Multiple chips intersect (AND).
+Multiple chips union (OR) — chips are inclusion filters, so adding a
+second chip widens the visible set, and selecting every chip in the
+row shows every tagged row. The earlier AND ("rows that have ALL
+selected tags") was changed because the natural mental model is
+"include rows from any of these categories" — selecting all chips and
+seeing zero results was confusing every time the tags were mutually
+exclusive on a row (e.g. an account tagged `dormant` vs one tagged
+`local` would never carry both, so the AND view collapsed to nothing).
 
 Grouping is purely a display affordance — the schema stores plain
 strings (§8) and tags without colons sort cleanly into "Other"
@@ -343,7 +350,8 @@ The token list response (`GET /api/admin/tokens`) gains two new fields per row: 
 ### 6.3 Filtered list + bulk revoke
 
 Existing list endpoints grow `?tag=` repeating query params filtering
-by effective tags (AND across multiple values):
+by effective tags (OR / union across multiple values — same rule as
+the chip UI in §5.5):
 
 ```
 GET /api/admin/subscriptions?tag=team:marketing&tag=env:prod
@@ -526,7 +534,8 @@ Three slices, each independently shippable. All three shipped 2026-05-02.
   unassigned variants, §7.1).
 - **Slice 3 — Grouped chip filter + bulk revoke.** §6.3 endpoints.
   `GET /api/admin/tokens?tag=` accepts repeating tag values that
-  intersect (AND) on the **effective** tag set. New
+  union (OR) on the **effective** tag set — see §5.5 for why
+  inclusion semantics are the natural mental model. New
   `POST /api/admin/subscriptions/revoke-by-tag` body
   (`{tags, confirm}`) revokes every match in one call, gated by a
   deterministic typed phrase computed as
@@ -557,7 +566,9 @@ Three slices, each independently shippable. All three shipped 2026-05-02.
     server-side-filter pages, `attachClientSide()` for pages where
     JS narrows in-memory rows. Each page hands it `rows`, `rowTags`,
     and a `renderRows` callback; the controller owns chip rendering,
-    URL state, AND-filter computation, and stale-selection pruning.
+    URL state, OR-filter computation (one shared `matches(rowTags,
+    selectedLower)` predicate exposed as `GG.tag_filter.matches`),
+    and stale-selection pruning.
   - **Stale-selection prune on every refresh.** When the last
     assignment of a selected chip goes (via picker × on a sub, repo,
     or account), the chip drops out of the URL and the row list

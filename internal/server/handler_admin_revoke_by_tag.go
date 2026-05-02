@@ -14,11 +14,13 @@ import (
 // handleAdminRevokeByTag godoc
 // @Summary      Bulk revoke subscriptions by effective tag (admin only)
 // @Description  Revokes every subscription whose effective tag set
-// @Description  (sub.tags ∪ repo.tags ∪ account.tags) covers every
-// @Description  tag in the request body. Multiple tag values intersect
-// @Description  (AND). Empty tag list is a 400 — bulk-revoke without a
-// @Description  filter would clear the whole catalogue, which has
-// @Description  enough blast radius to deserve a different endpoint.
+// @Description  (sub.tags ∪ repo.tags ∪ account.tags) carries at least
+// @Description  one of the tags in the request body. Multiple tag
+// @Description  values union (OR — same inclusion semantics as the
+// @Description  chip UI; selecting more chips widens the match).
+// @Description  Empty tag list is a 400 — bulk-revoke without a
+// @Description  filter would clear the catalogue, which has enough
+// @Description  blast radius to deserve a different endpoint.
 // @Description
 // @Description  The Confirm field must match the deterministic phrase
 // @Description  `revoke <comma-joined-lower-tags>` (tags sorted, e.g.
@@ -153,7 +155,7 @@ func (s *Server) matchingSubscriptionsByTag(wantLower []string) []revokeCandidat
 			accountKey = provider + ":" + identifier
 		}
 		effective := s.tags.EffectiveSubscriptionTags(e.Token, e.Repo, accountKey)
-		if !effectiveCoversAll(effective, wantLower) {
+		if !effectiveCoversAny(effective, wantLower) {
 			continue
 		}
 		abil := append([]string(nil), e.Abilities...)

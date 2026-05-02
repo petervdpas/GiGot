@@ -165,7 +165,8 @@ func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *au
 // @Description
 // @Description  GET supports a repeating `?tag=` query parameter that filters
 // @Description  by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
-// @Description  values intersect (AND). Tag matching is case-insensitive.
+// @Description  values union (OR — chips are inclusion filters; selecting
+// @Description  more chips widens the match). Tag matching is case-insensitive.
 // @Description
 // @Description  PATCH bodies that include a `tags` field receive an
 // @Description  UpdateTokenResponse echoing the canonical post-update
@@ -176,7 +177,7 @@ func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *au
 // @Tags         admin
 // @Accept       json
 // @Produce      json
-// @Param        tag   query     []string            false  "Filter by effective tag (repeatable; AND across values)" collectionFormat(multi)
+// @Param        tag   query     []string            false  "Filter by effective tag (repeatable; OR across values)" collectionFormat(multi)
 // @Param        body  body      TokenRequest        false  "Issue body (POST)"
 // @Param        body  body      UpdateTokenRequest  false  "Update body (PATCH) — repos and/or abilities and/or tags"
 // @Param        body  body      RevokeTokenRequest  false  "Revoke body (DELETE)"
@@ -353,7 +354,7 @@ func (s *Server) adminListTokens(w http.ResponseWriter, r *http.Request) {
 			accountKey = provider + ":" + identifier
 		}
 		effective := s.tags.EffectiveSubscriptionTags(e.Token, e.Repo, accountKey)
-		if !effectiveCoversAll(effective, wantLower) {
+		if !effectiveCoversAny(effective, wantLower) {
 			continue
 		}
 		items = append(items, TokenListItem{
@@ -395,11 +396,13 @@ func tagFilterFromQuery(r *http.Request) []string {
 	return out
 }
 
-// effectiveCoversAll returns true when every name in wantLower (already
-// lower-cased) is present in the effective set. Used by the listing
-// filter and the bulk revoke matcher so the AND semantics live in one
-// place.
-func effectiveCoversAll(effective, wantLower []string) bool {
+// effectiveCoversAny returns true when at least one name in wantLower
+// (already lower-cased) is present in the effective set. Used by the
+// listing filter and the bulk revoke matcher so the OR (union) semantics
+// live in one place — chips are inclusion filters, selecting more chips
+// widens the visible set rather than narrowing it. Empty wantLower means
+// "no filter active" and matches everything.
+func effectiveCoversAny(effective, wantLower []string) bool {
 	if len(wantLower) == 0 {
 		return true
 	}
@@ -408,11 +411,11 @@ func effectiveCoversAll(effective, wantLower []string) bool {
 		have[strings.ToLower(n)] = struct{}{}
 	}
 	for _, w := range wantLower {
-		if _, ok := have[w]; !ok {
-			return false
+		if _, ok := have[w]; ok {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 // handleAdminBindToken godoc

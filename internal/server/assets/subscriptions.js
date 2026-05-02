@@ -598,17 +598,16 @@
     // the chip-filter render above already picked up the new count.
   }
 
-  // visibleFromFilter computes the AND-filtered subset of
+  // visibleFromFilter computes the OR-filtered subset of
   // allTokensCache against the active ?tag= selection, exactly the
   // way the server's `?tag=` endpoint would. With no chip selected
-  // the whole unfiltered list IS the visible list.
+  // the whole unfiltered list IS the visible list. Uses the shared
+  // GG.tag_filter.matches predicate so the rule has one definition
+  // in the JS bundle.
   function visibleFromFilter() {
     const sel = tagFilterCtl ? tagFilterCtl.selected() : [];
     if (!sel.length) return allTokensCache;
-    return allTokensCache.filter(tok => {
-      const have = new Set((tok.effective_tags || []).map(s => s.toLowerCase()));
-      return sel.every(s => have.has(s));
-    });
+    return allTokensCache.filter(tok => GG.tag_filter.matches(tok.effective_tags, sel));
   }
 
   // remountCardTagPicker re-runs installTagsSection's mount logic on

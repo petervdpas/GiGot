@@ -41,6 +41,25 @@
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c])));
 
+  // matches is the single predicate that decides whether a row
+  // survives the chip filter. OR (union) semantics — chips are
+  // inclusion filters, so a row matches iff any one of the row's
+  // tags is in the selection. Empty `selectedLower` means "no
+  // filter active" and matches everything. Exposed publicly via
+  // `GG.tag_filter.matches` so call sites that need to recompute
+  // the filtered slice off in-memory data (e.g. subscriptions.js
+  // after a tag edit) don't grow their own copy of this predicate
+  // — there's exactly one in-process definition of the rule.
+  // The server-side equivalent lives in `effectiveCoversAny` in
+  // handler_admin.go (Go runtime, same OR rule, same empty-list
+  // semantics); cross-runtime by necessity, but kept in lockstep
+  // by this comment + the design doc.
+  function matches(rowTags, selectedLower) {
+    if (!selectedLower || !selectedLower.length) return true;
+    const have = new Set((rowTags || []).map(t => String(t).toLowerCase()));
+    return selectedLower.some(s => have.has(s));
+  }
+
   // selectedTagsFromURL parses ?tag= (repeating, lower-cased,
   // de-duped). Module-private; the public surface is ctl.selected().
   function selectedTagsFromURL() {
@@ -231,10 +250,7 @@
     function visibleRows() {
       const sel = ctl.selected();
       if (!sel.length) return rows();
-      return rows().filter(r => {
-        const have = new Set((rowTags(r) || []).map(t => t.toLowerCase()));
-        return sel.every(s => have.has(s));
-      });
+      return rows().filter(r => matches(rowTags(r), sel));
     }
 
     function renderAll() {
@@ -264,5 +280,5 @@
   }
 
   window.GG = window.GG || {};
-  window.GG.tag_filter = { mount, attachClientSide };
+  window.GG.tag_filter = { mount, attachClientSide, matches };
 })();
