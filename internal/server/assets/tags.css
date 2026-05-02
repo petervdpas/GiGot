@@ -187,27 +187,30 @@
   background: var(--modal-highlight-bg, var(--chip));
   padding: 0.6rem 1rem;
 }
-.acct-detail-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+/* Compact inline detail: one header row + one value row. Reads in a
+   single horizontal sweep instead of four stacked label/value pairs.
+   Tag picker lives in the rightmost cell so its pill row flows
+   alongside the metadata, not below it. */
+.acct-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
 }
-/* Two-column key/value grid for the moved-from-table metadata
-   (Password, Subscriptions, Created). The label column hugs its
-   widest entry; the value column takes the rest. */
-.acct-detail-grid {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.25rem 1rem;
-  margin: 0;
-  align-items: baseline;
-}
-.acct-detail-grid dt {
-  color: var(--muted);
-  font-size: 0.75rem;
+.acct-detail-table th {
+  text-align: left;
+  font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 0.15rem 0.7rem 0.15rem 0;
+  white-space: nowrap;
 }
-.acct-detail-grid dd {
-  margin: 0;
+.acct-detail-table td {
+  padding: 0.15rem 0.7rem 0.15rem 0;
+  vertical-align: top;
+}
+.acct-detail-table th:last-child,
+.acct-detail-table td:last-child {
+  width: 100%;          /* Tags column expands to fill remaining width */
 }

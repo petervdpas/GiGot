@@ -93,17 +93,24 @@
     detailTr.style.display = 'none';
     detailTr.innerHTML =
       '<td colspan="5">' +
-        '<div class="acct-detail-content">' +
-          '<dl class="acct-detail-grid">' +
-            '<dt>Password</dt><dd>' + (a.has_password ? 'yes' : '<span class="muted">dormant</span>') + '</dd>' +
-            '<dt>Subscriptions</dt><dd>' + subsCell + '</dd>' +
-            '<dt>Created</dt><dd class="muted">' + escapeHtml((a.created_at || '').slice(0, 10)) + '</dd>' +
-          '</dl>' +
-          '<div class="ic-section-label muted">Tags' +
-            (tagCount ? ' <span class="muted">(' + tagCount + ')</span>' : '') +
-          '</div>' +
-          '<div class="acct-tags-host"></div>' +
-        '</div>' +
+        '<table class="acct-detail-table">' +
+          '<thead>' +
+            '<tr>' +
+              '<th>Password</th>' +
+              '<th>Subscriptions</th>' +
+              '<th>Created</th>' +
+              '<th>Tags' + (tagCount ? ' <span class="muted">(' + tagCount + ')</span>' : '') + '</th>' +
+            '</tr>' +
+          '</thead>' +
+          '<tbody>' +
+            '<tr>' +
+              '<td>' + (a.has_password ? 'yes' : '<span class="muted">dormant</span>') + '</td>' +
+              '<td>' + subsCell + '</td>' +
+              '<td class="muted">' + escapeHtml((a.created_at || '').slice(0, 10)) + '</td>' +
+              '<td><div class="acct-tags-host"></div></td>' +
+            '</tr>' +
+          '</tbody>' +
+        '</table>' +
       '</td>';
 
     GG.tag_picker.mount(detailTr.querySelector('.acct-tags-host'), {
