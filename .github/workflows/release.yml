@@ -26,6 +26,13 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
+      - name: Verify minified assets are current
+        # Static assets ship pre-minified in internal/server/assets-dist/.
+        # Re-run generate and fail if the working tree differs — keeps a
+        # contributor from editing source JS/CSS without committing the
+        # regenerated dist.
+        run: make check-assets
+
       - name: Configure git identity (integration tests)
         # GiGot's scaffold code pushes to the "master" branch by default, and
         # InitBare relies on git's HEAD default. Do NOT set init.defaultBranch

@@ -20,9 +20,25 @@
 VERSION ?= $(shell git describe --tags --dirty --always 2>/dev/null | sed 's/^v//' || echo "0.0.0-dev")
 LDFLAGS := -s -w -X main.appVersion=$(VERSION)
 
-.PHONY: build test version clean
+.PHONY: build test version clean assets check-assets
 
-build:
+# Static assets are minified at build time by cmd/minify-assets and
+# embedded from internal/server/assets-dist/. Source lives in
+# internal/server/assets/. Both are committed so a fresh checkout can
+# `go build` directly; this target re-runs generate when source has
+# changed, and `check-assets` is the CI gate that verifies dist is in
+# lock-step with source.
+assets:
+	go generate ./internal/server/...
+
+check-assets: assets
+	@if ! git diff --quiet --exit-code internal/server/assets-dist; then \
+		echo "internal/server/assets-dist/ is out of date — run 'make assets' and commit the result."; \
+		git --no-pager diff --stat internal/server/assets-dist; \
+		exit 1; \
+	fi
+
+build: assets
 	go build -trimpath -ldflags "$(LDFLAGS)" -o gigot .
 
 test:
