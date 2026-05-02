@@ -7,6 +7,7 @@
 <meta name="gigot-version" content="{{.Version}}">
 <link rel="stylesheet" href="/assets/admin.css">
 <link rel="stylesheet" href="/assets/tags.css">
+<link rel="stylesheet" href="/assets/drawer.css">
 <script>
   /* Apply stored theme before the body paints to avoid a flash on page
      load. Identical block on every admin page. */
@@ -23,22 +24,9 @@
     <aside id="admin-sidebar"></aside>
     <main class="main">
       <div class="panel active">
-        <div class="page-header">
+        <div class="page-header with-add">
           <h1>Tags <span class="muted">(<span id="tag-count">0</span>)</span></h1>
-        </div>
-        <div class="card">
-          <h2>Add tag</h2>
-          <form id="tag-form" class="row">
-            <input name="name" placeholder="Name (e.g. team:marketing)" required>
-            <button type="submit">Add</button>
-          </form>
-          <div class="muted create-repo-hint">
-            Tags are organisational labels — they do not grant or revoke access.
-            Use the <code>prefix:value</code> shape (<code>team:marketing</code>, <code>env:prod</code>,
-            <code>contractor:acme</code>) so the subscription-list filter can group chips by category.
-            Names are case-insensitive unique; the first creator's casing wins for display.
-          </div>
-          <div id="tag-msg" class="muted"></div>
+          <button class="btn-add" data-drawer-open="create-tag" aria-label="Add tag" title="Add tag">+</button>
         </div>
         <div class="card">
           <div class="tag-card-head">
@@ -55,9 +43,19 @@
   </div>
 </div>
 
+<aside class="drawer" data-drawer-name="create-tag">
+  <div class="drawer-head">
+    <h2>Add tag</h2>
+    <button type="button" class="drawer-close" aria-label="Close">×</button>
+  </div>
+  <div class="drawer-body" data-lazy-tpl="create-tag" data-lazy-trigger="manual"></div>
+</aside>
+
 <script src="/assets/ui.js"></script>
 <script src="/assets/dialogs.js"></script>
 <script src="/assets/admin_common.js"></script>
+<script src="/assets/lazy.js"></script>
+<script src="/assets/drawer.js"></script>
 <script src="/assets/tags.js"></script>
 </body>
 </html>

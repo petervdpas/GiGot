@@ -111,6 +111,91 @@
     });
   }
 
+  // bindForm wires a drawer that hosts a single create/edit form
+  // fragment. Replaces the per-page `wireCreateXxxForm` boilerplate
+  // (find form → bind submit → collect [name] inputs → call API →
+  // on success refresh + close drawer → on error write into the
+  // -msg div) with one config-driven entry point.
+  //
+  // Markup contract:
+  //
+  //   <aside class="drawer" data-drawer-name="create-tag">
+  //     <div class="drawer-body" data-lazy-tpl="create-tag"
+  //          data-lazy-trigger="manual"></div>
+  //   </aside>
+  //
+  //   The lazy fragment has a single <form> with [name] inputs and a
+  //   `[id$="-msg"]` div for the error surface.
+  //
+  // Page wires it once on boot:
+  //
+  //   GG.drawer.bindForm('create-tag', {
+  //     submit: async (data) => api.createTag(data.name),
+  //     onSuccess: refresh,
+  //   });
+  //
+  // Optional opts:
+  //   - onRendered(host)   — runs after each fragment render (used
+  //                          for imperative picker mounts).
+  //   - getData()          — supplies template data; defaults to {}.
+  //
+  // The helper takes care of: lazy.bind, submit handler, payload
+  // collection, drawer auto-close on success, error display.
+  function bindForm(name, opts) {
+    opts = opts || {};
+    const drawer = document.querySelector('.drawer[data-drawer-name="' + cssEscape(name) + '"]');
+    if (!drawer) return;
+    const body = drawer.querySelector('.drawer-body');
+    if (!body || !window.GG || !GG.lazy) return;
+    GG.lazy.bind(body, {
+      getData: opts.getData || (() => ({})),
+      onRendered: host => {
+        if (opts.onRendered) opts.onRendered(host);
+        const form = host.querySelector('form');
+        if (!form) return;
+        form.addEventListener('submit', async e => {
+          e.preventDefault();
+          const msgEl = host.querySelector('[id$="-msg"]');
+          if (msgEl) {
+            msgEl.textContent = '';
+            msgEl.className = 'muted';
+          }
+          try {
+            const data = collectFormData(form);
+            await opts.submit(data);
+            if (opts.onSuccess) await opts.onSuccess();
+            closeAll();
+          } catch (err) {
+            if (msgEl) {
+              msgEl.textContent = err.message || String(err);
+              msgEl.className = 'error';
+            }
+          }
+        });
+      },
+    });
+  }
+
+  // collectFormData walks the form's [name] inputs and packages them
+  // into a plain JSON object. Checkbox groups (multiple inputs with
+  // the same name) collapse into arrays of the checked values, so a
+  // shape like {abilities: ["mirror", "audit"]} falls out naturally.
+  // Mirror's the existing selectedAbilitiesFromPicker shape, which
+  // is what the API expects.
+  function collectFormData(form) {
+    const data = {};
+    for (const el of form.querySelectorAll('[name]')) {
+      const name = el.name;
+      if (el.type === 'checkbox') {
+        if (!Array.isArray(data[name])) data[name] = [];
+        if (el.checked) data[name].push(el.value);
+      } else {
+        data[name] = el.value;
+      }
+    }
+    return data;
+  }
+
   window.GG = window.GG || {};
-  window.GG.drawer = { attachAll, open, close: closeAll };
+  window.GG.drawer = { attachAll, open, close: closeAll, bindForm };
 })();

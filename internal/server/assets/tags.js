@@ -148,23 +148,15 @@
       });
     }
 
-    document.getElementById('tag-form').addEventListener('submit', async e => {
-      e.preventDefault();
-      const f = e.target;
-      const msg = document.getElementById('tag-msg');
-      msg.textContent = '';
-      msg.className = 'muted';
-      const name = f.name.value.trim();
-      if (!name) return;
-      try {
-        await api.createTag(name);
-        f.reset();
-        await refresh();
-      } catch (ex) {
-        msg.textContent = ex.message;
-        msg.className = 'error';
-      }
+    // Add-tag form lives in a fragment rendered into the create-tag
+    // drawer. GG.drawer.bindForm wires lazy + submit + close-on-
+    // success + error-into-#tag-msg in one shot, so this page only
+    // declares the API call and the post-success refresh.
+    GG.drawer.bindForm('create-tag', {
+      submit: async data => api.createTag((data.name || '').trim()),
+      onSuccess: refresh,
     });
+    GG.drawer.attachAll();
 
     await refresh();
   })();

@@ -1,0 +1,19 @@
+<div class="drawer-form-info">
+  Tags are organisational labels — they do not grant or revoke access.
+  Use the <code class="code-chip">prefix:value</code> shape
+  (<code class="code-chip">team:marketing</code>,
+  <code class="code-chip">env:prod</code>,
+  <code class="code-chip">contractor:acme</code>)
+  so the subscription-list filter can group chips by category.
+  Names are case-insensitive unique; the first creator's casing wins for display.
+</div>
+<form id="tag-form" class="drawer-form">
+  <label>
+    <span class="field-label">Name</span>
+    <input name="name" placeholder="e.g. team:marketing" required>
+  </label>
+  <div id="tag-msg" class="muted"></div>
+  <div class="drawer-form-actions">
+    <button type="submit">Add</button>
+  </div>
+</form>

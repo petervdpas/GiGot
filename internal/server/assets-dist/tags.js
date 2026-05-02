@@ -4,4 +4,4 @@ This will also remove the tag from `+e.join(", ")+"."}const i=await GG.dialog.co
 
 `+o+`
 
-The tags themselves are deleted from the catalogue. This cannot be undone.`,okText:"Remove "+n.length,dangerOk:!0});if(!i)return;try{await e.sweepUnusedTags(),await t()}catch(e){await GG.dialog.alert("Sweep failed",e.message)}}),document.getElementById("tag-form").addEventListener("submit",async n=>{n.preventDefault();const o=n.target,s=document.getElementById("tag-msg");s.textContent="",s.className="muted";const i=o.name.value.trim();if(!i)return;try{await e.createTag(i),o.reset(),await t()}catch(e){s.textContent=e.message,s.className="error"}}),await t()})()})()
+The tags themselves are deleted from the catalogue. This cannot be undone.`,okText:"Remove "+n.length,dangerOk:!0});if(!i)return;try{await e.sweepUnusedTags(),await t()}catch(e){await GG.dialog.alert("Sweep failed",e.message)}}),GG.drawer.bindForm("create-tag",{submit:async t=>e.createTag((t.name||"").trim()),onSuccess:t}),GG.drawer.attachAll(),await t()})()})()

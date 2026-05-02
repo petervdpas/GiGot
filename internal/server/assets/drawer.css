@@ -200,3 +200,23 @@
   color: var(--text);
   width: 100%;
 }
+/* `.code-chip` is a banner-friendly inline-code style: transparent
+   background + accent text + subtle accent border. Designed for
+   info banners where the global `<code>` background (which is
+   `--field-bg`, near-black in dark mode) would read as visual
+   holes punched through the banner. Apply explicitly via a class
+   on the `<code>` element so default `<code>` chrome stays
+   untouched everywhere it's used semantically (token display, repo
+   URLs, identifier columns, etc). Same chip-suffix convention as
+   `.tag-chip` / `.repo-chip` even though this one is outlined
+   rather than filled — "chip" here means "small inline element"
+   regardless of fill. */
+.code-chip {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}

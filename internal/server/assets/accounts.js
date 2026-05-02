@@ -240,13 +240,12 @@
     return frag;
   }
 
-  // wireCreateAccountForm runs every time the drawer's lazy body
-  // re-renders. Re-mounts the Provider / Role pickers in their
-  // hosts (GG.select needs to be initialized after the markup
-  // exists) and binds the form's submit handler. On success:
-  // refresh the page list, close the drawer, surface a success
-  // message in the empty form ready for the next entry.
-  function wireCreateAccountForm(host) {
+  // mountCreateAccountPickers re-mounts the Provider / Role
+  // GG.select chrome inside the create-account fragment after each
+  // render. Picker hosts are page-specific (the fragment carries
+  // them as empty `<span id="...-host">` placeholders), so the
+  // imperative initialisation has to run post-render.
+  function mountCreateAccountPickers(host) {
     const providerHost = host.querySelector('#provider-host');
     if (providerHost) {
       providerHost.innerHTML = GG.select.html({
@@ -275,37 +274,6 @@
       });
       GG.select.initAll(roleHost);
     }
-
-    const form = host.querySelector('#acct-form');
-    if (!form) return;
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      const f = e.target;
-      const msg = host.querySelector('#acct-msg');
-      msg.textContent = '';
-      msg.className = 'muted';
-      const body = {
-        provider: f.provider.value,
-        identifier: f.identifier.value.trim(),
-        role: f.role.value,
-      };
-      const display = f.display_name.value.trim();
-      if (display) body.display_name = display;
-      const pw = f.password.value;
-      if (pw && body.provider === 'local') body.password = pw;
-
-      try {
-        await api.createAccount(body);
-        // Refresh the page list, close the drawer. The drawer's
-        // next open will re-render the fragment fresh (empty
-        // fields, ready for the next entry).
-        await refresh();
-        GG.drawer.close();
-      } catch (ex) {
-        msg.textContent = ex.message;
-        msg.className = 'error';
-      }
-    });
   }
 
   (async function boot() {
@@ -328,22 +296,26 @@
       },
     });
 
-    // Bind the create-account drawer body to its fragment. Pickers
-    // (Provider / Role) need imperative initialization after every
-    // render, plus the form's submit handler — onRendered is where
-    // both happen so the drawer is fully wired by the time it
-    // slides in.
-    //
-    // getData is a no-op (the form has no per-render data yet); a
-    // future "edit account" drawer reusing the same pattern would
-    // pass the account row through here.
-    const drawerBody = document.querySelector('.drawer[data-drawer-name="create-account"] .drawer-body');
-    if (drawerBody) {
-      GG.lazy.bind(drawerBody, {
-        getData: () => ({}),
-        onRendered: host => wireCreateAccountForm(host),
-      });
-    }
+    // Create-account form lives in a fragment rendered into the
+    // create-account drawer. GG.drawer.bindForm handles the lazy
+    // bind + submit + close + error-into-#acct-msg dance; this
+    // page only declares the picker mounts (onRendered), the API
+    // call (submit), and the post-success refresh.
+    GG.drawer.bindForm('create-account', {
+      onRendered: mountCreateAccountPickers,
+      submit: async data => {
+        const body = {
+          provider: data.provider,
+          identifier: (data.identifier || '').trim(),
+          role: data.role,
+        };
+        const display = (data.display_name || '').trim();
+        if (display) body.display_name = display;
+        if (data.password && body.provider === 'local') body.password = data.password;
+        return api.createAccount(body);
+      },
+      onSuccess: refresh,
+    });
     GG.drawer.attachAll();
 
     await refresh();
