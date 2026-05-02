@@ -1,0 +1,16 @@
+<div class="ability-picker">
+  {{#each abilities}}
+    <div class="switch-row {{stale}}">
+      <label class="switch">
+        <input type="checkbox" name="ability" value="{{name}}" {{checked}}>
+        <span class="slider"></span>
+      </label>
+      <span class="control-label">{{name}}</span>
+      <span class="muted ability-hint">{{hint}}</span>
+    </div>
+  {{/each}}
+</div>
+<div class="abilities-foot">
+  <button type="button" class="small ability-save hidden">Save</button>
+  <span class="muted ability-status"></span>
+</div>

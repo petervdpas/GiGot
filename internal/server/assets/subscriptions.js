@@ -306,14 +306,61 @@
     });
   }
 
+  // abilityViewModel shapes the data the abilities fragment renders
+  // against. Mirrors the rules in KNOWN_ABILITIES + relevantAbilities
+  // (server-side abilities are always {name, hint}; the picker adds
+  // `checked` / `stale` per-token state).
+  //
+  // - `checked`: empty string for unchecked, "checked" for checked
+  //   (lets `<input … {{checked}}>` render correctly without an
+  //   `{{#if}}` template feature we don't have).
+  // - `stale`: empty string for normal, "stale" for "held but not
+  //   relevant for this account's role" — drops in as a class on
+  //   the row so existing CSS styles it muted.
+  function abilityViewModel(t) {
+    const accountRole = accountRoleFor(t.username);
+    const held = new Set(t.abilities || []);
+    const relevant = KNOWN_ABILITIES.filter(a => a.relevant({ accountRole }));
+    const relevantNames = new Set(relevant.map(a => a.name));
+    const items = relevant.map(a => ({
+      name: a.name,
+      hint: a.hint,
+      checked: held.has(a.name) ? 'checked' : '',
+      stale: '',
+    }));
+    // Held but no longer relevant (admin demoted to regular while
+    // holding mirror). Render muted so the admin can revoke the
+    // stale bit on the current key without rebinding.
+    for (const name of held) {
+      if (!relevantNames.has(name)) {
+        items.push({
+          name,
+          hint: 'granted but not allowed for this account\'s role',
+          checked: 'checked',
+          stale: 'stale',
+        });
+      }
+    }
+    return { abilities: items };
+  }
+
   // installAbilitiesSection drops the flat chip row that
-  // Admin.renderTokenCard inserts and replaces it with a
-  // collapsible section whose body contains editable toggles + a
-  // right-aligned Save button. Toggles DON'T save on flip — they
-  // just mark the section dirty. Save commits, then the section
-  // snaps back to its pristine state WITHOUT re-rendering the
-  // card grid (that was causing collapsibles to snap shut and
-  // cards to reorder on every flip).
+  // Admin.renderTokenCard inserts and replaces it with a lazy
+  // collapsible whose body is rendered through GG.lazy from the
+  // `abilities` fragment. Toggles DON'T save on flip — they just
+  // mark the section dirty. Save commits, then the section snaps
+  // back to its pristine state WITHOUT re-rendering the card grid.
+  //
+  // The render lifecycle:
+  //   1. <details> is built imperatively (only the chrome — the
+  //      section title + the abilities count badge).
+  //   2. GG.lazy.bind hooks the toggle event. On first open, the
+  //      `abilities` fragment is rendered into the details body
+  //      using abilityViewModel(t) as the data.
+  //   3. onRendered wires dirty / save / status behaviour against
+  //      the freshly rendered DOM. Because the body is rebuilt on
+  //      each refresh(), all event listeners attach to whatever
+  //      DOM is current — no stale references.
   function installAbilitiesSection(card, t) {
     const flatChips = card.querySelector(':scope > .ic-chips.cell-abilities');
     if (flatChips) flatChips.remove();
@@ -322,39 +369,19 @@
 
     const details = document.createElement('details');
     details.className = 'ic-collapse abilities-collapse';
+    details.dataset.lazyTpl = 'abilities';
 
     const summary = document.createElement('summary');
     summary.className = 'ic-section-head';
     summary.innerHTML =
       '<span class="ic-section-title">Abilities</span>' +
-      '<span class="muted abilities-count"></span>';
-
-    const body = document.createElement('div');
-    body.className = 'ic-collapse-body abilities-body';
-
-    const picker = document.createElement('div');
-    picker.className = 'ability-picker';
-    body.appendChild(picker);
-
-    const foot = document.createElement('div');
-    foot.className = 'abilities-foot';
-    const saveBtn = document.createElement('button');
-    saveBtn.type = 'button';
-    saveBtn.className = 'small ability-save hidden';
-    saveBtn.textContent = 'Save';
-    const status = document.createElement('span');
-    status.className = 'muted ability-status';
-    // DOM order = visual order: Save first (left), status follows.
-    foot.appendChild(saveBtn);
-    foot.appendChild(status);
-    body.appendChild(foot);
+      '<span class="muted abilities-count">(' + (t.abilities || []).length + ')</span>';
 
     tokenField.parentNode.insertBefore(details, tokenField);
     details.appendChild(summary);
-    details.appendChild(body);
 
     function currentSelection() {
-      return selectedAbilitiesFromPicker(picker);
+      return selectedAbilitiesFromPicker(details);
     }
     function setCount(n) {
       const el = card.querySelector('.abilities-count');
@@ -366,50 +393,55 @@
       for (const x of b) if (!s.has(x)) return false;
       return true;
     }
-    function onDirty() {
-      const next = currentSelection();
-      const pristine = t.abilities || [];
-      const clean = sameSet(next, pristine);
-      saveBtn.classList.toggle('hidden', clean);
-      // Re-enable every time the button reappears — the click handler
-      // disables it during the PATCH to prevent double-submit, and
-      // without this the second flip shows a ghost button.
-      if (!clean) saveBtn.disabled = false;
-      status.textContent = '';
-      status.className = 'muted ability-status';
-    }
-    function repaint() {
-      renderAbilityPicker(picker, t.abilities || [], t.username || '');
-      setCount((t.abilities || []).length);
-      saveBtn.classList.add('hidden');
-      picker.querySelectorAll('.switch input[name="ability"]').forEach(cb => {
-        cb.addEventListener('change', onDirty);
-      });
-    }
-    saveBtn.addEventListener('click', async () => {
-      const next = currentSelection();
-      saveBtn.disabled = true;
-      status.textContent = 'saving…';
-      status.className = 'muted ability-status';
-      try {
-        await api.updateToken(t.token, { abilities: next });
-        // Mutate the in-memory snapshot instead of calling
-        // refreshTokens() — that re-fetches + re-renders the whole
-        // grid, which closes every collapsible and reorders cards.
-        // tokensCache holds the same `t` reference so downstream
-        // reads (renderTokensGrid filter) see the new abilities.
-        t.abilities = next;
-        setCount(next.length);
-        saveBtn.classList.add('hidden');
-        status.textContent = 'saved';
-      } catch (e) {
-        status.textContent = e.message;
-        status.className = 'error ability-status';
-        saveBtn.disabled = false;
-      }
+
+    GG.lazy.bind(details, {
+      getData: host => abilityViewModel(t),
+      // onRendered fires after each render() pass — both the first
+      // open AND any explicit GG.lazy.refresh(host) call. We re-find
+      // the foot elements because the prior render's nodes may have
+      // been replaced.
+      onRendered: host => {
+        const saveBtn = host.querySelector('.ability-save');
+        const status  = host.querySelector('.ability-status');
+        if (!saveBtn || !status) return;
+
+        function onDirty() {
+          const next = currentSelection();
+          const pristine = t.abilities || [];
+          const clean = sameSet(next, pristine);
+          saveBtn.classList.toggle('hidden', clean);
+          if (!clean) saveBtn.disabled = false;
+          status.textContent = '';
+          status.className = 'muted ability-status';
+        }
+        host.querySelectorAll('.switch input[name="ability"]').forEach(cb => {
+          cb.addEventListener('change', onDirty);
+        });
+
+        saveBtn.addEventListener('click', async () => {
+          const next = currentSelection();
+          saveBtn.disabled = true;
+          status.textContent = 'saving…';
+          status.className = 'muted ability-status';
+          try {
+            await api.updateToken(t.token, { abilities: next });
+            // Mutate the in-memory snapshot instead of refetching;
+            // tokensCache holds the same `t` reference so downstream
+            // reads see the new abilities. No grid re-render — the
+            // collapse stays open, other cards untouched.
+            t.abilities = next;
+            setCount(next.length);
+            saveBtn.classList.add('hidden');
+            status.textContent = 'saved';
+          } catch (e) {
+            status.textContent = e.message;
+            status.className = 'error ability-status';
+            saveBtn.disabled = false;
+          }
+        });
+      },
     });
 
-    repaint();
     return details;
   }
 

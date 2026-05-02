@@ -63,35 +63,23 @@ here. The items below do not overlap with Track B.
 
 Open work:
 
-- [ ] **`GG.lazy` — generic data-attribute-driven render helper.**
-      Move admin-page DOM glue from imperative
-      `querySelector` + `addEventListener` setups to a declarative
-      Vue/HTMX-style binding driven by `data-*` attributes on the
-      HTML. Concrete first shape:
-
-      ```html
-      <details data-collapse-src="/api/admin/tokens/{token}/abilities"
-               data-collapse-tpl="#tpl-abilities">
-        <summary>Abilities</summary>
-      </details>
-      ```
-
-      ```js
-      GG.lazy.attach('[data-collapse-src]', {
-        onOpen(el) { /* fetch + hydrate template + render into el */ }
-      });
-      ```
-
-      First migration target: the abilities collapse on subscriptions
-      cards (already isolated in `installAbilitiesSection` —
-      low-risk to convert and exercises the helper end-to-end).
-      Once it lands, `tag_picker` and `tag_filter` mounts can shift
-      to the same pattern (`data-tag-picker-src=...`,
-      `data-tag-filter=...`), and pages stop carrying boilerplate
-      mount calls. The principle (HTML carries intent, generic JS
-      reads it) already applies via `data-role` on badges and the
-      two `GG.tag_*` controllers — this lifts it from per-feature
-      to a default.
+- [ ] **`GG.lazy` — slice 2: `data-lazy-submit` + `data-lazy-after`.**
+      Slice 1 (helper + fragments + abilities-render migration) is
+      shipped (see "Done and shipping" below). Slice 2 adds the
+      submit pipeline so a button inside a rendered fragment with
+      `data-lazy-action="submit"` POSTs/PATCHes to
+      `data-lazy-submit`, with the response handled by
+      `data-lazy-after` (render / close / event). First migration
+      target: switch the abilities Save flow on subscription cards
+      to use it (currently still imperative — slice 1 only migrated
+      the chip-rendering side). Design lives in
+      [`docs/design/lazy.md`](docs/design/lazy.md) §4.5.
+- [ ] **`GG.lazy` — slice 3: opportunistic migrations.** Move
+      `tag_picker` mounts, account detail rows, and the mirror
+      destination collapse on repos to GG.lazy when their existing
+      imperative version next needs to change. No big-bang rewrite —
+      each migration only when there's a real reason. Establishes
+      the pattern as the project default, not just a one-off.
 - [ ] **Honest framing for the bulk-revoke confirm phrase.** The
       `revoke <tags>` phrase is deterministic, so it's anti-typo,
       not anti-script. Update `docs/design/tags.md` §5.6 + §6.3 to
@@ -112,6 +100,32 @@ Open work:
 
 Done and shipping:
 
+- [x] **`GG.lazy` — slice 1 (design:
+      [`lazy.md`](docs/design/lazy.md)).** Generic
+      data-attribute-driven render helper for the admin UI,
+      symmetric to `GG.tag_picker` / `GG.tag_filter`. Two ways to
+      feed data into a host: declarative `data-lazy-src="/path"`
+      (URL placeholders substitute from the host's `data-*`
+      attributes; helper fetches and renders) or programmatic
+      `GG.lazy.bind(host, {getData})` for cases where the data is
+      already in memory or the URL would carry something
+      unsafe-to-log (bearer tokens). Templates live in
+      `internal/server/templates/fragments/*.html`, served raw by
+      `GET /fragments/{name}` (admin-session gated, strong ETag
+      derived from a SHA-256 of the body, `Cache-Control:
+      no-cache, must-revalidate` so the browser revalidates and
+      gets a 304 after the first download — net cost per fragment
+      per release is one tiny round trip). Templating syntax:
+      `{{key}}` (HTML-escaped, dot paths) + `{{#each items}}…{{/each}}`,
+      no Handlebars dep. First migration: the abilities collapse
+      on subscription cards now renders via GG.lazy from the new
+      `templates/fragments/abilities.html`; the imperative builder
+      shrank to chrome (`<details>` + `<summary>`) + the data view
+      model + post-render dirty/save wiring. Save flow stays
+      imperative until slice 2 lands `data-lazy-submit`. Six
+      handler tests pin happy path, auth fence, unknown name,
+      path traversal, ETag round-trip, method-not-allowed.
+      Swagger regenerated.
 - [x] **Tags — slice 3 (design:
       [`tags.md`](docs/design/tags.md) §5.5, §5.6, §6.1, §6.3, §10).**
       Grouped chip filter clusters chips by prefix-before-colon

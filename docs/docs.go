@@ -2544,6 +2544,59 @@ const docTemplate = `{
                 }
             }
         },
+        "/fragments/{name}": {
+            "get": {
+                "description": "Returns the raw HTML of the named fragment from\ninternal/server/templates/fragments/. Used by the\nGG.lazy client helper to render detail panes on\ndemand. Admin-session gated — fragments don't carry\nuser data but they encode admin-UI shape (which\ninputs exist, what gets PATCHed where), and a\nleak gives an attacker recon for free.\n\nCache: strong ETag derived from the fragment body's\nSHA-256. Browsers send ` + "`" + `If-None-Match` + "`" + ` on every\nload and get a 304 after the first fetch — net cost\nper fragment per release is one tiny round trip.",
+                "produces": [
+                    "text/html"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Serve a UI fragment template (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Fragment name (no path, no extension)",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Fragment HTML body",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "304": {
+                        "description": "Not Modified — ETag matched",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Unknown fragment name",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/git/{name}.git/git-receive-pack": {
             "post": {
                 "security": [
