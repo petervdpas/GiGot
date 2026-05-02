@@ -148,6 +148,23 @@ func (tc *testContext) theResponseContentTypeShouldContain(ct string) error {
 	return nil
 }
 
+// theResponseHeaderShouldBeOneOf asserts that the named header's
+// value is one of the comma-separated `allowed` values. Used by the
+// X-GiGot-Load contract scenario where the header is one of three
+// classifications.
+func (tc *testContext) theResponseHeaderShouldBeOneOf(name, allowed string) error {
+	got := tc.resp.Header.Get(name)
+	if got == "" {
+		return fmt.Errorf("expected header %q to be set, got empty", name)
+	}
+	for _, v := range strings.Split(allowed, ",") {
+		if strings.TrimSpace(v) == got {
+			return nil
+		}
+	}
+	return fmt.Errorf("header %q = %q, want one of %q", name, got, allowed)
+}
+
 func (tc *testContext) theResponseBodyShouldContain(text string) error {
 	if !contains(tc.respBody, text) {
 		return fmt.Errorf("expected body to contain %q", text)
@@ -1350,6 +1367,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the response status should be (\d+)$`, tc.theResponseStatusShouldBe)
 	ctx.Step(`^the response should contain JSON key "([^"]*)" with value "([^"]*)"$`, tc.theResponseShouldContainJSONKeyWithValue)
 	ctx.Step(`^the response content type should contain "([^"]*)"$`, tc.theResponseContentTypeShouldContain)
+	ctx.Step(`^the response header "([^"]*)" should be one of "([^"]*)"$`, tc.theResponseHeaderShouldBeOneOf)
 	ctx.Step(`^the response body should contain "([^"]*)"$`, tc.theResponseBodyShouldContain)
 	ctx.Step(`^the response body should not contain "([^"]*)"$`, tc.theResponseBodyShouldNotContain)
 	ctx.Step(`^a repository "([^"]*)" exists$`, tc.aRepositoryExists)

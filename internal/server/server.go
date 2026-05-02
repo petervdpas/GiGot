@@ -92,6 +92,19 @@ type Server struct {
 	// destination. Optional so tests that need deterministic behavior
 	// can swap or disable it.
 	mirrorWorker *mirrorWorker
+
+	// load is the gauge that powers the X-GiGot-Load response header
+	// and the GET /api/health/load endpoint. Begin/End brackets the
+	// git smart-HTTP handlers; Snapshot is read by the load-header
+	// middleware on every response. Always non-nil — initialised in
+	// New().
+	load *loadTracker
+
+	// pushSlots is the admission gate for concurrent
+	// git-receive-pack handlers. TryAcquire from handleGitRouter
+	// before dispatching the push; Release on handler exit. Always
+	// non-nil — initialised in New() from cfg.Limits.PushSlots.
+	pushSlots *slotPool
 }
 
 // New creates a new Server instance. A server keypair is loaded from
@@ -291,6 +304,8 @@ func New(cfg *config.Config) *Server {
 	if err := s.git.BackfillAuditForAll(); err != nil {
 		log.Printf("server: BackfillAuditForAll: %v", err)
 	}
+	s.load = newLoadTracker()
+	s.pushSlots = newSlotPool(cfg.Limits.PushSlots)
 	s.routes()
 	return s
 }
@@ -507,10 +522,30 @@ func (s *Server) pageData() PageData {
 	return PageData{Version: s.brandVersion()}
 }
 
-// Handler returns the HTTP handler chain (sealed-body middleware → auth
-// middleware → mux) for use in tests and Start().
+// Handler returns the HTTP handler chain (load-header → sealed-body →
+// auth → mux) for use in tests and Start(). The load-header layer is
+// outermost so the X-GiGot-Load header lands on every response —
+// including the 401s and other early-exits below — which lets
+// Formidable read the load signal from any GiGot interaction without
+// needing a successful API call.
 func (s *Server) Handler() http.Handler {
-	return s.sealedMiddleware(s.auth.Middleware(s.mux))
+	return s.loadHeaderMiddleware(s.sealedMiddleware(s.auth.Middleware(s.mux)))
+}
+
+// loadHeaderMiddleware reads a fresh snapshot from the load tracker
+// before invoking the inner handler and writes the level onto the
+// response as `X-GiGot-Load: low|medium|high`. Setting the header
+// upfront (rather than wrapping the ResponseWriter) keeps the
+// middleware allocation-free; the header value is fixed at request
+// start and won't drift mid-response, which is the right read for a
+// signal that's already a coarse classification of recent state.
+func (s *Server) loadHeaderMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.load != nil {
+			w.Header().Set("X-GiGot-Load", s.load.Snapshot().Level)
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Start begins listening for HTTP requests and blocks until SIGINT/SIGTERM
@@ -566,6 +601,7 @@ func (s *Server) routes() {
 
 	// API
 	s.mux.HandleFunc("/api/health", s.handleHealth)
+	s.mux.HandleFunc("/api/health/load", s.handleHealthLoad)
 	s.mux.HandleFunc("/api/repos", s.handleRepos)
 	s.mux.HandleFunc("/api/repos/", s.handleRepoRouter)
 	s.mux.HandleFunc("/api/auth/token", s.handleToken)
@@ -603,6 +639,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/admin/auth/", s.handleAuthPage)
 	s.mux.HandleFunc("/admin/benchmark", s.handleBenchmarkPage)
 	s.mux.HandleFunc("/admin/benchmark/", s.handleBenchmarkPage)
+	s.mux.HandleFunc("/admin/limits", s.handleLimitsPage)
+	s.mux.HandleFunc("/admin/limits/", s.handleLimitsPage)
 	s.mux.HandleFunc("/user", s.handleUserPage)
 	s.mux.HandleFunc("/user/", s.handleUserPage)
 	// /help and /help/<slug> render embedded markdown via goldmark.
@@ -624,6 +662,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/admin/accounts/", s.handleAdminAccount)
 	s.mux.HandleFunc("/api/admin/auth", s.handleAdminAuth)
 	s.mux.HandleFunc("/api/admin/benchmark", s.handleAdminBenchmark)
+	s.mux.HandleFunc("/api/admin/limits", s.handleAdminLimits)
 	// Admin per-repo subroutes live under /api/admin/repos/{name}/...:
 	//   /destinations[/{id}] — mirror-sync targets
 	//   /formidable          — convert plain repo to a Formidable context

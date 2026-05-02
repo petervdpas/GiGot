@@ -83,6 +83,14 @@ func (s *Server) handleBenchmarkPage(w http.ResponseWriter, r *http.Request) {
 	s.adminPageHandler(benchmarkPageTmpl, "/admin/benchmark", "/admin/benchmark/")(w, r)
 }
 
+// handleLimitsPage serves the /admin/limits console — operator
+// tunables (push concurrency, retry-after delay) editable hot-
+// reload via PATCH /api/admin/limits. Same static-shell-plus-JS
+// pattern as the other admin sections.
+func (s *Server) handleLimitsPage(w http.ResponseWriter, r *http.Request) {
+	s.adminPageHandler(limitsPageTmpl, "/admin/limits", "/admin/limits/")(w, r)
+}
+
 // handleUserPage serves the /user self-serve account page. Public
 // path (no server-side session gate) — user.js calls /api/me and
 // bounces to /admin on a 401. Same pattern as the admin pages.

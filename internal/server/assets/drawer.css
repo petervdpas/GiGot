@@ -239,20 +239,6 @@
   width: 100%;
 }
 
-/* Info banner pinned at the top of the drawer body — explains what
-   the form is for before the admin starts typing. Uses the accent
-   palette so it reads as instruction, not a warning. Fluid width
-   so the banner shrinks with the drawer on narrow viewports. */
-.drawer-form-info {
-  background: var(--accent-bg);
-  border-left: 3px solid var(--accent);
-  border-radius: 0 var(--radius) var(--radius) 0;
-  padding: 0.7rem 0.9rem;
-  font-size: 0.85rem;
-  line-height: 1.4;
-  color: var(--text);
-  width: 100%;
-}
 /* `.code-chip` is a banner-friendly inline-code style: transparent
    background + accent text + subtle accent border. Designed for
    info banners where the global `<code>` background (which is

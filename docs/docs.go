@@ -915,6 +915,106 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/limits": {
+            "get": {
+                "description": "GET returns the current LimitsConfig plus live\nin-flight slot count. PATCH updates push_slots\nand/or push_retry_after_sec; both fields are\noptional, omitted fields are left unchanged.\nSuccessful PATCH persists the new values to the\nconfig file (cfg.Save) so changes survive restart,\nand resizes the live slot pool — in-flight pushes\nfinish on the old capacity, new pushes are gated\nby the new one. Bounds: push_slots 1-1000,\npush_retry_after_sec 1-3600.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Read or update server-side admission limits (admin only)",
+                "parameters": [
+                    {
+                        "description": "Patch body (PATCH only)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.LimitsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET / PATCH response",
+                        "schema": {
+                            "$ref": "#/definitions/server.LimitsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "GET returns the current LimitsConfig plus live\nin-flight slot count. PATCH updates push_slots\nand/or push_retry_after_sec; both fields are\noptional, omitted fields are left unchanged.\nSuccessful PATCH persists the new values to the\nconfig file (cfg.Save) so changes survive restart,\nand resizes the live slot pool — in-flight pushes\nfinish on the old capacity, new pushes are gated\nby the new one. Bounds: push_slots 1-1000,\npush_retry_after_sec 1-3600.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Read or update server-side admission limits (admin only)",
+                "parameters": [
+                    {
+                        "description": "Patch body (PATCH only)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.LimitsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET / PATCH response",
+                        "schema": {
+                            "$ref": "#/definitions/server.LimitsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/login": {
             "post": {
                 "description": "Exchanges username/password for a session cookie. Only the\nlocal provider is accepted on this endpoint; returns 404\nwhen cfg.Auth.AllowLocal is false.",
@@ -2809,6 +2909,26 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/health/load": {
+            "get": {
+                "description": "Returns a coarse load classification (` + "`" + `low` + "`" + ` / ` + "`" + `medium` + "`" + `\n/ ` + "`" + `high` + "`" + `) plus the raw signals that drove it: number\nof in-flight git operations, p95 / p99 of completed\ndurations across the last 60 seconds, and the count\nof samples that were in the rolling window when the\nsnapshot was taken.\n\nSame Level value is reflected on every response via\nthe ` + "`" + `X-GiGot-Load` + "`" + ` header — clients that want the\ngauge as a side-effect of normal traffic should read\nthe header rather than poll this endpoint. Polling\nis for explicit health probes and dashboards.\n\nPublic (no auth) so an external monitor (Azure\nMonitor, a Formidable instance reading without a\nsession) can scrape it. Reveals operational state\nbut no user-or-content data — the same posture as\nGET /api/health.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Load gauge — current GiGot load classification",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.LoadSnapshot"
                         }
                     }
                 }
@@ -5161,6 +5281,74 @@ const docTemplate = `{
                 "status": {
                     "type": "string",
                     "example": "ok"
+                }
+            }
+        },
+        "server.LimitsRequest": {
+            "type": "object",
+            "properties": {
+                "push_retry_after_sec": {
+                    "type": "integer"
+                },
+                "push_slots": {
+                    "type": "integer"
+                }
+            }
+        },
+        "server.LimitsResponse": {
+            "type": "object",
+            "properties": {
+                "push_retry_after_sec": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "push_slot_in_use": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "push_slots": {
+                    "type": "integer",
+                    "example": 10
+                }
+            }
+        },
+        "server.LoadSnapshot": {
+            "type": "object",
+            "properties": {
+                "in_flight": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "level": {
+                    "type": "string",
+                    "enum": [
+                        "low",
+                        "medium",
+                        "high"
+                    ],
+                    "example": "low"
+                },
+                "p95_ms": {
+                    "type": "number",
+                    "example": 42.5
+                },
+                "p99_ms": {
+                    "type": "number",
+                    "example": 118
+                },
+                "push_slot_capacity": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "push_slot_in_use": {
+                    "description": "PushSlotInUse / PushSlotCapacity report the admission-gate\nstate. Pushes are rejected with 429 + ` + "`" + `Retry-After` + "`" + ` when\nin_use ≥ capacity. Read these to decide whether the gate is\nactively rejecting traffic vs. just running near saturation.",
+                    "type": "integer",
+                    "example": 3
+                },
+                "window_count": {
+                    "description": "Window is the count of samples that fell inside the rolling\n60-second window for this snapshot. Useful for debugging\n\"why is load reported as low when I just pushed?\" — if Window\nis 0, the percentiles are 0 because no samples are in scope yet.",
+                    "type": "integer",
+                    "example": 24
                 }
             }
         },

@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -37,18 +38,54 @@ func (s *Server) handleRepoRouter(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleGitRouter dispatches /git/* to the appropriate git protocol handler.
+// handleGitRouter dispatches /git/* to the appropriate git protocol
+// handler. All three protocol verbs are bracketed by the load
+// tracker (Begin/End) so concurrent pushes / pulls / discovery
+// requests show up in the in-flight count and the rolling-window
+// duration histogram. The 404 fall-through is left untracked —
+// it isn't a real GiGot operation.
+//
+// receive-pack additionally passes through the push-slot admission
+// gate. When all configured slots are busy, the request is rejected
+// with `429 Too Many Requests` + `Retry-After: <cfg.Limits.PushRetryAfterSec>`
+// — clients (Formidable) honor the header and back off. Reads
+// (upload-pack, info-refs) bypass the gate so a push storm doesn't
+// stall clones / fetches behind it.
 func (s *Server) handleGitRouter(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
+	var inner http.HandlerFunc
+	isReceive := false
 	switch {
 	case strings.HasSuffix(path, "/info/refs"):
-		s.handleGitInfoRefs(w, r)
+		inner = s.handleGitInfoRefs
 	case strings.HasSuffix(path, "/git-upload-pack"):
-		s.handleGitUploadPack(w, r)
+		inner = s.handleGitUploadPack
 	case strings.HasSuffix(path, "/git-receive-pack"):
-		s.handleGitReceivePack(w, r)
+		inner = s.handleGitReceivePack
+		isReceive = true
 	default:
 		http.NotFound(w, r)
+		return
 	}
+
+	if isReceive && s.pushSlots != nil {
+		if !s.pushSlots.TryAcquire() {
+			retry := s.cfg.Limits.PushRetryAfterSec
+			if retry < 1 {
+				retry = 5
+			}
+			w.Header().Set("Retry-After", strconv.Itoa(retry))
+			writeError(w, http.StatusTooManyRequests,
+				"push slots full, retry after "+strconv.Itoa(retry)+"s")
+			return
+		}
+		defer s.pushSlots.Release()
+	}
+
+	if s.load != nil {
+		start := s.load.Begin()
+		defer s.load.End(start)
+	}
+	inner(w, r)
 }

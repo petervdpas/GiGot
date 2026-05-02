@@ -582,6 +582,63 @@ definitions:
         example: ok
         type: string
     type: object
+  server.LimitsRequest:
+    properties:
+      push_retry_after_sec:
+        type: integer
+      push_slots:
+        type: integer
+    type: object
+  server.LimitsResponse:
+    properties:
+      push_retry_after_sec:
+        example: 5
+        type: integer
+      push_slot_in_use:
+        example: 3
+        type: integer
+      push_slots:
+        example: 10
+        type: integer
+    type: object
+  server.LoadSnapshot:
+    properties:
+      in_flight:
+        example: 3
+        type: integer
+      level:
+        enum:
+        - low
+        - medium
+        - high
+        example: low
+        type: string
+      p95_ms:
+        example: 42.5
+        type: number
+      p99_ms:
+        example: 118
+        type: number
+      push_slot_capacity:
+        example: 10
+        type: integer
+      push_slot_in_use:
+        description: |-
+          PushSlotInUse / PushSlotCapacity report the admission-gate
+          state. Pushes are rejected with 429 + `Retry-After` when
+          in_use ≥ capacity. Read these to decide whether the gate is
+          actively rejecting traffic vs. just running near saturation.
+        example: 3
+        type: integer
+      window_count:
+        description: |-
+          Window is the count of samples that fell inside the rolling
+          60-second window for this snapshot. Useful for debugging
+          "why is load reported as low when I just pushed?" — if Window
+          is 0, the percentiles are 0 because no samples are in scope yet.
+        example: 24
+        type: integer
+    type: object
   server.MeResponse:
     properties:
       display_name:
@@ -1647,6 +1704,91 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       summary: Manage one credential by name (admin only)
+      tags:
+      - admin
+  /admin/limits:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the current LimitsConfig plus live
+        in-flight slot count. PATCH updates push_slots
+        and/or push_retry_after_sec; both fields are
+        optional, omitted fields are left unchanged.
+        Successful PATCH persists the new values to the
+        config file (cfg.Save) so changes survive restart,
+        and resizes the live slot pool — in-flight pushes
+        finish on the old capacity, new pushes are gated
+        by the new one. Bounds: push_slots 1-1000,
+        push_retry_after_sec 1-3600.
+      parameters:
+      - description: Patch body (PATCH only)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.LimitsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET / PATCH response
+          schema:
+            $ref: '#/definitions/server.LimitsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Read or update server-side admission limits (admin only)
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the current LimitsConfig plus live
+        in-flight slot count. PATCH updates push_slots
+        and/or push_retry_after_sec; both fields are
+        optional, omitted fields are left unchanged.
+        Successful PATCH persists the new values to the
+        config file (cfg.Save) so changes survive restart,
+        and resizes the live slot pool — in-flight pushes
+        finish on the old capacity, new pushes are gated
+        by the new one. Bounds: push_slots 1-1000,
+        push_retry_after_sec 1-3600.
+      parameters:
+      - description: Patch body (PATCH only)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.LimitsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET / PATCH response
+          schema:
+            $ref: '#/definitions/server.LimitsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Read or update server-side admission limits (admin only)
       tags:
       - admin
   /admin/login:
@@ -3100,6 +3242,37 @@ paths:
           schema:
             $ref: '#/definitions/server.HealthResponse'
       summary: Health check
+      tags:
+      - system
+  /health/load:
+    get:
+      description: |-
+        Returns a coarse load classification (`low` / `medium`
+        / `high`) plus the raw signals that drove it: number
+        of in-flight git operations, p95 / p99 of completed
+        durations across the last 60 seconds, and the count
+        of samples that were in the rolling window when the
+        snapshot was taken.
+
+        Same Level value is reflected on every response via
+        the `X-GiGot-Load` header — clients that want the
+        gauge as a side-effect of normal traffic should read
+        the header rather than poll this endpoint. Polling
+        is for explicit health probes and dashboards.
+
+        Public (no auth) so an external monitor (Azure
+        Monitor, a Formidable instance reading without a
+        session) can scrape it. Reveals operational state
+        but no user-or-content data — the same posture as
+        GET /api/health.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.LoadSnapshot'
+      summary: Load gauge — current GiGot load classification
       tags:
       - system
   /me:

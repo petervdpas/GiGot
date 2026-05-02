@@ -67,6 +67,64 @@ Open work:
 
 Done and shipping:
 
+- [x] **Push admission gate + admin-tunable limits at
+      `/admin/limits`.** Sits on top of the load gauge: the gauge
+      is advisory (header reflects "I'm getting busy"), the gate
+      is enforcement (rejects when full). N concurrent
+      `git-receive-pack` slots (default 10, configurable);
+      `TryAcquire` from the router before dispatch, `Release`
+      on handler exit. When all slots are busy, the request gets
+      `429 Too Many Requests` + `Retry-After: <N>` (default 5 s,
+      configurable). Reads (`upload-pack`, `info-refs`) bypass
+      the gate so a push storm doesn't stall clones / fetches
+      behind it. New `cfg.Limits` config block persisted to
+      `gigot.json`; `GET/PATCH /api/admin/limits` exposes
+      `push_slots` (1-1000) and `push_retry_after_sec` (1-3600)
+      as hot-reloadable knobs — PATCH validates, applies, then
+      `cfg.Save`s. Resize is mutex-based (not channel) so
+      shrinking under load doesn't strand tokens; in-flight
+      pushes finish on the old capacity, new pushes are gated
+      by the new one. New `/admin/limits` page in the sidebar
+      with two number inputs + Save (gated by a dirty check) +
+      a live "currently 3 / 10 in use" indicator. The load
+      snapshot at `/api/health/load` gained
+      `push_slot_in_use` / `push_slot_capacity` so ops can
+      monitor saturation alongside the level. Tests: 6 unit
+      cases on `slotPool` (acquire/release, snapshot, grow,
+      shrink with overflow, clamp, concurrent fan-out), 7 handler
+      cases on `/api/admin/limits` (GET, two PATCH paths,
+      validation gates, auth fence, two end-to-end 429
+      assertions including configured-retry-after), plus a
+      cucumber scenario that the load endpoint exposes the new
+      slot fields. Swagger regenerated.
+- [x] **Load gauge — `X-GiGot-Load` header + `GET /api/health/load`.**
+      Two surfaces, one signal. Every response carries an
+      `X-GiGot-Load: low | medium | high` header so a client gets
+      the gauge as a free side-effect of normal traffic; a
+      dedicated public `GET /api/health/load` endpoint returns the
+      full snapshot (`level`, `in_flight`, `p95_ms`, `p99_ms`,
+      `window_count`) for explicit polls (Azure Monitor, ops
+      dashboards). Powered by an in-process `loadTracker`:
+      Begin/End brackets every git smart-HTTP request
+      (info-refs / upload-pack / receive-pack), the rolling 60-s
+      sample window feeds the percentile math, and the
+      classification ladder is `inFlight ≥ 2×CPU OR p95 > 500 ms
+      → high`, `inFlight ≥ CPU OR p95 > 200 ms → medium`,
+      otherwise `low`. Public (no auth) so an external monitor or
+      a Formidable instance without a session can scrape it —
+      same posture as `/api/health`. Intended consumer is
+      Formidable: local-first writes never block on the gauge,
+      but a background-sync handler can read the header off any
+      response to (a) surface a "server busy" hint to the user,
+      (b) back off retry frequency, (c) skip optional mirror
+      dispatches when the host is saturated. Tests: 5 unit cases
+      against `loadTracker` (counter, in-flight ladder, p95
+      promotion, window expiry, empty percentile), 4 handler
+      cases against `/api/health/load` (happy path, method
+      fence, header on every response including 404, snapshot
+      reflects tracker state), and 5 cucumber scenarios in
+      `integration/features/load.feature`. Swagger annotation
+      published the contract.
 - [x] **Server-side benchmark suite at `/admin/benchmark`.** New
       admin page with toggles for **scale** (10 / 100 / 500 /
       1000 synthetic subs), **mode** (Sequential / Concurrent),

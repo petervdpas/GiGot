@@ -1,0 +1,43 @@
+{{define "title"}}Admin - Limits{{end}}
+{{define "scripts"}}
+<script src="/assets/limits.js"></script>
+{{end}}
+{{define "content"}}
+<div class="page-header">
+  <h1>Limits</h1>
+</div>
+<div class="admin-forms-info">
+  Operator tunables. Changes apply immediately and persist to
+  <code class="code-chip" id="cfg-path">gigot.json</code>; in-flight
+  pushes finish on the previous capacity, new pushes are gated by
+  the new one.
+</div>
+
+<div class="card">
+  <h2>Push concurrency</h2>
+  <p class="muted limits-hint">
+    Caps how many <code>git-receive-pack</code> requests run at the
+    same time. When all slots are busy, additional pushes get
+    <code>429 Too Many Requests</code> with a <code>Retry-After</code>
+    header so the client backs off and retries. Reads
+    (clone / fetch) are not slot-gated.
+  </p>
+  <div class="limits-row">
+    <label class="limits-field">
+      <span class="field-label">Push slots</span>
+      <input type="number" id="push-slots" min="1" max="1000" value="10">
+      <span class="muted limits-bound">1 - 1000</span>
+    </label>
+    <label class="limits-field">
+      <span class="field-label">Retry-After (seconds)</span>
+      <input type="number" id="push-retry-after-sec" min="1" max="3600" value="5">
+      <span class="muted limits-bound">1 - 3600</span>
+    </label>
+  </div>
+  <div class="limits-state muted" id="limits-state"></div>
+  <div class="limits-actions">
+    <button type="button" id="limits-save-btn" class="primary" disabled>Save</button>
+    <span id="limits-msg" class="muted limits-msg"></span>
+  </div>
+</div>
+{{end}}

@@ -18,6 +18,7 @@ type Config struct {
 	Auth    AuthConfig    `json:"auth"`
 	Crypto  CryptoConfig  `json:"crypto"`
 	Logging LoggingConfig `json:"logging"`
+	Limits  LimitsConfig  `json:"limits"`
 	// Admins is the bootstrap seed list of admin accounts — NOT a
 	// live allowlist. On startup, entries not yet in the accounts
 	// store are upserted with role=admin; after that the store is the
@@ -168,6 +169,19 @@ type LoggingConfig struct {
 	Level string `json:"level"`
 }
 
+// LimitsConfig controls server-side admission limits — concurrency
+// caps and the retry-after hints they hand back to clients on
+// rejection. PushSlots gates concurrent git-receive-pack handlers
+// (the heavy write path); reads (clone / fetch / info-refs) are
+// not slot-gated. PushRetryAfterSec is the integer-seconds value
+// echoed in the `Retry-After` HTTP header on a 429 from the slot
+// gate — clients that honor the header back off by that much.
+// Editable hot-reload via PATCH /api/admin/limits.
+type LimitsConfig struct {
+	PushSlots         int `json:"push_slots"`
+	PushRetryAfterSec int `json:"push_retry_after_sec"`
+}
+
 // Defaults returns a Config with sensible defaults.
 func Defaults() *Config {
 	return &Config{
@@ -196,6 +210,10 @@ func Defaults() *Config {
 		},
 		Logging: LoggingConfig{
 			Level: "info",
+		},
+		Limits: LimitsConfig{
+			PushSlots:         10,
+			PushRetryAfterSec: 5,
 		},
 		Admins: []AdminSeed{
 			{Provider: accounts.ProviderLocal, Identifier: "admin", DisplayName: "Primary admin"},

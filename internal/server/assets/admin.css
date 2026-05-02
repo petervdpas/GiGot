@@ -1495,7 +1495,6 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
 /* /admin/benchmark — toggles + run button + per-topic result
    bars. Visual goal: read the slowest p95 at a glance, decide
    whether the hardware is keeping up at this scale. */
-.bench-lede { margin-bottom: 0.8rem; max-width: 60ch; }
 .bench-card { margin-bottom: 0.6rem; }
 .bench-radio-row,
 .bench-topic-list {
@@ -1540,6 +1539,52 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
   border-radius: 3px;
   min-width: 2px;
 }
+/* `.admin-forms-info` is the accented info banner pinned at the top
+   of an admin form or a settings page — explains what the surface
+   is for before the admin starts typing or tuning. One rule, one
+   visual treatment; every drawer create/edit form AND every plain
+   admin lede (limits, benchmark) reaches for the same class. */
+.admin-forms-info {
+  background: var(--accent-bg);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--text);
+  width: 100%;
+  /* Match the inter-card gap so a banner pinned above a card or
+     form reads as the same rhythm as card-after-card. Drawers
+     stack via flex `gap` and the margin collapses; plain admin
+     pages (limits, benchmark) use this margin directly. */
+  margin-bottom: 1rem;
+}
+/* /admin/limits — operator tunables. Two side-by-side number
+   inputs (push slots + retry-after seconds), live in-use line, and
+   a Save button gated by the dirty check. Visual goal: settings
+   page that reads as "two knobs and a state read" without growing
+   into a config-explorer. */
+.limits-hint { margin-bottom: 0.6rem; }
+.limits-row {
+  display: flex;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+.limits-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.limits-field input { width: 8rem; }
+.limits-bound { font-size: 0.75rem; }
+.limits-state { margin-bottom: 0.6rem; font-size: 0.85rem; }
+.limits-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+.limits-msg.error { color: #f85149; }
 /* Collapsible card chrome — `<details class="card">` reuses the
    plain card visual but its <summary> wraps the H2 + a chevron so
    the operator can fold settings cards out of the way once they've
