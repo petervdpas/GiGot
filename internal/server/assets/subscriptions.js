@@ -183,7 +183,7 @@
   }
 
   function selectedAbilitiesFromPicker(container) {
-    return Array.from(container.querySelectorAll('.switch input[name="ability"]:checked'))
+    return Array.from(container.querySelectorAll('.switch input[name="abilities"]:checked'))
       .map(cb => cb.value);
   }
 
@@ -385,10 +385,12 @@
   //   2. GG.lazy.bind hooks the toggle event. On first open, the
   //      `abilities` fragment is rendered into the details body
   //      using abilityViewModel(t) as the data.
-  //   3. onRendered wires dirty / save / status behaviour against
-  //      the freshly rendered DOM. Because the body is rebuilt on
-  //      each refresh(), all event listeners attach to whatever
-  //      DOM is current — no stale references.
+  //   3. onRendered wires dirty tracking against the freshly
+  //      rendered DOM. Save itself rides GG.lazy slice 2:
+  //      `data-lazy-submit` + `data-lazy-after="event:abilities-saved"`,
+  //      so the click → fetch → error display path lives in the
+  //      helper. The page only listens for the saved event to
+  //      patch in-memory state and resync the summary chips.
   function installAbilitiesSection(card, t) {
     const flatChips = card.querySelector(':scope > .ic-chips.cell-abilities');
     if (flatChips) flatChips.remove();
@@ -398,6 +400,17 @@
     const details = document.createElement('details');
     details.className = 'ic-collapse abilities-collapse';
     details.dataset.lazyTpl = 'abilities';
+    // Slice 2 wiring: the helper handles the save fetch, error
+    // display, and after-action. The token rides as a host data-*
+    // attribute (NOT in the URL — see feedback_subscription_key_per_user)
+    // so the helper merges it into the PATCH body alongside the
+    // collected `abilities` array. `event:abilities-saved` lets the
+    // page sync in-memory state without the helper having to know
+    // about token caches or summary chips.
+    details.dataset.token = t.token;
+    details.dataset.lazySubmit = '/api/admin/tokens';
+    details.dataset.lazySubmitMethod = 'PATCH';
+    details.dataset.lazyAfter = 'event:abilities-saved';
 
     const summary = document.createElement('summary');
     summary.className = 'ic-section-head';
@@ -422,12 +435,36 @@
       return true;
     }
 
+    // Page-level listener: fired by GG.lazy.submit on success per
+    // `data-lazy-after="event:abilities-saved"`. event.detail.request
+    // is the body the helper sent ({token, abilities}); we mirror
+    // `abilities` into the in-memory token snapshot so subsequent
+    // reads see the new state without a refetch, then resync the
+    // outer card's summary chips. The picker DOM is left untouched
+    // — checkmarks already reflect the saved state since the user
+    // is the one who set them.
+    details.addEventListener('abilities-saved', e => {
+      const next = (e.detail && e.detail.request && e.detail.request.abilities) || [];
+      t.abilities = next.slice();
+      setCount(next.length);
+      const saveBtn = details.querySelector('.ability-save');
+      const status  = details.querySelector('.ability-status');
+      if (saveBtn) saveBtn.classList.add('hidden');
+      if (status) {
+        status.textContent = 'saved';
+        status.className = 'muted ability-status';
+      }
+      const outerCard = card.closest('details.info-card.token-card');
+      if (outerCard) Admin.syncTokenCardSummaryAbilities(outerCard, t);
+    });
+
     GG.lazy.bind(details, {
       getData: host => abilityViewModel(t),
       // onRendered fires after each render() pass — both the first
       // open AND any explicit GG.lazy.refresh(host) call. We re-find
       // the foot elements because the prior render's nodes may have
-      // been replaced.
+      // been replaced. Dirty tracking lives here; the save click
+      // itself is wired by GG.lazy via `data-lazy-action="submit"`.
       onRendered: host => {
         const saveBtn = host.querySelector('.ability-save');
         const status  = host.querySelector('.ability-status');
@@ -438,42 +475,11 @@
           const pristine = t.abilities || [];
           const clean = sameSet(next, pristine);
           saveBtn.classList.toggle('hidden', clean);
-          if (!clean) saveBtn.disabled = false;
           status.textContent = '';
           status.className = 'muted ability-status';
         }
-        host.querySelectorAll('.switch input[name="ability"]').forEach(cb => {
+        host.querySelectorAll('.switch input[name="abilities"]').forEach(cb => {
           cb.addEventListener('change', onDirty);
-        });
-
-        saveBtn.addEventListener('click', async () => {
-          const next = currentSelection();
-          saveBtn.disabled = true;
-          status.textContent = 'saving…';
-          status.className = 'muted ability-status';
-          try {
-            await api.updateToken(t.token, { abilities: next });
-            // Mutate the in-memory snapshot instead of refetching;
-            // tokensCache holds the same `t` reference so downstream
-            // reads see the new abilities. No grid re-render — the
-            // collapse stays open, other cards untouched.
-            t.abilities = next;
-            setCount(next.length);
-            saveBtn.classList.add('hidden');
-            status.textContent = 'saved';
-            // Repaint the outer card's summary ability badges so
-            // the at-a-glance state stays in sync with the saved
-            // abilities. Without this the summary would still show
-            // the pre-edit list until the next refresh.
-            // `card` here is the lazy-body div; .closest walks up to
-            // the outer <details class="info-card token-card">.
-            const outerCard = card.closest('details.info-card.token-card');
-            if (outerCard) Admin.syncTokenCardSummaryAbilities(outerCard, t);
-          } catch (e) {
-            status.textContent = e.message;
-            status.className = 'error ability-status';
-            saveBtn.disabled = false;
-          }
         });
       },
     });

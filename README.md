@@ -63,15 +63,6 @@ here. The items below do not overlap with Track B.
 
 Open work:
 
-- [ ] **`GG.lazy` — slice 2: `data-lazy-submit` + `data-lazy-after`.**
-      Slice 1 + opportunistic migrations shipped (see "Done"
-      below). Slice 2 adds the submit pipeline so a button inside
-      a rendered fragment with `data-lazy-action="submit"`
-      POSTs/PATCHes to `data-lazy-submit`, with the response
-      handled by `data-lazy-after` (render / close / event). First
-      target: switch the abilities Save flow on subscription cards
-      to use it (currently still imperative). Design lives in
-      [`docs/design/lazy.md`](docs/design/lazy.md) §4.5.
 - [ ] **Mirror-destination section migration to GG.lazy.** It's the
       last imperative section on a repo card. Three states (no
       destination / view-existing / editor mode) plus sync / remove
@@ -125,8 +116,10 @@ Done and shipping:
         revalidate). Templating: `{{key}}` + `{{#each}}`. Triggers:
         `open` on `<details>`, `click`, `now`, `manual`. Both
         declarative `data-lazy-src` and programmatic
-        `getData` paths. Used by every drawer, every card-body,
-        every collapse on the admin pages.
+        `getData` paths for the read flow; slice 2 added
+        `data-lazy-submit` + `data-lazy-after` for in-place
+        Save. Used by every drawer, every card-body, every
+        collapse on the admin pages.
       - **`GG.tag_picker`** (existing) — per-entity tag assignment
         UI, reused on repo / sub / account detail rows.
       - **`GG.tag_filter`** (existing) — chip-filter controller.
@@ -172,6 +165,40 @@ Done and shipping:
       (use delete + re-add per credential-vault.md §3) are not
       editable through this flow.
 
+- [x] **`GG.lazy` — slice 2 (design:
+      [`lazy.md`](docs/design/lazy.md) §4.5, §8).** Submit
+      pipeline + after-action behaviour. Adds
+      `data-lazy-submit="/path"` (URL placeholders substituted
+      from the host's `data-*`, same rules as `data-lazy-src`),
+      `data-lazy-submit-method` (default `POST`),
+      `data-lazy-after` (`render` re-renders the fragment against
+      the response — the default; `refresh` re-runs the read path;
+      `close` collapses the host or closes the enclosing
+      `.drawer`; `event:<name>` dispatches a bubbling
+      `CustomEvent` with `{request, response}` detail), and
+      `data-lazy-action="submit"` on buttons inside a rendered
+      fragment to fire the submit (also wired on nested `<form>`
+      submit so Enter-in-input commits). Errors land in any
+      `[data-lazy-msg]` element inside the rendered body and
+      additionally fire a `lazy-submit-error` event so page-level
+      handlers can react. Submit body = collected `[name]` inputs
+      (checkboxes always group as arrays, even single-checkbox
+      names) merged with the host's non-`lazy-*` `data-*`
+      attributes (form fields win on key collision). First
+      caller: the abilities Save flow on subscription cards. The
+      `<details>` host carries
+      `data-token` + `data-lazy-submit="/api/admin/tokens"` +
+      `data-lazy-submit-method="PATCH"` +
+      `data-lazy-after="event:abilities-saved"`; the `Save` button
+      in the fragment carries `data-lazy-action="submit"`; the
+      page listens for `abilities-saved` to mirror `abilities`
+      back into the in-memory token snapshot and resync the
+      summary chips. The `name="ability"` input in
+      `templates/fragments/abilities.html` was renamed to
+      `name="abilities"` so the helper's collected payload key
+      lines up with the API contract directly (no remap layer).
+      Drawer forms still ride `GG.drawer.bindForm`; they may
+      migrate later if the simplification is worth the churn.
 - [x] **`GG.lazy` — slice 1 (design:
       [`lazy.md`](docs/design/lazy.md)).** Generic
       data-attribute-driven render helper for the admin UI,

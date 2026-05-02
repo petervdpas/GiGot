@@ -6,7 +6,7 @@
 //
 // See docs/design/lazy.md for the full contract.
 //
-// Hello world:
+// Hello world (read flow):
 //
 //   <details data-lazy-tpl="abilities" data-token="abc123">
 //     <summary>Abilities</summary>
@@ -26,6 +26,32 @@
 //   </details>
 //
 //   GG.lazy.attachAll();
+//
+// Hello world (write flow — slice 2):
+//
+//   <details data-lazy-tpl="abilities"
+//            data-lazy-submit="/api/admin/tokens"
+//            data-lazy-submit-method="PATCH"
+//            data-lazy-after="event:abilities-saved"
+//            data-token="abc123">
+//     <summary>Abilities</summary>
+//   </details>
+//
+//   <!-- inside the abilities fragment: -->
+//   <button type="button" data-lazy-action="submit">Save</button>
+//   <span data-lazy-msg></span>
+//
+// On click of `[data-lazy-action="submit"]` (or a `<form>` submit):
+// the helper collects every `[name]` input inside the rendered body,
+// merges in the host's non-`lazy-*` `data-*` attributes, fetches the
+// `data-lazy-submit` endpoint with `data-lazy-submit-method` (default
+// POST), then runs `data-lazy-after` (default `render`):
+//   - `render`            — re-render the fragment against the response
+//   - `refresh`           — re-run the read path (fetch + render fresh data)
+//   - `close`             — collapse the host (or close enclosing drawer)
+//   - `event:<name>`      — dispatch a CustomEvent with `{request, response}`
+// Errors land in any `[data-lazy-msg]` element inside the rendered body
+// AND fire a bubbling `lazy-submit-error` CustomEvent on the host.
 
 (function () {
   const esc = (window.GG && window.GG.core && window.GG.core.escapeHtml) ||
@@ -173,23 +199,32 @@
     }
     // Pre-validate URL placeholders at bind time, not click time.
     if (src) substituteURL(src, host);
+    if (host.dataset.lazySubmit) substituteURL(host.dataset.lazySubmit, host);
 
     const trigger = host.dataset.lazyTrigger || defaultTrigger(host);
+
+    // renderInto paints `data` into the host using the cached
+    // fragment. Shared between the read path (run) and the
+    // post-submit `render` after-action. After painting, wire any
+    // submit triggers ([data-lazy-action="submit"] + nested forms)
+    // so they're live for the freshly rendered DOM.
+    async function renderInto(data) {
+      const tpl = await fetchFragment(tplName);
+      const html = render(tpl, data || {});
+      const target = host.tagName === 'DETAILS'
+        ? ensureDetailsBody(host)
+        : host;
+      target.innerHTML = html;
+      if (host.dataset.lazySubmit) wireSubmitTriggers(host, target);
+      if (opts.onRendered) opts.onRendered(host, data);
+    }
 
     async function run() {
       try {
         const data = src
           ? await (await fetch(substituteURL(src, host), { credentials: 'same-origin' })).json()
           : await opts.getData(host);
-        const tpl = await fetchFragment(tplName);
-        const html = render(tpl, data || {});
-        // Replace any prior render. For <details> we render into a
-        // dedicated child div so <summary> isn't clobbered.
-        const target = host.tagName === 'DETAILS'
-          ? ensureDetailsBody(host)
-          : host;
-        target.innerHTML = html;
-        if (opts.onRendered) opts.onRendered(host, data);
+        await renderInto(data);
       } catch (e) {
         // Surface render failures so a misconfig isn't a silent
         // empty card. The error lands in the console and a small
@@ -201,9 +236,10 @@
     }
 
     bindTrigger(host, trigger, run);
-    // Stash a refresh hook on the element so refresh(host) can find
-    // it without rewalking the bind config.
+    // Stash hooks on the element so refresh(host) and the submit
+    // path can find them without rewalking the bind config.
     host.__lazyRun = run;
+    host.__lazyRender = renderInto;
   }
 
   // ensureDetailsBody returns the `.lazy-body` div inside a
@@ -239,12 +275,164 @@
     if (host && host.__lazyRun) host.__lazyRun();
   }
 
+  // ───────────────────────────────────────────────────────── submit
+  //
+  // Slice 2: write path. The helper collects every `[name]` input
+  // inside the rendered body, merges in the host's non-`lazy-*`
+  // `data-*` attributes, fetches the configured endpoint, then runs
+  // `data-lazy-after` against the response.
+  //
+  // Submit triggers are wired AFTER each render so the wiring
+  // attaches to the freshly painted DOM (re-renders replace the
+  // listener targets).
+
+  // collectSubmitBody walks every [name] input inside `target` and
+  // packages the result as JSON, then merges in the host's payload-
+  // worthy data-* attributes. Three rules drive the input encoding:
+  //
+  //   - Checkbox of any name           → array of checked values.
+  //                                     Always an array, even if there
+  //                                     is exactly one checkbox of
+  //                                     that name; the abilities
+  //                                     picker uses this.
+  //   - Radio of a given name          → string value of the checked
+  //                                     option (or omitted if none).
+  //   - Anything else                  → string value of the field.
+  //
+  // The host-data merge appends every `data-*` whose key doesn't
+  // start with `lazy` (those are the helper's own metadata) and
+  // whose name isn't already in the form payload (form fields win).
+  // Only the host's own dataset is consulted — child elements'
+  // data-* are not aggregated; if a value needs to ride to the
+  // server, put it on the host or render it as a [name] input.
+  function collectSubmitBody(host, target) {
+    const data = {};
+    target.querySelectorAll('[name]').forEach(el => {
+      const name = el.name;
+      if (el.type === 'checkbox') {
+        if (!Array.isArray(data[name])) data[name] = [];
+        if (el.checked) data[name].push(el.value);
+      } else if (el.type === 'radio') {
+        if (el.checked) data[name] = el.value;
+      } else {
+        data[name] = el.value;
+      }
+    });
+    for (const key in host.dataset) {
+      if (key.startsWith('lazy')) continue;
+      if (data[key] === undefined) data[key] = host.dataset[key];
+    }
+    return data;
+  }
+
+  // setSubmitMessage writes `text` into every [data-lazy-msg] element
+  // inside `target` and toggles the error class on. Empty text clears
+  // both. Multiple targets are unusual in practice but cheap to
+  // support; the abilities footer uses one, drawer forms might add a
+  // second above the action row.
+  function setSubmitMessage(target, text, kind) {
+    target.querySelectorAll('[data-lazy-msg]').forEach(el => {
+      el.textContent = text || '';
+      el.classList.toggle('error', kind === 'error');
+      el.classList.toggle('muted', kind !== 'error');
+    });
+  }
+
+  // runAfter applies the configured post-submit behaviour. The
+  // `event:<name>` form dispatches a bubbling CustomEvent so a page-
+  // level listener can react (typically: mutate in-memory state and
+  // call GG.lazy.refresh). Unknown values fall through to a no-op so
+  // a typo doesn't strand the request — the network call still
+  // happened, the visible state just doesn't auto-update.
+  async function runAfter(host, after, request, response) {
+    after = after || 'render';
+    if (after === 'render') {
+      if (host.__lazyRender) await host.__lazyRender(response || {});
+      return;
+    }
+    if (after === 'refresh') {
+      if (host.__lazyRun) await host.__lazyRun();
+      return;
+    }
+    if (after === 'close') {
+      if (host.tagName === 'DETAILS') host.open = false;
+      const drawer = host.closest && host.closest('.drawer');
+      if (drawer && window.GG && GG.drawer && GG.drawer.close) GG.drawer.close();
+      return;
+    }
+    if (after.indexOf('event:') === 0) {
+      const name = after.slice('event:'.length);
+      host.dispatchEvent(new CustomEvent(name, {
+        bubbles: true,
+        detail: { request, response },
+      }));
+    }
+  }
+
+  // submit fires the configured POST/PATCH/etc., handles errors, and
+  // dispatches the after-action. Single in-flight guard via
+  // `host.__lazySubmitting` so a second click during the network round
+  // trip is dropped (matches the existing imperative ability-save
+  // pattern that disabled the button).
+  async function submit(host) {
+    if (host.__lazySubmitting) return;
+    const url = substituteURL(host.dataset.lazySubmit, host);
+    const method = (host.dataset.lazySubmitMethod || 'POST').toUpperCase();
+    const target = host.tagName === 'DETAILS' ? ensureDetailsBody(host) : host;
+    const body = collectSubmitBody(host, target);
+    setSubmitMessage(target, '', 'muted');
+    host.__lazySubmitting = true;
+    try {
+      const r = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+      });
+      let payload = null;
+      try { payload = await r.json(); } catch { payload = null; }
+      if (!r.ok) {
+        const msg = (payload && payload.error) || ('submit failed: ' + r.status);
+        throw new Error(msg);
+      }
+      await runAfter(host, host.dataset.lazyAfter, body, payload || {});
+    } catch (err) {
+      setSubmitMessage(target, err.message || String(err), 'error');
+      host.dispatchEvent(new CustomEvent('lazy-submit-error', {
+        bubbles: true,
+        detail: { error: err, request: body },
+      }));
+    } finally {
+      host.__lazySubmitting = false;
+    }
+  }
+
+  // wireSubmitTriggers binds the freshly rendered DOM. Buttons with
+  // `data-lazy-action="submit"` fire submit on click; nested `<form>`
+  // elements fire on the form's `submit` event so Enter-in-input
+  // also commits. Rebound on every render — listeners attach to the
+  // current DOM nodes, not stale ones from a previous render.
+  function wireSubmitTriggers(host, target) {
+    target.querySelectorAll('[data-lazy-action="submit"]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        submit(host);
+      });
+    });
+    target.querySelectorAll('form').forEach(form => {
+      form.addEventListener('submit', e => {
+        e.preventDefault();
+        submit(host);
+      });
+    });
+  }
+
   window.GG = window.GG || {};
   window.GG.lazy = {
-    bind, attachAll, refresh,
+    bind, attachAll, refresh, submit,
     cache: { clear: () => fragments.clear() },
     // Exposed for tests / future extension; not part of the
     // public contract.
-    _internals: { render, substituteURL },
+    _internals: { render, substituteURL, collectSubmitBody },
   };
 })();

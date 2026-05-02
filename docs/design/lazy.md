@@ -1,6 +1,6 @@
 # GG.lazy
 
-Status: **slice 1 + opportunistic migrations shipped 2026-05-02.**
+Status: **slice 1 + 2 + opportunistic migrations shipped 2026-05-02.**
 Generic `data-*`-attribute-driven render helper for the admin UI.
 Replaces per-page imperative DOM glue (`querySelector` +
 `addEventListener` setups that build the same shape in three places)
@@ -345,9 +345,23 @@ caller wants it.
   raw at `GET /fragments/{name}` (admin-gated, ETag-cached,
   gzipped at startup, 304 on revalidate). First migration was the
   abilities collapse on `/admin/subscriptions`.
-- **Slice 2 — `data-lazy-submit` + abilities save flow.** Open.
-  Adds the submit + after behaviour. Migrates the abilities save
-  to use it. Establishes the second caller before extending.
+- **Slice 2 — `data-lazy-submit` + abilities save flow.** ✅ shipped
+  2026-05-02. `data-lazy-submit` + `data-lazy-submit-method` +
+  `data-lazy-after` + `data-lazy-action="submit"` landed in
+  `assets/lazy.js`. After-actions: `render` (re-render fragment
+  against response — the default), `refresh` (re-run the read
+  path), `close` (collapse the host or close the enclosing
+  `.drawer`), `event:<name>` (dispatch a bubbling CustomEvent with
+  `{request, response}` detail). Errors land in `[data-lazy-msg]`
+  inside the rendered body and fire a `lazy-submit-error` event.
+  Abilities save on `/admin/subscriptions` migrated as the first
+  caller — the host's `data-token` rides as a body field (NOT a
+  URL placeholder; subscription tokens are bearer creds), the
+  abilities checkboxes collapse into the `abilities` array, and
+  `event:abilities-saved` lets the page sync in-memory state +
+  resync the summary chips. The `name="ability"` checkbox in the
+  abilities fragment was renamed to `name="abilities"` so the
+  helper's payload key matches the API contract directly.
 - **Slice 3 — Migrate the rest opportunistically.** ✅ mostly
   shipped 2026-05-02. Token-card body, repo-card body, account
   detail row, repo-subscriptions collapse, and every drawer form

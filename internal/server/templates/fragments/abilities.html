@@ -2,7 +2,7 @@
   {{#each abilities}}
     <div class="switch-row {{stale}}">
       <label class="switch">
-        <input type="checkbox" name="ability" value="{{name}}" {{checked}}>
+        <input type="checkbox" name="abilities" value="{{name}}" {{checked}}>
         <span class="slider"></span>
       </label>
       <span class="control-label">{{name}}</span>
@@ -10,7 +10,7 @@
     </div>
   {{/each}}
   <div class="abilities-foot">
-    <span class="muted ability-status"></span>
-    <button type="button" class="small ability-save hidden">Save</button>
+    <span class="muted ability-status" data-lazy-msg></span>
+    <button type="button" class="small ability-save hidden" data-lazy-action="submit">Save</button>
   </div>
 </div>
