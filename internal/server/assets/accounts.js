@@ -7,6 +7,13 @@
   const { api, escapeHtml, initSidebar, guardSession } = window.Admin;
 
   let tagsCatalogueCache = [];
+  let accountsCache = [];
+  // GG.tag_filter.attachClientSide controller. Renders the chip
+  // filter, owns ?tag= URL state, and narrows the visible row set.
+  // Mounted once on boot — page-level refresh() just re-fetches
+  // data and asks the controller to re-render.
+  let tagFilterCtl = null;
+
   // Per-account expand state, keyed by "provider:identifier". Persisted
   // across refresh() calls so a tag-edit (which triggers a re-render)
   // doesn't snap every open detail row shut. Same pattern as the
@@ -20,13 +27,11 @@
         api.listTags().catch(() => ({ tags: [] })),
       ]);
       tagsCatalogueCache = (tagData.tags || []).map(t => t.name);
-      const rows = data.accounts || [];
-      document.getElementById('acct-count').textContent = rows.length;
-      const tbody = document.getElementById('acct-rows');
-      tbody.replaceChildren();
-      for (const a of rows.sort(sortAccounts)) {
-        tbody.appendChild(renderRow(a));
-      }
+      accountsCache = (data.accounts || []).slice().sort(sortAccounts);
+      // refresh() prunes the URL filter against the new dataset and
+      // re-renders both the chips and the visible row list (which
+      // calls renderRow for each surviving account).
+      if (tagFilterCtl) tagFilterCtl.refresh();
     } catch (e) {
       console.error(e);
     }
@@ -120,6 +125,15 @@
       onChange: async (next) => {
         const resp = await api.setAccountTags(a.provider, a.identifier, next);
         a.tags = resp.tags || [];
+        // Catalogue may have grown via auto-create; refresh the
+        // dropdown source so the next "+ add tag" sees the new name.
+        try {
+          const data = await api.listTags();
+          tagsCatalogueCache = (data.tags || []).map(t => t.name);
+        } catch { /* leave cache as-is */ }
+        // Re-evaluate the chip filter (prune stale + repaint chips +
+        // re-narrow the visible row list).
+        if (tagFilterCtl) tagFilterCtl.refresh();
       },
     });
 
@@ -217,6 +231,21 @@
     const who = await guardSession();
     if (!who) return;
     initSidebar('accounts', who);
+
+    // Mount the tag filter — controller renders the chips, owns the
+    // ?tag= URL state, and narrows the visible row list.
+    tagFilterCtl = GG.tag_filter.attachClientSide({
+      filterRow: document.getElementById('tag-filter'),
+      emptyHint: 'No tags in use on any account yet — add one to a row and the chip will appear here.',
+      rows:    () => accountsCache,
+      rowTags: a => a.tags || [],
+      renderRows: visible => {
+        document.getElementById('acct-count').textContent = visible.length;
+        const tbody = document.getElementById('acct-rows');
+        tbody.replaceChildren();
+        for (const a of visible) tbody.appendChild(renderRow(a));
+      },
+    });
 
     // Render the Provider + Role dropdowns with the shared .gsel chrome
     // so they match the Kind dropdown on the credentials page. The

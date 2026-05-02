@@ -187,6 +187,82 @@
     return { render, selected, prune };
   }
 
+  // attachClientSide is the higher-level helper for pages that filter
+  // their rows in JS (repos, accounts — anywhere the API doesn't
+  // accept ?tag= and the entire dataset is already in memory).
+  // It does the wiring every such page would otherwise repeat:
+  //
+  //   - read every row's tag list via rowTags(row)
+  //   - feed the union to the chip filter (getFilterableTags)
+  //   - on chip click, recompute the visible subset (AND across
+  //     selected chips, case-insensitive) and call renderRows
+  //   - on caller-driven data change (e.g. tag picker on a card),
+  //     a single ctl.refresh() prunes the URL filter, re-renders
+  //     the chips, and re-renders the rows.
+  //
+  // Returned controller has just one method most callers care about:
+  //   ctl.refresh()  → prune + chip render + row render
+  //
+  // For server-side-filter pages (subscriptions), reach for
+  // mount() directly — the page owns the fetch + render flow.
+  function attachClientSide(opts) {
+    const filterRow    = opts.filterRow;
+    const actionsRow   = opts.actionsRow || null;
+    const actionButton = opts.actionButton || null;
+    const summary      = opts.summary || null;
+    const rows         = opts.rows || (() => []);
+    const rowTags      = opts.rowTags || (() => []);
+    const renderRows   = opts.renderRows || (() => {});
+    const emptyHint    = opts.emptyHint || 'No tags in use yet.';
+    const actionLabel  = opts.actionLabel;
+    const onAction     = opts.onAction;
+
+    function filterableTags() {
+      const seen = new Map();
+      for (const r of rows()) {
+        for (const name of (rowTags(r) || [])) {
+          const key = name.toLowerCase();
+          if (!seen.has(key)) seen.set(key, name);
+        }
+      }
+      return [...seen.values()];
+    }
+
+    function visibleRows() {
+      const sel = ctl.selected();
+      if (!sel.length) return rows();
+      return rows().filter(r => {
+        const have = new Set((rowTags(r) || []).map(t => t.toLowerCase()));
+        return sel.every(s => have.has(s));
+      });
+    }
+
+    function renderAll() {
+      renderRows(visibleRows());
+      ctl.render();
+    }
+
+    const ctl = mount({
+      filterRow, actionsRow, actionButton, summary,
+      emptyHint, actionLabel,
+      getFilterableTags: filterableTags,
+      getMatchCount:     () => visibleRows().length,
+      onSelectionChange: async () => { renderAll(); },
+      onAction:          onAction,
+    });
+
+    // Public refresh: caller runs this after a data mutation
+    // (tag picker change, row added/removed). Prunes the URL
+    // selection of any chip no row carries anymore, then re-renders
+    // both the chips and the visible row list in one shot.
+    function refresh() {
+      ctl.prune();
+      renderAll();
+    }
+
+    return Object.assign({}, ctl, { refresh, visibleRows });
+  }
+
   window.GG = window.GG || {};
-  window.GG.tag_filter = { mount };
+  window.GG.tag_filter = { mount, attachClientSide };
 })();

@@ -14,6 +14,11 @@
   let destinationsByRepo = {};
   let accountsCache = [];
   let tagsCatalogueCache = [];
+  // GG.tag_filter.attachClientSide controller. Owns chip rendering,
+  // URL ↔ selection binding, prune-on-stale, and the AND-filter
+  // computation; this page just hands it the data sources and
+  // renderRows callback.
+  let tagFilterCtl = null;
 
   // subsOpenState: same pattern as destOpenState — preserves
   // expand/collapse per repo across refreshes so re-rendering the
@@ -77,9 +82,18 @@
       allTags: tagsCatalogueCache,
       onChange: async (next) => {
         const resp = await api.setRepoTags(r.name, next);
-        // Mutate the cached row so a subsequent re-render reflects
-        // the new state; no global refresh needed for a tag flip.
+        // Mutate the cached row so the next render reads the new
+        // state, then ask the chip filter controller to re-evaluate
+        // (prune any stale selection + repaint chips + re-narrow
+        // the visible repo list).
         r.tags = resp.tags || [];
+        // Catalogue may have grown (auto-create), so refresh names
+        // for the picker dropdown too.
+        try {
+          const data = await api.listTags();
+          tagsCatalogueCache = (data.tags || []).map(t => t.name);
+        } catch { /* leave cache as-is */ }
+        if (tagFilterCtl) tagFilterCtl.refresh();
       },
     });
 
@@ -458,11 +472,10 @@
       }));
       destinationsByRepo = Object.fromEntries(destEntries);
 
-      document.getElementById('repo-count').textContent = repoData.count;
-      const grid = document.getElementById('repo-grid');
-      const empty = document.getElementById('repo-empty');
-      grid.replaceChildren(...repoInfoCache.map(renderRepoCard));
-      empty.classList.toggle('hidden', repoInfoCache.length !== 0);
+      // refresh() prunes the URL filter against the new data, then
+      // re-renders both the chips and the visible-row list (which
+      // is what calls renderRepoCard for each surviving row).
+      if (tagFilterCtl) tagFilterCtl.refresh();
     } catch (e) {
       console.error(e);
     }
@@ -472,6 +485,26 @@
     const who = await guardSession();
     if (!who) return;
     initSidebar('repositories', who);
+
+    // Mount the tag filter once — the controller owns the chip
+    // rendering, URL state, and AND-filter computation. The page
+    // supplies data sources (rows + rowTags) and a renderRows
+    // callback that paints the visible cards into the grid.
+    tagFilterCtl = GG.tag_filter.attachClientSide({
+      filterRow: document.getElementById('tag-filter'),
+      emptyHint: 'No tags in use on any repository yet — add one to a card and the chip will appear here.',
+      rows:    () => repoInfoCache,
+      rowTags: r => r.tags || [],
+      renderRows: visible => {
+        const grid = document.getElementById('repo-grid');
+        const empty = document.getElementById('repo-empty');
+        grid.replaceChildren(...visible.map(renderRepoCard));
+        // Count tracks visible (filtered) — same as
+        // /admin/subscriptions where (N) reflects the visible set.
+        document.getElementById('repo-count').textContent = visible.length;
+        empty.classList.toggle('hidden', visible.length !== 0);
+      },
+    });
 
     // Render the Formidable-scaffold toggle into its placeholder on the
     // create form. Consistent with the other "toggle markup lives in
