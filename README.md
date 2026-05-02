@@ -69,12 +69,6 @@ Open work:
       500 / 1000 subs and decide whether to (a) cache the
       unfiltered list per session, (b) collapse to one fetch, or
       (c) leave it. Either way, document the budget.
-- [ ] **Catalogue-noise nudge in the Tags page.** Auto-create on
-      picker means typos pile up. Either prompt before creating a
-      brand-new name from a picker (`"Create 'frontned'?"`) or
-      surface unused-tag count somewhere that nudges admins toward
-      `Remove unused` periodically. Pick one.
-
 Done and shipping:
 
 - [x] **Tag chip filter switched from AND (intersection) to
