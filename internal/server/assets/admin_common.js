@@ -89,6 +89,12 @@
         body: JSON.stringify(body),
       });
       if (!r.ok) throw new Error((await r.json()).error || 'update failed');
+      // Tag-touching PATCHes echo back the canonical {tags,
+      // effective_tags} so callers can update their in-memory model
+      // without a follow-up listing fetch. Repo / abilities-only
+      // PATCHes return the plain MessageResponse — caller still
+      // gets a body, just no new tag fields.
+      try { return await r.json(); } catch { return {}; }
     },
     async revokeToken(token) {
       const r = await fetch('/api/admin/tokens', {
@@ -360,15 +366,6 @@
   function roleBadgeAttrs(role) {
     if (!role) return '';
     return ' data-role="' + escapeHtml(role) + '"';
-  }
-  // Back-compat alias kept for any caller that still composes badge
-  // HTML the old way (class-driven). New call sites prefer
-  // roleBadgeAttrs. The only role that mapped to a class before was
-  // "admin" → "formidable"; the CSS keeps that selector live too.
-  function roleBadgeClass(role) {
-    if (role === 'admin') return 'formidable';
-    if (role === 'maintainer') return 'maintainer';
-    return '';
   }
 
   // accountLabelHTML returns the same human-readable label as
@@ -720,7 +717,7 @@
   window.Admin = {
     api,
     escapeHtml, shortSha,
-    accountLabel, accountLabelHTML, accountOption, resolveAccount, roleBadgeClass, roleBadgeAttrs,
+    accountLabel, accountLabelHTML, accountOption, resolveAccount, roleBadgeAttrs,
     renderTokenCard,
     initSidebar, guardSession,
     copyToClipboard,

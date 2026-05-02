@@ -893,6 +893,19 @@ definitions:
       token:
         type: string
     type: object
+  server.UpdateTokenResponse:
+    properties:
+      effective_tags:
+        items:
+          type: string
+        type: array
+      message:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
   server.WriteFileConflictResponse:
     properties:
       base_b64:
@@ -2364,6 +2377,13 @@ paths:
         GET supports a repeating `?tag=` query parameter that filters
         by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
         values intersect (AND). Tag matching is case-insensitive.
+
+        PATCH bodies that include a `tags` field receive an
+        UpdateTokenResponse echoing the canonical post-update
+        `tags` (direct) and `effective_tags` (the §2 union),
+        so the admin UI can patch its in-memory model without
+        a follow-up listing fetch. Repo / abilities-only
+        PATCH bodies still receive the simpler MessageResponse.
       parameters:
       - collectionFormat: multi
         description: Filter by effective tag (repeatable; AND across values)
@@ -2377,7 +2397,7 @@ paths:
         name: body
         schema:
           $ref: '#/definitions/server.TokenRequest'
-      - description: Update body (PATCH) — repos and/or abilities
+      - description: Update body (PATCH) — repos and/or abilities and/or tags
         in: body
         name: body
         schema:
@@ -2391,7 +2411,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: PATCH / DELETE response
+          description: PATCH (repo/abilities only) / DELETE response
           schema:
             $ref: '#/definitions/server.MessageResponse'
         "201":
@@ -2432,6 +2452,13 @@ paths:
         GET supports a repeating `?tag=` query parameter that filters
         by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
         values intersect (AND). Tag matching is case-insensitive.
+
+        PATCH bodies that include a `tags` field receive an
+        UpdateTokenResponse echoing the canonical post-update
+        `tags` (direct) and `effective_tags` (the §2 union),
+        so the admin UI can patch its in-memory model without
+        a follow-up listing fetch. Repo / abilities-only
+        PATCH bodies still receive the simpler MessageResponse.
       parameters:
       - collectionFormat: multi
         description: Filter by effective tag (repeatable; AND across values)
@@ -2445,7 +2472,7 @@ paths:
         name: body
         schema:
           $ref: '#/definitions/server.TokenRequest'
-      - description: Update body (PATCH) — repos and/or abilities
+      - description: Update body (PATCH) — repos and/or abilities and/or tags
         in: body
         name: body
         schema:
@@ -2459,7 +2486,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: PATCH / DELETE response
+          description: PATCH (repo/abilities only) / DELETE response
           schema:
             $ref: '#/definitions/server.MessageResponse'
         "201":
@@ -2500,6 +2527,13 @@ paths:
         GET supports a repeating `?tag=` query parameter that filters
         by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
         values intersect (AND). Tag matching is case-insensitive.
+
+        PATCH bodies that include a `tags` field receive an
+        UpdateTokenResponse echoing the canonical post-update
+        `tags` (direct) and `effective_tags` (the §2 union),
+        so the admin UI can patch its in-memory model without
+        a follow-up listing fetch. Repo / abilities-only
+        PATCH bodies still receive the simpler MessageResponse.
       parameters:
       - collectionFormat: multi
         description: Filter by effective tag (repeatable; AND across values)
@@ -2513,7 +2547,7 @@ paths:
         name: body
         schema:
           $ref: '#/definitions/server.TokenRequest'
-      - description: Update body (PATCH) — repos and/or abilities
+      - description: Update body (PATCH) — repos and/or abilities and/or tags
         in: body
         name: body
         schema:
@@ -2527,7 +2561,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: PATCH / DELETE response
+          description: PATCH (repo/abilities only) / DELETE response
           schema:
             $ref: '#/definitions/server.MessageResponse'
         "201":
@@ -2568,6 +2602,13 @@ paths:
         GET supports a repeating `?tag=` query parameter that filters
         by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
         values intersect (AND). Tag matching is case-insensitive.
+
+        PATCH bodies that include a `tags` field receive an
+        UpdateTokenResponse echoing the canonical post-update
+        `tags` (direct) and `effective_tags` (the §2 union),
+        so the admin UI can patch its in-memory model without
+        a follow-up listing fetch. Repo / abilities-only
+        PATCH bodies still receive the simpler MessageResponse.
       parameters:
       - collectionFormat: multi
         description: Filter by effective tag (repeatable; AND across values)
@@ -2581,7 +2622,7 @@ paths:
         name: body
         schema:
           $ref: '#/definitions/server.TokenRequest'
-      - description: Update body (PATCH) — repos and/or abilities
+      - description: Update body (PATCH) — repos and/or abilities and/or tags
         in: body
         name: body
         schema:
@@ -2595,7 +2636,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: PATCH / DELETE response
+          description: PATCH (repo/abilities only) / DELETE response
           schema:
             $ref: '#/definitions/server.MessageResponse'
         "201":

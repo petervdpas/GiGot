@@ -166,16 +166,24 @@ func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *au
 // @Description  GET supports a repeating `?tag=` query parameter that filters
 // @Description  by effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple
 // @Description  values intersect (AND). Tag matching is case-insensitive.
+// @Description
+// @Description  PATCH bodies that include a `tags` field receive an
+// @Description  UpdateTokenResponse echoing the canonical post-update
+// @Description  `tags` (direct) and `effective_tags` (the §2 union),
+// @Description  so the admin UI can patch its in-memory model without
+// @Description  a follow-up listing fetch. Repo / abilities-only
+// @Description  PATCH bodies still receive the simpler MessageResponse.
 // @Tags         admin
 // @Accept       json
 // @Produce      json
 // @Param        tag   query     []string            false  "Filter by effective tag (repeatable; AND across values)" collectionFormat(multi)
 // @Param        body  body      TokenRequest        false  "Issue body (POST)"
-// @Param        body  body      UpdateTokenRequest  false  "Update body (PATCH) — repos and/or abilities"
+// @Param        body  body      UpdateTokenRequest  false  "Update body (PATCH) — repos and/or abilities and/or tags"
 // @Param        body  body      RevokeTokenRequest  false  "Revoke body (DELETE)"
-// @Success      200   {object}  TokenListResponse   "GET response"
-// @Success      201   {object}  TokenResponse       "POST response"
-// @Success      200   {object}  MessageResponse     "PATCH / DELETE response"
+// @Success      200   {object}  TokenListResponse    "GET response"
+// @Success      201   {object}  TokenResponse        "POST response"
+// @Success      200   {object}  UpdateTokenResponse  "PATCH response when tags were touched"
+// @Success      200   {object}  MessageResponse      "PATCH (repo/abilities only) / DELETE response"
 // @Failure      400   {object}  ErrorResponse
 // @Failure      401   {object}  ErrorResponse
 // @Failure      404   {object}  ErrorResponse
@@ -299,6 +307,27 @@ func (s *Server) adminUpdateToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// When the body touched tags, echo the updated row back so the
+	// client can patch its in-memory state without a follow-up GET.
+	// Lets the subscriptions UI update tag pills + chip filter + the
+	// visible card list locally; the alternative was a full grid
+	// re-render that snapped every "Abilities" collapsible shut.
+	if req.Tags != nil {
+		entry := s.tokenStrategy.Get(req.Token)
+		if entry != nil {
+			provider, identifier, perr := parseTokenUsername(entry.Username)
+			accountKey := ""
+			if perr == nil && s.accounts.Has(provider, identifier) {
+				accountKey = provider + ":" + identifier
+			}
+			writeJSON(w, http.StatusOK, UpdateTokenResponse{
+				Message:       "token updated",
+				Tags:          s.tags.TagsFor(tags.ScopeSubscription, req.Token),
+				EffectiveTags: s.tags.EffectiveSubscriptionTags(req.Token, entry.Repo, accountKey),
+			})
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, MessageResponse{Message: "token updated"})
 }
 

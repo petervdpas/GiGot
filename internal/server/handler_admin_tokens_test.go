@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -239,6 +240,93 @@ func TestAdminTokens_PatchSetsTagsAndListSurfacesEffective(t *testing.T) {
 	}
 	if len(found.EffectiveTags) != 2 {
 		t.Errorf("EffectiveTags = %v, want both sub + repo tags", found.EffectiveTags)
+	}
+}
+
+// TestAdminTokens_PatchTagsResponseShape pins the in-place-render
+// contract: when the PATCH body touches tags, the response body is
+// an UpdateTokenResponse carrying the canonical post-update direct
+// tags + effective_tags (sub ∪ repo ∪ account). The admin UI relies
+// on this so it can patch its in-memory model without a follow-up
+// listing fetch — a regression here would silently re-introduce
+// the full grid re-render that resets every open abilities
+// collapsible.
+func TestAdminTokens_PatchTagsResponseShape(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	if err := srv.git.InitBare("addresses"); err != nil {
+		t.Fatal(err)
+	}
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Tag the repo so effective_tags has an inherited member.
+	if rec := do(t, srv, http.MethodPut, "/api/admin/repos/addresses/tags",
+		map[string]any{"tags": []string{"team:marketing"}}, sess); rec.Code != http.StatusOK {
+		t.Fatalf("repo tag PUT: %d", rec.Code)
+	}
+
+	rec := do(t, srv, http.MethodPatch, "/api/admin/tokens",
+		map[string]any{
+			"token": token,
+			"tags":  []string{"project:redesign"},
+		}, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp UpdateTokenResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Tags) != 1 || resp.Tags[0] != "project:redesign" {
+		t.Errorf("Tags = %v, want [project:redesign]", resp.Tags)
+	}
+	if len(resp.EffectiveTags) != 2 {
+		t.Fatalf("EffectiveTags = %v, want 2 (direct + inherited)", resp.EffectiveTags)
+	}
+	// Order is stable (sorted by store); spot-check both members.
+	hasDirect, hasInherited := false, false
+	for _, n := range resp.EffectiveTags {
+		if n == "project:redesign" {
+			hasDirect = true
+		}
+		if n == "team:marketing" {
+			hasInherited = true
+		}
+	}
+	if !hasDirect || !hasInherited {
+		t.Errorf("EffectiveTags missing direct or inherited: %v", resp.EffectiveTags)
+	}
+}
+
+// TestAdminTokens_PatchAbilitiesOnlyKeepsMessageResponse pins the
+// other side of the contract: a PATCH that doesn't touch tags
+// returns the simpler MessageResponse, not the richer
+// UpdateTokenResponse. Stops a future change from accidentally
+// growing the response shape for every PATCH.
+func TestAdminTokens_PatchAbilitiesOnlyKeepsMessageResponse(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	if err := srv.git.InitBare("addresses"); err != nil {
+		t.Fatal(err)
+	}
+	token, _ := srv.tokenStrategy.Issue("alice", "addresses", nil)
+
+	rec := do(t, srv, http.MethodPatch, "/api/admin/tokens",
+		map[string]any{
+			"token":     token,
+			"abilities": []string{},
+		}, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	// MessageResponse only has "message"; UpdateTokenResponse adds
+	// "tags" + "effective_tags". Their absence here is the point.
+	if strings.Contains(body, "\"tags\"") || strings.Contains(body, "\"effective_tags\"") {
+		t.Errorf("abilities-only PATCH leaked tag fields: %s", body)
+	}
+	if !strings.Contains(body, "token updated") {
+		t.Errorf("missing message field: %s", body)
 	}
 }
 

@@ -63,17 +63,35 @@ here. The items below do not overlap with Track B.
 
 Open work:
 
-- [ ] **Drop dead `roleBadgeClass` alias.** `assets/admin_common.js`
-      keeps `roleBadgeClass(role)` as a back-compat shim from before
-      the data-role refactor; no source caller uses it anymore.
-      Delete the function + its export.
-- [ ] **Don't full-rerender token cards on tag picker change.**
-      Today `refreshAfterTagChange` repaints the whole card grid,
-      which collapses every open `Abilities` section. Replace the
-      grid-level rerender with a card-local update that mutates the
-      tag pills + filter chips in place; only drop a card from view
-      if it falls out of the active filter, leaving the surviving
-      cards' collapse state intact.
+- [ ] **`GG.lazy` — generic data-attribute-driven render helper.**
+      Move admin-page DOM glue from imperative
+      `querySelector` + `addEventListener` setups to a declarative
+      Vue/HTMX-style binding driven by `data-*` attributes on the
+      HTML. Concrete first shape:
+
+      ```html
+      <details data-collapse-src="/api/admin/tokens/{token}/abilities"
+               data-collapse-tpl="#tpl-abilities">
+        <summary>Abilities</summary>
+      </details>
+      ```
+
+      ```js
+      GG.lazy.attach('[data-collapse-src]', {
+        onOpen(el) { /* fetch + hydrate template + render into el */ }
+      });
+      ```
+
+      First migration target: the abilities collapse on subscriptions
+      cards (already isolated in `installAbilitiesSection` —
+      low-risk to convert and exercises the helper end-to-end).
+      Once it lands, `tag_picker` and `tag_filter` mounts can shift
+      to the same pattern (`data-tag-picker-src=...`,
+      `data-tag-filter=...`), and pages stop carrying boilerplate
+      mount calls. The principle (HTML carries intent, generic JS
+      reads it) already applies via `data-role` on badges and the
+      two `GG.tag_*` controllers — this lifts it from per-feature
+      to a default.
 - [ ] **Honest framing for the bulk-revoke confirm phrase.** The
       `revoke <tags>` phrase is deterministic, so it's anti-typo,
       not anti-script. Update `docs/design/tags.md` §5.6 + §6.3 to

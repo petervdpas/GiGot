@@ -1934,7 +1934,7 @@ const docTemplate = `{
         },
         "/admin/tokens": {
             "get": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.\n\nPATCH bodies that include a ` + "`" + `tags` + "`" + ` field receive an\nUpdateTokenResponse echoing the canonical post-update\n` + "`" + `tags` + "`" + ` (direct) and ` + "`" + `effective_tags` + "`" + ` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1965,7 +1965,7 @@ const docTemplate = `{
                         }
                     },
                     {
-                        "description": "Update body (PATCH) — repos and/or abilities",
+                        "description": "Update body (PATCH) — repos and/or abilities and/or tags",
                         "name": "body",
                         "in": "body",
                         "schema": {
@@ -1983,7 +1983,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "PATCH / DELETE response",
+                        "description": "PATCH (repo/abilities only) / DELETE response",
                         "schema": {
                             "$ref": "#/definitions/server.MessageResponse"
                         }
@@ -2021,7 +2021,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.\n\nPATCH bodies that include a ` + "`" + `tags` + "`" + ` field receive an\nUpdateTokenResponse echoing the canonical post-update\n` + "`" + `tags` + "`" + ` (direct) and ` + "`" + `effective_tags` + "`" + ` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2052,7 +2052,7 @@ const docTemplate = `{
                         }
                     },
                     {
-                        "description": "Update body (PATCH) — repos and/or abilities",
+                        "description": "Update body (PATCH) — repos and/or abilities and/or tags",
                         "name": "body",
                         "in": "body",
                         "schema": {
@@ -2070,7 +2070,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "PATCH / DELETE response",
+                        "description": "PATCH (repo/abilities only) / DELETE response",
                         "schema": {
                             "$ref": "#/definitions/server.MessageResponse"
                         }
@@ -2108,7 +2108,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.\n\nPATCH bodies that include a ` + "`" + `tags` + "`" + ` field receive an\nUpdateTokenResponse echoing the canonical post-update\n` + "`" + `tags` + "`" + ` (direct) and ` + "`" + `effective_tags` + "`" + ` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2139,7 +2139,7 @@ const docTemplate = `{
                         }
                     },
                     {
-                        "description": "Update body (PATCH) — repos and/or abilities",
+                        "description": "Update body (PATCH) — repos and/or abilities and/or tags",
                         "name": "body",
                         "in": "body",
                         "schema": {
@@ -2157,7 +2157,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "PATCH / DELETE response",
+                        "description": "PATCH (repo/abilities only) / DELETE response",
                         "schema": {
                             "$ref": "#/definitions/server.MessageResponse"
                         }
@@ -2195,7 +2195,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.",
+                "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues intersect (AND). Tag matching is case-insensitive.\n\nPATCH bodies that include a ` + "`" + `tags` + "`" + ` field receive an\nUpdateTokenResponse echoing the canonical post-update\n` + "`" + `tags` + "`" + ` (direct) and ` + "`" + `effective_tags` + "`" + ` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2226,7 +2226,7 @@ const docTemplate = `{
                         }
                     },
                     {
-                        "description": "Update body (PATCH) — repos and/or abilities",
+                        "description": "Update body (PATCH) — repos and/or abilities and/or tags",
                         "name": "body",
                         "in": "body",
                         "schema": {
@@ -2244,7 +2244,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "PATCH / DELETE response",
+                        "description": "PATCH (repo/abilities only) / DELETE response",
                         "schema": {
                             "$ref": "#/definitions/server.MessageResponse"
                         }
@@ -5518,6 +5518,26 @@ const docTemplate = `{
                 },
                 "token": {
                     "type": "string"
+                }
+            }
+        },
+        "server.UpdateTokenResponse": {
+            "type": "object",
+            "properties": {
+                "effective_tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

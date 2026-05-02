@@ -296,23 +296,12 @@
       inherited,
       allTags: tagsCatalogueCache,
       onChange: async (next) => {
-        await api.updateToken(t.token, { tags: next });
-        // Three things have to re-evaluate after a tag picker
-        // change so the page stays internally consistent:
-        //   1. catalogue cache  → so the picker dropdown (and the
-        //      filter chip set) sees a name the picker just
-        //      auto-created server-side.
-        //   2. allTokensCache   → so the chip filter row reflects
-        //      the new effective_tags universe (a chip whose last
-        //      sub just lost the tag must drop off).
-        //   3. tokensCache      → so the visible card grid honours
-        //      the active ?tag= filter; if removing this tag took
-        //      the current sub out of the matched set, the card
-        //      must disappear from the grid (the original "remove
-        //      tag should re-evaluate filter" complaint).
-        // refreshAfterTagChange does all three in one round trip
-        // each, then re-renders the grid + filter.
-        await refreshAfterTagChange();
+        // The PATCH response echoes back the canonical {tags,
+        // effective_tags} so we can patch state in place — no full
+        // card re-render needed (which would otherwise reset every
+        // open abilities collapsible).
+        const resp = await api.updateToken(t.token, { tags: next });
+        await applyTokenTagUpdate(t, resp);
       },
     });
   }
@@ -486,26 +475,140 @@
     return tagFilterCtl ? tagFilterCtl.selected() : [];
   }
 
-  // refreshAfterTagChange — the sub-card-picker-onChange path. Adds
-  // a catalogue refetch to the chip-toggle dance so the picker
-  // dropdown sees newly auto-created tag names. Re-renders the
-  // visible token cards, which resets the abilities-collapse state
-  // on each — that's the tradeoff for "remove tag → chip + card +
-  // revoke button all re-evaluate" without a manual reload. Tag
-  // editing is much rarer than ability editing, so this asymmetry
-  // is the right one.
-  async function refreshAfterTagChange() {
-    try {
-      const [tagData, allTokenData] = await Promise.all([
-        api.listTags(),
-        api.listTokensByTags([]),
-      ]);
-      tagsCatalogueCache = (tagData.tags || []).map(t => t.name);
-      allTokensCache = allTokenData.tokens || [];
-      await applyPrunedFilteredFetch();
-    } catch (e) {
-      console.error(e);
+  // applyTokenTagUpdate — the sub-card-picker-onChange path. Patches
+  // the in-memory model from the PATCH response, then reconciles the
+  // chip filter + visible grid IN PLACE: cards that stay don't get
+  // re-rendered (so any open abilities collapsibles stay open), the
+  // edited card just has its tag-picker re-mounted, cards that drop
+  // out of the active filter are removed, and cards that newly match
+  // are inserted. No full card grid re-render and no extra refetches.
+  async function applyTokenTagUpdate(t, resp) {
+    const newTags          = (resp && resp.tags) || [];
+    const newEffectiveTags = (resp && resp.effective_tags) || [];
+    // Update the row in tokensCache (the visible filtered set).
+    t.tags = newTags.slice();
+    t.effective_tags = newEffectiveTags.slice();
+    // Mirror the update into allTokensCache so the chip filter
+    // recomputes the right "filterable tags" set.
+    const mirror = allTokensCache.find(x => x.token === t.token);
+    if (mirror && mirror !== t) {
+      mirror.tags = newTags.slice();
+      mirror.effective_tags = newEffectiveTags.slice();
+    } else if (!mirror) {
+      // Defensive: a sub the server returned but we never had in
+      // the unfiltered list (shouldn't happen at steady state).
+      allTokensCache.push(t);
     }
+    // Catalogue may have grown via auto-create. Append any names
+    // we sent that weren't previously in the cache so the picker
+    // dropdowns on other cards see them on next open.
+    const have = new Set(tagsCatalogueCache.map(s => s.toLowerCase()));
+    for (const name of newTags) {
+      if (!have.has(name.toLowerCase())) {
+        tagsCatalogueCache.push(name);
+        have.add(name.toLowerCase());
+      }
+    }
+    // Re-mount this card's tag picker so the inherited slice is
+    // recomputed (effective − direct). Pills + dropdown reflect
+    // the new state.
+    remountCardTagPicker(t);
+    // Chip filter: prune any URL selection that no sub carries
+    // anymore, then repaint the chip row.
+    if (tagFilterCtl) {
+      tagFilterCtl.prune();
+      tagFilterCtl.render();
+    }
+    // Re-derive tokensCache from the active filter against the
+    // updated allTokensCache, then reconcile the grid in place.
+    tokensCache = visibleFromFilter();
+    reconcileTokenGrid();
+    // Action-row state (visible / count) tracks tokensCache, so
+    // the chip-filter render above already picked up the new count.
+  }
+
+  // visibleFromFilter computes the AND-filtered subset of
+  // allTokensCache against the active ?tag= selection, exactly the
+  // way the server's `?tag=` endpoint would. With no chip selected
+  // the whole unfiltered list IS the visible list.
+  function visibleFromFilter() {
+    const sel = tagFilterCtl ? tagFilterCtl.selected() : [];
+    if (!sel.length) return allTokensCache;
+    return allTokensCache.filter(tok => {
+      const have = new Set((tok.effective_tags || []).map(s => s.toLowerCase()));
+      return sel.every(s => have.has(s));
+    });
+  }
+
+  // remountCardTagPicker re-runs installTagsSection's mount logic on
+  // a single card so its inherited-pill slice (effective − direct)
+  // is recomputed against the freshly returned effective_tags. The
+  // rest of the card's DOM (abilities collapse state in particular)
+  // stays exactly as it was.
+  function remountCardTagPicker(t) {
+    const grid = document.getElementById('token-grid');
+    const card = grid && grid.querySelector(
+      '.info-card[data-token="' + cssEscape(t.token) + '"]',
+    );
+    if (!card) return;
+    const oldSection = card.querySelector(':scope > .ic-tags-section');
+    if (oldSection) oldSection.remove();
+    installTagsSection(card, t);
+  }
+
+  // cssEscape returns a string safe for use inside an attribute
+  // selector value. Falls through to native CSS.escape when
+  // available; otherwise quotes the input naively (token strings
+  // are URL-safe base64 so no special characters need escaping in
+  // practice — this is belt-and-braces).
+  function cssEscape(s) {
+    if (window.CSS && window.CSS.escape) return window.CSS.escape(s);
+    return String(s).replace(/"/g, '\\"');
+  }
+
+  // reconcileTokenGrid diffs the existing card DOM against
+  // tokensCache and adjusts in place. Cards keyed by data-token:
+  //   - present in DOM but missing from tokensCache → removed
+  //   - present in tokensCache but missing from DOM → inserted at
+  //     their tokensCache index
+  //   - present in both → left untouched (preserves abilities
+  //     collapse state, the whole point of this dance)
+  // The order of remaining cards is left alone unless the visible
+  // set fundamentally changed; cosmetic re-ordering on every tag
+  // edit isn't worth the disturbance.
+  function reconcileTokenGrid() {
+    const grid = document.getElementById('token-grid');
+    const empty = document.getElementById('token-empty');
+    if (!grid) return;
+    // Apply the ?user= local narrowing the same way renderTokensGrid
+    // does, so reconcile + grid stay in lockstep on user-filtered
+    // page loads.
+    const scoped = userFilter();
+    const visible = scoped
+      ? tokensCache.filter(tok => tokenMatchesUser(tok, scoped))
+      : tokensCache;
+    const visibleSet = new Set(visible.map(tok => tok.token));
+    // Drop cards that shouldn't be visible.
+    for (const card of [...grid.querySelectorAll('.info-card[data-token]')]) {
+      if (!visibleSet.has(card.dataset.token)) card.remove();
+    }
+    // Insert cards that should be visible but aren't yet, in their
+    // tokensCache order. We insert by walking visible in order and
+    // checking the card-at-that-index.
+    const renderedTokens = new Set(
+      [...grid.querySelectorAll('.info-card[data-token]')]
+        .map(c => c.dataset.token),
+    );
+    for (let i = 0; i < visible.length; i++) {
+      const tok = visible[i];
+      if (renderedTokens.has(tok.token)) continue;
+      const newCard = renderTokenCard(tok);
+      const ref = grid.children[i] || null;
+      if (ref) grid.insertBefore(newCard, ref);
+      else grid.appendChild(newCard);
+    }
+    document.getElementById('count').textContent = visible.length;
+    if (empty) empty.classList.toggle('hidden', visible.length !== 0);
   }
 
   // openRevokeByTagDialog enumerates the matching subs, asks the

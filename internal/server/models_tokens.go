@@ -36,6 +36,19 @@ type RevokeTokenRequest struct {
 	Token string `json:"token" example:"a1b2c3d4..."`
 }
 
+// UpdateTokenResponse is returned from PATCH /api/admin/tokens when
+// the body touched the tag set. Carries the canonical post-update
+// tags + effective_tags so the admin UI can patch its in-memory
+// model in place — no follow-up listing fetch needed, no full card
+// re-render required (which would otherwise reset every open
+// abilities collapsible). When the body only touched repo or
+// abilities, the simpler MessageResponse shape is returned instead.
+type UpdateTokenResponse struct {
+	Message       string   `json:"message"`
+	Tags          []string `json:"tags"`
+	EffectiveTags []string `json:"effective_tags"`
+}
+
 // UpdateTokenRequest is the body for PATCH /api/admin/tokens. Repo,
 // when non-nil and non-empty, rebinds the key to a different repo
 // (subject to the "one key per (account, repo)" uniqueness rule).
