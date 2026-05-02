@@ -107,3 +107,43 @@ func TestFragments_MethodNotAllowed(t *testing.T) {
 		t.Fatalf("want 405 for POST, got %d", rec.Code)
 	}
 }
+
+// TestFragments_GzipWhenAccepted pins that the handler returns the
+// precomputed gzipped body when the client advertises Accept-Encoding:
+// gzip, and the raw body otherwise. The Vary: Accept-Encoding header
+// is required either way so caches don't mix the two responses.
+func TestFragments_GzipWhenAccepted(t *testing.T) {
+	srv, sess := adminTestServer(t)
+
+	// Without gzip support: raw body, no Content-Encoding.
+	req := httptest.NewRequest(http.MethodGet, "/fragments/abilities", nil)
+	req.AddCookie(sess)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("raw fetch: want 200, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Encoding"); got != "" {
+		t.Errorf("raw fetch leaked Content-Encoding %q", got)
+	}
+	if got := rec.Header().Get("Vary"); !strings.Contains(got, "Accept-Encoding") {
+		t.Errorf("Vary should include Accept-Encoding, got %q", got)
+	}
+	rawLen := rec.Body.Len()
+
+	// With gzip support: Content-Encoding: gzip, body smaller than raw.
+	req = httptest.NewRequest(http.MethodGet, "/fragments/abilities", nil)
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	req.AddCookie(sess)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("gzip fetch: want 200, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Encoding"); got != "gzip" {
+		t.Errorf("Content-Encoding = %q, want gzip", got)
+	}
+	if rec.Body.Len() >= rawLen {
+		t.Errorf("gzipped body (%d bytes) not smaller than raw (%d bytes) — gzip didn't help", rec.Body.Len(), rawLen)
+	}
+}

@@ -30,11 +30,13 @@ import (
 var fragmentsFS embed.FS
 
 // fragmentEntry holds one fragment's bytes plus the strong ETag
-// derived from its content. Computed once at startup so per-request
-// cost is a map lookup + a write — the file is tiny and the cache
-// stays in memory for the life of the process.
+// derived from its content, AND a precomputed gzipped copy when
+// compression earns its keep. Computed once at startup so the
+// per-request cost is a map lookup + a write — no gzip work in the
+// hot path. Same pattern assets.go uses for the static bundle.
 type fragmentEntry struct {
 	body []byte
+	gz   []byte // nil when gzip didn't shrink the body, e.g. tiny fragments
 	etag string
 }
 
@@ -66,6 +68,7 @@ var fragmentCache = func() map[string]*fragmentEntry {
 		sum := sha256.Sum256(body)
 		cache[name] = &fragmentEntry{
 			body: body,
+			gz:   maybeGzip(body, "text/html"),
 			etag: `"` + hex.EncodeToString(sum[:16]) + `"`,
 		}
 		return nil
@@ -121,8 +124,17 @@ func (s *Server) handleFragments(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("ETag", entry.etag)
 	w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Vary: Accept-Encoding so caches don't mix gzipped + raw bodies
+	// for the same URL — same posture as handleAssets.
+	w.Header().Set("Vary", "Accept-Encoding")
 	if match := r.Header.Get("If-None-Match"); match == entry.etag {
 		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	if entry.gz != nil && acceptsGzip(r) {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(entry.gz)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
