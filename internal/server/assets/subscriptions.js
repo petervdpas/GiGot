@@ -14,6 +14,11 @@
                                // it (directly or via repo/account inheritance).
   let credentialsCache = [];
   let accountsCache = [];
+  // cardOpenState: per-token <details> open/close persistence across
+  // refreshes. Keyed by token. Without this, every refreshTokens()
+  // (including the ones triggered by tag picker onChange) would
+  // collapse every expanded card the admin opened.
+  const cardOpenState = Object.create(null);
   // tagsCatalogueCache holds every tag name in the catalogue. Used
   // by the picker dropdown so an admin can re-attach a tag they
   // just orphaned. The CHIP FILTER does NOT read from here — chips
@@ -257,9 +262,28 @@
       },
     });
 
-    const card = Admin.renderTokenCard(t, { titleHTML, subtitle, leftChips, actions });
-    installTagsSection(card, t);
-    installAbilitiesSection(card, t);
+    // The card body renders lazily on first open from the
+    // token-card-body fragment. Tags + abilities sections are
+    // page-specific (admin only), so they hook in via onBodyRendered
+    // — runs after the fragment paints, with `host` pointing at the
+    // freshly rendered body. .token-field exists by then so the
+    // insertBefore inside install*Section finds it.
+    const card = Admin.renderTokenCard(t, {
+      titleHTML, subtitle, leftChips, actions,
+      onBodyRendered: host => {
+        installTagsSection(host, t);
+        installAbilitiesSection(host, t);
+      },
+    });
+    // Restore + persist open/close state. The card is now a
+    // <details>; without persistence each refresh would slam every
+    // expanded card shut. Setting .open programmatically doesn't
+    // fire the toggle event, so we trigger the lazy render by hand.
+    if (cardOpenState[t.token]) {
+      card.open = true;
+      GG.lazy.refresh(card);
+    }
+    card.addEventListener('toggle', () => { cardOpenState[t.token] = card.open; });
     return card;
   }
 
@@ -437,6 +461,14 @@
             setCount(next.length);
             saveBtn.classList.add('hidden');
             status.textContent = 'saved';
+            // Repaint the outer card's summary ability badges so
+            // the at-a-glance state stays in sync with the saved
+            // abilities. Without this the summary would still show
+            // the pre-edit list until the next refresh.
+            // `card` here is the lazy-body div; .closest walks up to
+            // the outer <details class="info-card token-card">.
+            const outerCard = card.closest('details.info-card.token-card');
+            if (outerCard) Admin.syncTokenCardSummaryAbilities(outerCard, t);
           } catch (e) {
             status.textContent = e.message;
             status.className = 'error ability-status';

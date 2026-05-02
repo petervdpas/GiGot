@@ -292,16 +292,22 @@ form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 }
 
 .ability-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
+  /* Two-column grid: ability rows in column 1, the Save / status
+     foot in column 2 spanning all rows. With one ability, Save sits
+     inline to its right (the layout the user asked for). With many
+     abilities, Save floats vertically centred in the right column
+     instead of being squeezed onto a single row. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.45rem 0.6rem;
+  align-items: center;
   padding: 0.6rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   min-width: 260px;
   background: var(--field-bg);
 }
-.ability-picker .switch-row { display: flex; align-items: center; gap: 0.6rem; font-size: 0.9rem; flex-wrap: wrap; }
+.ability-picker > .switch-row { grid-column: 1; display: flex; align-items: center; gap: 0.6rem; font-size: 0.9rem; flex-wrap: wrap; }
 .ability-picker .switch-row .control-label { color: var(--text); cursor: pointer; }
 .ability-picker .switch-row.stale .control-label { color: var(--muted); font-style: italic; }
 .ability-hint { font-size: 0.75rem; color: var(--muted); }
@@ -469,29 +475,37 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+  /* Grid cells default to min-width: auto, which means they expand
+     to the content's min-content size. With long unbreakable chips
+     (BrainDamage, mirror) + a long subtitle email, this pushed the
+     card past the panel edge on narrow viewports. min-width: 0
+     lets the grid cell shrink to whatever the column allots; child
+     overflow handlers (ellipsis on title/subtitle, flex-wrap on
+     summary) absorb the content. */
+  min-width: 0;
+  max-width: 100%;
 }
 
-/* Repo cards on /admin/repositories are <details> elements so the
-   whole card collapses to its header (title + badges). The default
-   browser disclosure marker is hidden; a custom chevron in the
-   summary rotates 90° when the card opens. The card chrome inherits
-   from `.info-card` above; only the summary-specific bits live here. */
-details.info-card.repo-card > summary {
+/* Both repo cards (/admin/repositories) and token cards
+   (/admin/subscriptions, /user) are <details> elements so the
+   whole card collapses to its summary. They share every visual
+   trait (default marker hidden, custom chevron rotates on open,
+   summary wraps onto a second line on narrow viewports, hover
+   tints the title), so the rules below target both via the
+   shared `details.info-card` selector — no per-page duplication.
+   The chevron is wrapped in `.card-chevron` regardless of which
+   page; markup carries the same class on both. */
+details.info-card > summary {
   cursor: pointer;
   list-style: none;          /* Firefox / standards */
   user-select: none;
+  align-items: center;
+  flex-wrap: wrap;
 }
-details.info-card.repo-card > summary::-webkit-details-marker {
+details.info-card > summary::-webkit-details-marker {
   display: none;             /* WebKit */
 }
-.repo-card-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-  flex: 1;
-}
-.repo-card-chevron {
+.card-chevron {
   color: var(--muted);
   font-size: 0.7rem;
   flex-shrink: 0;
@@ -499,11 +513,37 @@ details.info-card.repo-card > summary::-webkit-details-marker {
   display: inline-block;
   width: 0.8rem;             /* fixed width so name doesn't shift on toggle */
 }
-details.info-card.repo-card[open] > summary .repo-card-chevron {
+details.info-card[open] > summary .card-chevron {
   transform: rotate(90deg);
 }
-details.info-card.repo-card > summary:hover .ic-title {
+details.info-card > summary:hover .ic-title {
   color: var(--accent);
+}
+
+/* Repo card summary nests its chevron inside a title-wrap div so
+   the chevron stays glued to the title and `.ic-chips` reads as a
+   single right-side flex child. Token cards put the chevron
+   directly in the summary (alongside the existing .ic-title-wrap),
+   which works because the wrap on the summary handles narrow
+   viewports the same way. */
+.repo-card-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1;
+}
+
+/* The body wrapper inside each token card is `.lazy-body` (GG.lazy
+   creates it inside <details> hosts). It stacks tags / abilities /
+   token field / actions vertically; the gap value drives how
+   much breathing room sits between, e.g., the abilities collapse
+   and the token field below it. */
+.info-card.token-card > .lazy-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding-top: 0.5rem;
 }
 .info-card .ic-header {
   display: flex;
@@ -798,16 +838,23 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
   padding-top: 0.4rem;
   padding-left: 1.1rem;
 }
-/* Foot: Save button first (left), then the status message right
- * next to it — "saved" reads as confirmation of the button you
- * just clicked, not something floating on the other side of the
- * row. Save is always present; status text is empty until
- * something happens. */
+/* Foot lives in the right column of the ability-picker grid,
+ * spanning every ability row. With one ability the layout reads
+ * "[toggle] [name] [hint] ──── [status] [Save]" on a single row;
+ * with multiple abilities Save floats vertically centred in the
+ * right column instead of being squeezed onto a single row.
+ * Save is always present (hidden until dirty); status text is
+ * empty until something happens. */
 .abilities-foot {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  align-self: center;
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  margin-top: 0.4rem;
+}
+.abilities-foot .ability-status {
+  font-size: 0.85rem;
 }
 
 .dest-row {

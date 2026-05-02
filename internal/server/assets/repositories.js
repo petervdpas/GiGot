@@ -77,7 +77,7 @@
     card.innerHTML =
       '<summary class="ic-header repo-card-head">' +
         '<div class="repo-card-title-wrap">' +
-          '<span class="repo-card-chevron" aria-hidden="true">▶</span>' +
+          '<span class="card-chevron" aria-hidden="true">▶</span>' +
           '<div class="ic-title">' + escapeHtml(r.name) + '</div>' +
         '</div>' +
         '<div class="ic-chips">' + badges.join('') + '</div>' +

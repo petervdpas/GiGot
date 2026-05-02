@@ -433,88 +433,131 @@
   // }
   function renderTokenCard(t, opts) {
     opts = opts || {};
-    const card = document.createElement('div');
-    card.className = 'info-card';
+    // Card is a <details> so the whole row collapses to its identity
+    // header (title + subtitle + repo chip + any header badges).
+    // Body renders on first open via GG.lazy from the
+    // `token-card-body` fragment. Page-level code (subscriptions.js)
+    // wires open/close persistence per-token so a refresh doesn't
+    // slam every expanded card shut.
+    const card = document.createElement('details');
+    card.className = 'info-card token-card';
     card.dataset.token = t.token;
+    card.dataset.lazyTpl = 'token-card-body';
 
-    // Subscription keys bind to exactly one repo. Older cards used
-    // to render a chip list; now it's a single chip (or a muted
-    // "(unbound)" fallback if the server somehow returned an empty
-    // string, which should not happen with the post-migration
-    // invariant). Legacy tokens without a bound repo fall through
-    // to the muted variant instead of crashing the card.
-    const repos = t.repo
+    // Repo chip + ability badges ride in the summary so the
+    // collapsed state still reads "whose key, which repo, what can
+    // it do" at a glance — important on /admin/subscriptions where
+    // many keys can be on the page at once. Admin edits to
+    // abilities re-paint the .cell-abilities-summary div in place
+    // (see syncTokenCardSummaryAbilities below).
+    const repoChip = t.repo
       ? '<span class="repo-chip">' + escapeHtml(t.repo) + '</span>'
       : '<span class="repo-chip none">(unbound)</span>';
-    const abilities = (t.abilities && t.abilities.length)
-      ? t.abilities.map(a => '<span class="ability-badge">' + escapeHtml(a) + '</span>').join('')
-      : '';
 
     const subtitleHTML = opts.subtitle ? '<div class="ic-subtitle">' + opts.subtitle + '</div>' : '';
     const leftChipsHTML = opts.leftChips || '';
-    // Right-side header chips show only context (legacy badge when
-    // applicable) — the repo chip lives in the body row below, so we
-    // don't duplicate the repo name in two places. An empty chips
-    // container still renders so the flex header preserves spacing.
-    const headerChipsHTML = leftChipsHTML;
-
     const actions = opts.actions || [];
-    const actionsHTML = actions.length
-      ? '<div class="ic-actions cell-actions">' +
-          actions.map((_, i) =>
-            '<button type="button" class="small ' + escapeHtml(actions[i].className || '') + '" data-idx="' + i + '">' +
-              escapeHtml(actions[i].label) +
-            '</button>'
-          ).join('') +
-        '</div>'
-      : '';
+    const abilitiesChipsHTML = renderAbilityBadges(t.abilities || []);
 
     // Token is a password-equivalent secret, so we render it masked
-     // by default and expose an eye toggle to reveal it for the
-     // seconds it takes to copy. Copy always uses the real value —
-     // it ignores the mask state so accidental over-sharing (paste
-     // the bullets) can't happen.
+    // by default and expose an eye toggle to reveal it for the
+    // seconds it takes to copy. Copy always uses the real value —
+    // it ignores the mask state so accidental over-sharing (paste
+    // the bullets) can't happen. Mask length scales with token
+    // length so the field width stays plausible.
     const masked = '•'.repeat(Math.min(48, Math.max(16, t.token.length)));
+
     card.innerHTML =
-      '<div class="ic-header">' +
+      '<summary class="ic-header token-card-head">' +
+        '<span class="card-chevron" aria-hidden="true">▶</span>' +
         '<div class="ic-title-wrap">' +
           '<div class="ic-title" title="' + escapeHtml(t.username || '') + '">' + (opts.titleHTML || escapeHtml(opts.title || '')) + '</div>' +
           subtitleHTML +
         '</div>' +
-        (headerChipsHTML ? '<div class="ic-chips">' + headerChipsHTML + '</div>' : '') +
-      '</div>' +
-      '<div class="ic-chips cell-repos">' + repos + '</div>' +
-      (abilities ? '<div class="ic-chips cell-abilities">' + abilities + '</div>' : '') +
-      '<div class="token-field" data-revealed="0">' +
-        '<code class="token-value token-masked">' + masked + '</code>' +
-        '<button type="button" class="icon-btn eye-btn" aria-label="Show key" title="Show key">' +
-          eyeIconSVG(false) +
-        '</button>' +
-        '<button type="button" class="copy-btn">Copy</button>' +
-      '</div>' +
-      actionsHTML;
+        '<div class="ic-chips">' +
+          repoChip +
+          '<span class="cell-abilities-summary">' + abilitiesChipsHTML + '</span>' +
+          leftChipsHTML +
+        '</div>' +
+      '</summary>';
 
-    const field = card.querySelector('.token-field');
-    const valueEl = field.querySelector('.token-value');
-    const eyeBtn = field.querySelector('.eye-btn');
-    eyeBtn.addEventListener('click', () => {
-      const revealed = field.dataset.revealed === '1';
-      const next = !revealed;
-      field.dataset.revealed = next ? '1' : '0';
-      valueEl.textContent = next ? t.token : masked;
-      valueEl.classList.toggle('token-masked', !next);
-      eyeBtn.setAttribute('aria-label', next ? 'Hide key' : 'Show key');
-      eyeBtn.setAttribute('title', next ? 'Hide key' : 'Show key');
-      eyeBtn.innerHTML = eyeIconSVG(next);
+    GG.lazy.bind(card, {
+      getData: () => ({
+        abilities: t.abilities || [],
+        abilities_hidden: (t.abilities && t.abilities.length) ? '' : 'hidden',
+        masked,
+        actions: actions.map((a, i) => ({
+          label: a.label,
+          class: a.className || '',
+          idx: String(i),
+        })),
+        actions_hidden: actions.length ? '' : 'hidden',
+      }),
+      onRendered: host => wireTokenCardBody(host, t, opts, masked),
     });
 
-    card.querySelector('.copy-btn').addEventListener('click', e => copyToClipboard(t.token, e.currentTarget));
-    for (const btn of card.querySelectorAll('.ic-actions button[data-idx]')) {
-      const idx = Number(btn.dataset.idx);
-      btn.addEventListener('click', () => actions[idx].onClick(card));
+    return card;
+  }
+
+  // wireTokenCardBody runs after the token-card-body fragment renders.
+  // Wires the eye toggle, copy button, and action button click
+  // handlers against the freshly rendered DOM, then hands off to the
+  // page-supplied onBodyRendered (used by subscriptions.js to inject
+  // the tags + abilities collapse sections via insertBefore against
+  // .token-field).
+  function wireTokenCardBody(host, t, opts, masked) {
+    const field = host.querySelector('.token-field');
+    if (field) {
+      const valueEl = field.querySelector('.token-value');
+      const eyeBtn = field.querySelector('.eye-btn');
+      if (valueEl && eyeBtn) {
+        eyeBtn.addEventListener('click', () => {
+          const revealed = field.dataset.revealed === '1';
+          const next = !revealed;
+          field.dataset.revealed = next ? '1' : '0';
+          valueEl.textContent = next ? t.token : masked;
+          valueEl.classList.toggle('token-masked', !next);
+          eyeBtn.setAttribute('aria-label', next ? 'Hide key' : 'Show key');
+          eyeBtn.setAttribute('title', next ? 'Hide key' : 'Show key');
+          eyeBtn.innerHTML = eyeIconSVG(next);
+        });
+      }
+      const copyBtn = field.querySelector('.copy-btn');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', e => copyToClipboard(t.token, e.currentTarget));
+      }
     }
 
-    return card;
+    const actions = opts.actions || [];
+    for (const btn of host.querySelectorAll('.ic-actions button[data-idx]')) {
+      const idx = Number(btn.dataset.idx);
+      btn.addEventListener('click', () => actions[idx].onClick(host));
+    }
+
+    if (opts.onBodyRendered) opts.onBodyRendered(host);
+  }
+
+  // renderAbilityBadges returns the HTML for a flat list of ability
+  // badges. Used in the token card summary so the at-a-glance state
+  // is visible without expanding the card. Empty list → empty string
+  // (the wrapping span is still rendered so syncTokenCardSummaryAbilities
+  // has a stable target to repaint into).
+  function renderAbilityBadges(abilities) {
+    if (!abilities || !abilities.length) return '';
+    return abilities
+      .map(a => '<span class="ability-badge">' + escapeHtml(a) + '</span>')
+      .join('');
+  }
+
+  // syncTokenCardSummaryAbilities repaints the summary's ability
+  // chips against the current `t.abilities`. Called by the admin
+  // abilities-collapse save handler so the summary stays in sync
+  // without a full card re-render (which would lose open state on
+  // both the card and its inner abilities collapse).
+  function syncTokenCardSummaryAbilities(card, t) {
+    const target = card.querySelector(':scope > summary .cell-abilities-summary');
+    if (!target) return;
+    target.innerHTML = renderAbilityBadges(t.abilities || []);
   }
 
   // eyeIconSVG returns the inline SVG for a show/hide toggle. Open
@@ -718,7 +761,7 @@
     api,
     escapeHtml, shortSha,
     accountLabel, accountLabelHTML, accountOption, resolveAccount, roleBadgeAttrs,
-    renderTokenCard,
+    renderTokenCard, syncTokenCardSummaryAbilities,
     initSidebar, guardSession,
     copyToClipboard,
   };
