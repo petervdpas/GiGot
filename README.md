@@ -61,6 +61,37 @@ is schema-aware publishing (records → Azure DevOps wiki, Confluence,
 etc.) which explicitly belongs in Formidable's WikiWonder plugin, not
 here. The items below do not overlap with Track B.
 
+Open work:
+
+- [ ] **Drop dead `roleBadgeClass` alias.** `assets/admin_common.js`
+      keeps `roleBadgeClass(role)` as a back-compat shim from before
+      the data-role refactor; no source caller uses it anymore.
+      Delete the function + its export.
+- [ ] **Don't full-rerender token cards on tag picker change.**
+      Today `refreshAfterTagChange` repaints the whole card grid,
+      which collapses every open `Abilities` section. Replace the
+      grid-level rerender with a card-local update that mutates the
+      tag pills + filter chips in place; only drop a card from view
+      if it falls out of the active filter, leaving the surviving
+      cards' collapse state intact.
+- [ ] **Honest framing for the bulk-revoke confirm phrase.** The
+      `revoke <tags>` phrase is deterministic, so it's anti-typo,
+      not anti-script. Update `docs/design/tags.md` §5.6 + §6.3 to
+      say so explicitly — the security boundary is the admin
+      session, not the phrase. Avoid suggesting the phrase
+      "prevents scripted callers" anywhere.
+- [ ] **Benchmark the chip-filter fetch path.** At ≤15 subs per team
+      it's free; at ~500 subs every chip toggle does an unfiltered
+      fetch + a filtered fetch. Measure end-to-end latency at 100 /
+      500 / 1000 subs and decide whether to (a) cache the
+      unfiltered list per session, (b) collapse to one fetch, or
+      (c) leave it. Either way, document the budget.
+- [ ] **Catalogue-noise nudge in the Tags page.** Auto-create on
+      picker means typos pile up. Either prompt before creating a
+      brand-new name from a picker (`"Create 'frontned'?"`) or
+      surface unused-tag count somewhere that nudges admins toward
+      `Remove unused` periodically. Pick one.
+
 Done and shipping:
 
 - [x] **Tags — slice 3 (design:
