@@ -125,6 +125,14 @@
       run();
       return;
     }
+    if (kind === 'manual') {
+      // No auto-binding. Caller drives renders via
+      // GG.lazy.refresh(host). Used when the visible "open" gesture
+      // lives on a sibling element (e.g. a toggle button outside
+      // the host) and the helper would otherwise wire the wrong
+      // listener.
+      return;
+    }
     if (kind === 'open' && host.tagName === 'DETAILS') {
       // <details>.toggle fires on both open and close; we only care
       // about open. addEventListener("toggle") fires per state

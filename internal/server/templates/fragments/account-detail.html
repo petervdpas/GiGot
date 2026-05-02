@@ -1,0 +1,23 @@
+<td colspan="5">
+  <table class="acct-detail-table">
+    <thead>
+      <tr>
+        <th>Password</th>
+        <th>Subscriptions</th>
+        <th>Created</th>
+        <th>Tags <span class="muted {{tag_count_hidden}}">({{tag_count}})</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="{{password_muted}}">{{password_label}}</span></td>
+        <td>
+          <a class="badge sub-badge {{subs_link_hidden}}" href="{{subs_url}}">{{subs_label}}</a>
+          <span class="muted {{subs_empty_hidden}}">—</span>
+        </td>
+        <td class="muted">{{created_at}}</td>
+        <td><div class="acct-tags-host"></div></td>
+      </tr>
+    </tbody>
+  </table>
+</td>

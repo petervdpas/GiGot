@@ -59,14 +59,6 @@
 
   function renderRow(a) {
     const tr = document.createElement('tr');
-    // Subscription cell: click-through to /admin/subscriptions filtered
-    // by this account. Zero → muted dash (nothing to click).
-    const subsCell = a.subscription_count > 0
-      ? '<a class="badge sub-badge" href="/admin/subscriptions?user=' +
-          encodeURIComponent(a.provider + ':' + a.identifier) + '">' +
-          a.subscription_count + ' key' + (a.subscription_count === 1 ? '' : 's') +
-        '</a>'
-      : '<span class="muted">—</span>';
     // Identifier rendering: OAuth subs can be 40+ chars of opaque
     // base64url and wrap the row into an unreadable vertical stack.
     // Truncate in the cell and expose the full value via `title` so
@@ -94,56 +86,77 @@
     // are identity-shaped (provider / identifier / display name /
     // role) — everything that's metadata about the account moves
     // here so the table stays scannable.
+    // The detail row is a GG.lazy host — its body is rendered from
+    // the `account-detail` fragment on first open. The toggle button
+    // outside the host drives the render via GG.lazy.refresh(),
+    // hence trigger="manual" so the helper doesn't bind its own
+    // click handler on the row itself.
     const detailTr = document.createElement('tr');
     detailTr.className = 'acct-detail-row';
     detailTr.style.display = 'none';
-    detailTr.innerHTML =
-      '<td colspan="5">' +
-        '<table class="acct-detail-table">' +
-          '<thead>' +
-            '<tr>' +
-              '<th>Password</th>' +
-              '<th>Subscriptions</th>' +
-              '<th>Created</th>' +
-              '<th>Tags' + (tagCount ? ' <span class="muted">(' + tagCount + ')</span>' : '') + '</th>' +
-            '</tr>' +
-          '</thead>' +
-          '<tbody>' +
-            '<tr>' +
-              '<td>' + (a.has_password ? 'yes' : '<span class="muted">dormant</span>') + '</td>' +
-              '<td>' + subsCell + '</td>' +
-              '<td class="muted">' + escapeHtml((a.created_at || '').slice(0, 10)) + '</td>' +
-              '<td><div class="acct-tags-host"></div></td>' +
-            '</tr>' +
-          '</tbody>' +
-        '</table>' +
-      '</td>';
+    detailTr.dataset.lazyTpl = 'account-detail';
+    detailTr.dataset.lazyTrigger = 'manual';
 
-    GG.tag_picker.mount(detailTr.querySelector('.acct-tags-host'), {
-      tags: a.tags || [],
-      allTags: tagsCatalogueCache,
-      onChange: async (next) => {
-        const resp = await api.setAccountTags(a.provider, a.identifier, next);
-        a.tags = resp.tags || [];
-        // Catalogue may have grown via auto-create; refresh the
-        // dropdown source so the next "+ add tag" sees the new name.
-        try {
-          const data = await api.listTags();
-          tagsCatalogueCache = (data.tags || []).map(t => t.name);
-        } catch { /* leave cache as-is */ }
-        // Re-evaluate the chip filter (prune stale + repaint chips +
-        // re-narrow the visible row list).
-        if (tagFilterCtl) tagFilterCtl.refresh();
+    GG.lazy.bind(detailTr, {
+      // getData shapes the JSON the fragment renders against.
+      // Conditional class+label pairs (password_muted /
+      // password_label, subs_link_hidden / subs_empty_hidden) are
+      // the workaround for the helper's deliberate lack of
+      // {{#if}} — see lazy.md §4.3.
+      getData: () => ({
+        password_muted: a.has_password ? '' : 'muted',
+        password_label: a.has_password ? 'yes' : 'dormant',
+        subs_url: a.subscription_count > 0
+          ? '/admin/subscriptions?user=' + encodeURIComponent(a.provider + ':' + a.identifier)
+          : '#',
+        subs_label: a.subscription_count > 0
+          ? a.subscription_count + ' key' + (a.subscription_count === 1 ? '' : 's')
+          : '',
+        subs_link_hidden:  a.subscription_count > 0 ? '' : 'hidden',
+        subs_empty_hidden: a.subscription_count > 0 ? 'hidden' : '',
+        created_at: (a.created_at || '').slice(0, 10),
+        tag_count: tagCount,
+        tag_count_hidden: tagCount ? '' : 'hidden',
+      }),
+      // onRendered re-mounts the tag picker against the freshly
+      // rendered .acct-tags-host. Fires on first open AND on every
+      // refresh after a tag change, so the picker always reflects
+      // the current state.
+      onRendered: host => {
+        const tagHost = host.querySelector('.acct-tags-host');
+        if (!tagHost) return;
+        GG.tag_picker.mount(tagHost, {
+          tags: a.tags || [],
+          allTags: tagsCatalogueCache,
+          onChange: async (next) => {
+            const resp = await api.setAccountTags(a.provider, a.identifier, next);
+            a.tags = resp.tags || [];
+            try {
+              const data = await api.listTags();
+              tagsCatalogueCache = (data.tags || []).map(t => t.name);
+            } catch { /* leave cache as-is */ }
+            if (tagFilterCtl) tagFilterCtl.refresh();
+          },
+        });
       },
     });
 
     const toggleBtn = tr.querySelector('.acct-row-toggle');
+    // First-render guard: refresh() runs the lazy template + onRendered
+    // exactly once on first open. Subsequent opens just unhide the
+    // already-rendered row, so the picker's local state survives
+    // the close→reopen toggle.
+    let lazyRendered = false;
     function applyOpen(open) {
       detailTr.style.display = open ? '' : 'none';
       toggleBtn.classList.toggle('open', open);
       toggleBtn.textContent = open ? '▼' : '▶';
       toggleBtn.setAttribute('aria-label', open ? 'Hide account detail' : 'Show account detail');
       acctOpenState[accountKey] = open;
+      if (open && !lazyRendered) {
+        GG.lazy.refresh(detailTr);
+        lazyRendered = true;
+      }
     }
     toggleBtn.addEventListener('click', () => applyOpen(!acctOpenState[accountKey]));
     if (acctOpenState[accountKey]) applyOpen(true);
