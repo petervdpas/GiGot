@@ -11,6 +11,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -25,13 +26,24 @@ import (
 )
 
 const (
-	srcDir  = "internal/server/assets"
-	dstDir  = "internal/server/assets-dist"
 	mode    = 0o644
 	dirMode = 0o755
 )
 
 func main() {
+	// Defaults match the //go:generate context (cwd is the directory
+	// containing the directive, so plain "assets" / "assets-dist"
+	// resolve correctly). Flags let `go run ./cmd/minify-assets` from
+	// any cwd work too — pass -src/-dst with whatever paths fit.
+	var (
+		srcDir = flag.String("src", "assets", "source directory (relative to cwd)")
+		dstDir = flag.String("dst", "assets-dist", "destination directory (relative to cwd)")
+	)
+	flag.Parse()
+
+	src := *srcDir
+	dst := *dstDir
+
 	m := minify.New()
 	m.AddFunc("text/css", css.Minify)
 	m.AddFunc("text/html", html.Minify)
@@ -41,26 +53,26 @@ func main() {
 	// Wipe and recreate dist so deleted source files don't leave
 	// stale copies behind. The directory is generated output — its
 	// only contents are whatever this command writes.
-	if err := os.RemoveAll(dstDir); err != nil {
+	if err := os.RemoveAll(dst); err != nil {
 		fatalf("clean dst: %v", err)
 	}
-	if err := os.MkdirAll(dstDir, dirMode); err != nil {
+	if err := os.MkdirAll(dst, dirMode); err != nil {
 		fatalf("create dst: %v", err)
 	}
 
 	var savings int64
-	err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if info.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel(srcDir, path)
+		rel, err := filepath.Rel(src, path)
 		if err != nil {
 			return err
 		}
-		out := filepath.Join(dstDir, rel)
+		out := filepath.Join(dst, rel)
 		if err := os.MkdirAll(filepath.Dir(out), dirMode); err != nil {
 			return err
 		}
