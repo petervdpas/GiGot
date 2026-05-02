@@ -63,13 +63,6 @@ here. The items below do not overlap with Track B.
 
 Open work:
 
-- [ ] **Mirror-destination section migration to GG.lazy.** It's the
-      last imperative section on a repo card. Three states (no
-      destination / view-existing / editor mode) plus sync / remove
-      / enabled-toggle actions, so it's a real refactor, not a
-      mechanical move. Either one fragment with class-toggle
-      states, or split into three fragments (no-dest / view / edit)
-      driven by a state-aware getData. Decide when there's time.
 - [ ] **Template inheritance for admin pages** (the third audit
       item from the DRY pass). Each admin page repeats ~17 lines
       of `<head>` boilerplate + identical `<body>` shell. Move
@@ -165,6 +158,31 @@ Done and shipping:
       (use delete + re-add per credential-vault.md §3) are not
       editable through this flow.
 
+- [x] **Mirror-destination section migrated to GG.lazy.** Last
+      imperative section on a repo card now rides three fragments
+      (`dest-empty.html`, `dest-view.html`, `dest-edit.html`) on
+      one `<details>` host. State machine in `repositories.js`
+      flips `data-lazy-tpl` between the three modes and calls
+      `GG.lazy.refresh(host)`; `getData` reads the per-repo
+      destination + `destEditMode` toggle to shape the right view
+      model per render. Sync block uses the class-toggle trick
+      (`*_hidden` on three sibling `<div class="dest-sync …">`
+      blocks) since the engine has no `{{#if}}`. Editor form rides
+      slice 2: `data-lazy-submit` + `data-lazy-submit-method`
+      switch between `POST /api/admin/repos/{repo}/destinations`
+      (create) and `PATCH /…/destinations/{id}` (edit);
+      `data-lazy-after="event:dest-saved"` lets the page refresh
+      its repo state on success; the form's `[data-lazy-msg]`
+      span paints submit errors automatically. Sync now / Remove /
+      enabled-toggle / Add / Edit / Cancel buttons stay imperative
+      because they're not form submits — single-action triggers
+      against existing API. The `lazy.js` helper got one tweak:
+      `tplName` is now read fresh from the host's dataset on each
+      render (was captured at bind time), so dynamic state
+      switching on a single host works without a rebind.
+      Mirror-destination is the second caller for slice 2's
+      `data-lazy-submit` pipeline, so the abstraction earns its
+      keep beyond the abilities collapse.
 - [x] **`GG.lazy` — slice 2 (design:
       [`lazy.md`](docs/design/lazy.md) §4.5, §8).** Submit
       pipeline + after-action behaviour. Adds

@@ -167,7 +167,15 @@ button.rowmenu-item.danger:hover {
 
 .error { color: #f85149; font-size: 0.9rem; margin-top: 0.5rem; }
 .success { color: #3fb950; font-size: 0.9rem; margin-top: 0.5rem; }
-.hidden { display: none; }
+/* `.hidden` is the project's universal "make this go away" utility.
+   Used as a class-toggle when a fragment renders both the empty and
+   non-empty branches and one of them needs to disappear. Marked
+   !important because component-level `display: flex/grid` rules at
+   the same specificity but later in source order would otherwise
+   win — the same trap that previously forced inline-style fallbacks
+   in subscriptions.js and a per-class `.tag-filter-actions.hidden`
+   override in tags.css. The utility should always win. */
+.hidden { display: none !important; }
 
 form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 

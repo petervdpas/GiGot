@@ -196,10 +196,7 @@
     );
     const scoped = usernameEl ? usernameEl.value : '';
     const any = relevantAbilities(scoped).length > 0;
-    // Toggle via inline style (not .hidden) because the drawer-form
-    // grid layout has higher specificity than .hidden's display:none
-    // and we'd lose to it. style attribute beats both.
-    wrap.style.display = any ? '' : 'none';
+    wrap.classList.toggle('hidden', !any);
     if (any) renderAbilityPicker(picker, [], scoped);
   }
 

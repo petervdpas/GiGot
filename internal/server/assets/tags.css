@@ -304,12 +304,6 @@
   padding-top: 0.4rem;
   border-top: 1px dashed var(--line);
 }
-/* `.hidden` is the global "display: none" toggle in admin.css; without
-   this override the more-specific `.tag-filter-actions { display: flex }`
-   rule would defeat it whenever both classes are on the same node. */
-.tag-filter-actions.hidden {
-  display: none;
-}
 .tag-filter-actions .btn-revoke-by-tag {
   /* Reuse global .danger button styling — no override here. */
 }

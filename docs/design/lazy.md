@@ -1,6 +1,8 @@
 # GG.lazy
 
 Status: **slice 1 + 2 + opportunistic migrations shipped 2026-05-02.**
+Mirror-destination section migrated to three-fragment state machine
+on the same date (second `data-lazy-submit` caller).
 Generic `data-*`-attribute-driven render helper for the admin UI.
 Replaces per-page imperative DOM glue (`querySelector` +
 `addEventListener` setups that build the same shape in three places)
@@ -19,6 +21,10 @@ Real-world fragments shipped to date (in
 - `create-account.html` / `create-credential.html` /
   `create-repository.html` / `create-tag.html` / `edit-credential.html` /
   `issue-subscription.html` / `rename-tag.html` — drawer form bodies
+- `dest-empty.html` / `dest-view.html` / `dest-edit.html` —
+  three modes of the mirror-destination section on repo cards
+  (state-machine swaps `data-lazy-tpl` on one `<details>` host;
+  the editor form is the second caller of `data-lazy-submit`)
 - `repo-card-body.html` — repository card details body
 - `repo-subscriptions.html` — repo card's nested subs collapse
 - `token-card-body.html` — admin subscription card body

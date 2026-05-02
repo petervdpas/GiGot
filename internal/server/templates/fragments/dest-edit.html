@@ -1,0 +1,29 @@
+<div class="ic-section-head">
+  <span class="ic-section-title">{{title}}</span>
+</div>
+<form class="dest-form">
+  <label class="dest-field">
+    <span class="stat-label">URL</span>
+    <input type="text" name="url" value="{{url}}" placeholder="https://github.com/org/repo.git" required>
+  </label>
+  <div class="dest-field">
+    <span class="stat-label">Credential</span>
+    <span class="cred-select-host"></span>
+  </div>
+  <div class="dest-privacy {{privacy_hidden}}">
+    <div class="dest-privacy-warn">
+      <strong>Privacy notice.</strong>
+      Adding a mirror destination turns off GiGot's sealed-body advantage for this repo.
+      Git pushes plaintext commits to the destination. Anyone with access to <code>{{repo_short}}</code> at that remote will be able to read every file and every past version of every file in this repository.
+    </div>
+    <div class="switch-row">
+      <span class="privacy-toggle-host"></span>
+      <span class="control-label">I understand the contents of this repo will be readable at the destination.</span>
+    </div>
+  </div>
+  <div class="dest-actions">
+    <button type="submit" class="small">{{submit_label}}</button>
+    <button type="button" class="small secondary cancel-btn">Cancel</button>
+    <span class="dest-err error" data-lazy-msg></span>
+  </div>
+</form>

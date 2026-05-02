@@ -188,8 +188,7 @@
   // `getData` (programmatic) or `data-lazy-src` (declarative URL).
   function bind(host, opts) {
     opts = opts || {};
-    const tplName = host.dataset.lazyTpl;
-    if (!tplName) throw new Error('lazy: data-lazy-tpl missing');
+    if (!host.dataset.lazyTpl) throw new Error('lazy: data-lazy-tpl missing');
     const src = host.dataset.lazySrc;
     if (src && opts.getData) {
       throw new Error('lazy: cannot mix data-lazy-src with getData');
@@ -205,10 +204,16 @@
 
     // renderInto paints `data` into the host using the cached
     // fragment. Shared between the read path (run) and the
-    // post-submit `render` after-action. After painting, wire any
-    // submit triggers ([data-lazy-action="submit"] + nested forms)
-    // so they're live for the freshly rendered DOM.
+    // post-submit `render` after-action. tplName is read fresh from
+    // the host's dataset on every call so a page can swap fragments
+    // by mutating `data-lazy-tpl` and calling GG.lazy.refresh — the
+    // mirror-destination section uses this for empty/view/edit
+    // state switching on one host. After painting, wire any submit
+    // triggers ([data-lazy-action="submit"] + nested forms) so
+    // they're live for the freshly rendered DOM.
     async function renderInto(data) {
+      const tplName = host.dataset.lazyTpl;
+      if (!tplName) throw new Error('lazy: data-lazy-tpl missing at render time');
       const tpl = await fetchFragment(tplName);
       const html = render(tpl, data || {});
       const target = host.tagName === 'DETAILS'

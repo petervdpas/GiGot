@@ -1,0 +1,29 @@
+<div class="dest-row">
+  <div class="dest-url"><span class="stat-label">URL</span> <code>{{url}}</code></div>
+  <div class="dest-meta">
+    <span class="stat-label">Credential</span>
+    <span class="cred-pill {{cred_missing}}">{{cred_label}}</span>
+    <button type="button" class="badge {{enabled_class}} enabled-toggle" title="{{enabled_title}}">{{enabled_label}}</button>
+  </div>
+  <div class="dest-sync dest-sync-never {{never_hidden}}">
+    <span class="stat-label">Last sync</span>
+    <span class="muted">never</span>
+  </div>
+  <div class="dest-sync dest-sync-ok {{ok_hidden}}">
+    <span class="stat-label">Last sync</span>
+    <span class="badge formidable">ok</span>
+    <span class="muted">{{when}}</span>
+  </div>
+  <div class="dest-sync dest-sync-err {{err_hidden}}">
+    <span class="stat-label">Last sync</span>
+    <span class="badge warn">error</span>
+    <span class="muted">{{when}}</span>
+    <pre class="dest-sync-err-body {{err_body_hidden}}">{{err_text}}</pre>
+  </div>
+  <div class="dest-actions">
+    <button type="button" class="small sync-dest-btn">Sync now</button>
+    <button type="button" class="small secondary edit-dest-btn">Edit</button>
+    <button type="button" class="small danger remove-dest-btn">Remove</button>
+    <span class="dest-sync-msg muted"></span>
+  </div>
+</div>

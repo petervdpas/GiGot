@@ -243,78 +243,204 @@
   // Without it, refreshRepos() collapses any section the user had
   // expanded — re-rendering blows away the <details open> attribute.
   const destOpenState = Object.create(null);
+  // destEditMode flips a card into the editor pane while the user is
+  // adding or changing a destination. Cleared on save (the
+  // dest-saved event handler) and on cancel; refreshRepos() rebuilds
+  // the card from scratch and reads this map to decide which
+  // fragment to render. Keyed by repo name; absence = no edit.
+  const destEditMode = Object.create(null);
+
+  // shortenUrl produces a compact summary hint like "github.com/org/repo"
+  // so the collapsed summary is informative at a glance without wrapping.
+  function shortenUrl(url) {
+    if (!url) return '';
+    try {
+      const u = new URL(url);
+      return u.host + u.pathname.replace(/\.git$/, '');
+    } catch {
+      return url;
+    }
+  }
+
+  function formatSyncTime(iso) {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso;
+      return d.toLocaleString();
+    } catch (_) { return iso; }
+  }
+
+  // destMode picks the fragment for the section's current state.
+  // Edit mode wins when set even if a destination exists (the user
+  // clicked Edit on an existing dest); otherwise an existing dest
+  // shows the view, and absence shows the empty/Add prompt.
+  function destMode(repoName) {
+    if (destEditMode[repoName]) return 'edit';
+    return destinationsByRepo[repoName] ? 'view' : 'empty';
+  }
+
+  // destViewModel returns the data the dest-* fragment renders
+  // against. Each mode has its own view-model shape; the empty mode
+  // doesn't need data, but returning {} keeps the GG.lazy.bind
+  // contract simple. The class-toggle trick (`*_hidden`) covers the
+  // "render only one of three sub-blocks" gates inside dest-view's
+  // sync block, since the templating engine doesn't carry {{#if}}.
+  function destViewModel(repoName) {
+    const mode = destMode(repoName);
+    if (mode === 'empty') return {};
+    if (mode === 'view') {
+      const d = destinationsByRepo[repoName];
+      const status = d.last_sync_status || '';
+      const when = d.last_sync_at ? formatSyncTime(d.last_sync_at) : '';
+      const errText = d.last_sync_error ? d.last_sync_error.slice(0, 400) : '';
+      return {
+        url:           d.url || '',
+        cred_label:    d.credential_name ? d.credential_name : '(no credential)',
+        cred_missing:  d.credential_name ? '' : 'missing',
+        enabled_class: d.enabled ? 'formidable' : 'empty',
+        enabled_label: d.enabled ? 'enabled' : 'disabled',
+        enabled_title: d.enabled
+          ? 'Click to disable automatic mirror-sync'
+          : 'Click to enable automatic mirror-sync',
+        when,
+        err_text:        errText,
+        err_body_hidden: errText ? '' : 'hidden',
+        never_hidden:  status === ''   ? '' : 'hidden',
+        ok_hidden:     status === 'ok' ? '' : 'hidden',
+        err_hidden:    (status && status !== 'ok') ? '' : 'hidden',
+      };
+    }
+    // edit
+    const existing = destinationsByRepo[repoName] || null;
+    return {
+      title:          existing ? 'Edit mirror destination' : 'Add mirror destination',
+      url:            existing ? existing.url : '',
+      submit_label:   existing ? 'Save' : 'Add',
+      privacy_hidden: existing ? 'hidden' : '',
+      // Only the first 40 chars of the repo name go into the privacy
+      // notice. Long names elide with the original here-doc behaviour.
+      repo_short:     repoName.slice(0, 40),
+    };
+  }
+
+  // applyDestSubmit sets/clears the data-lazy-submit family of attrs
+  // on the host based on mode. POST in edit-mode-with-no-existing
+  // (create), PATCH in edit-mode-with-existing. Other modes drop the
+  // attrs so the helper doesn't try to wire submit triggers against
+  // markup that doesn't have a form.
+  function applyDestSubmit(host, repoName) {
+    const mode = destMode(repoName);
+    if (mode !== 'edit') {
+      delete host.dataset.lazySubmit;
+      delete host.dataset.lazySubmitMethod;
+      delete host.dataset.lazyAfter;
+      return;
+    }
+    const existing = destinationsByRepo[repoName] || null;
+    const base = '/api/admin/repos/' + encodeURIComponent(repoName) + '/destinations';
+    if (existing) {
+      host.dataset.lazySubmit = base + '/' + encodeURIComponent(existing.id);
+      host.dataset.lazySubmitMethod = 'PATCH';
+    } else {
+      host.dataset.lazySubmit = base;
+      host.dataset.lazySubmitMethod = 'POST';
+    }
+    host.dataset.lazyAfter = 'event:dest-saved';
+  }
+
+  // setDestMode flips the per-repo edit toggle and re-renders the
+  // section in place. Going INTO edit mode keeps the section open
+  // so the form is immediately visible after Add / Edit; going OUT
+  // (cancel) lands back on view or empty.
+  function setDestMode(host, repoName, edit) {
+    if (edit) destEditMode[repoName] = true;
+    else delete destEditMode[repoName];
+    host.dataset.lazyTpl = 'dest-' + destMode(repoName);
+    applyDestSubmit(host, repoName);
+    GG.lazy.refresh(host);
+  }
 
   function renderDestinationSection(container, repoName) {
+    // Entire section is one <details> disclosure. Summary carries
+    // the title + a compact status hint (URL host or "not mirrored")
+    // so the user can decide whether to expand without opening every
+    // repo. Body lives in a single fragment whose name swaps as the
+    // user moves through empty/view/edit.
     const dest = destinationsByRepo[repoName] || null;
-
-    // Entire section is one <details> disclosure. Summary carries the
-    // title + a compact status hint (URL host or "— add one") so the
-    // user can decide whether to expand without opening every repo.
-    // Actions and the editor live in the body; the summary itself is
-    // noise-free.
     const statusHint = dest
       ? '<span class="ic-summary-hint mono">' + escapeHtml(shortenUrl(dest.url)) + '</span>'
       : '<span class="ic-summary-hint muted">not mirrored</span>';
-    const open = destOpenState[repoName] ? ' open' : '';
+    const openAttr = destOpenState[repoName] ? ' open' : '';
 
     container.innerHTML =
-      '<details class="ic-collapse dest-details"' + open + '>' +
+      '<details class="ic-collapse dest-details"' + openAttr + '>' +
         '<summary class="ic-section-head">' +
           '<span class="ic-section-title">Mirror destination</span>' +
           statusHint +
         '</summary>' +
-        '<div class="ic-collapse-body dest-body"></div>' +
       '</details>';
 
     const details = container.querySelector('.dest-details');
+    details.dataset.repo = repoName;
+    details.dataset.lazyTpl = 'dest-' + destMode(repoName);
+    applyDestSubmit(details, repoName);
     details.addEventListener('toggle', () => { destOpenState[repoName] = details.open; });
 
-    const body = container.querySelector('.dest-body');
+    // dest-saved fires from GG.lazy after a successful POST/PATCH
+    // (per data-lazy-after="event:dest-saved" set in applyDestSubmit).
+    // Clear edit mode so the next render lands on view, then refresh
+    // the page-level state so the new URL / credential / enabled
+    // flags propagate to the summary hint and the chip filter row.
+    details.addEventListener('dest-saved', () => {
+      delete destEditMode[repoName];
+      refreshRepos();
+    });
 
-    if (!dest) {
-      body.innerHTML =
-        '<div class="dest-empty-row">' +
-          '<span class="muted">Not mirrored. Add a destination to push this repo to an external git remote.</span>' +
-          '<button type="button" class="small secondary add-dest-btn">+ Add destination</button>' +
-        '</div>';
-      body.querySelector('.add-dest-btn').addEventListener('click', () => {
-        // Editor replaces the whole container — re-open when we come
-        // back to this view so the user doesn't have to click twice.
+    GG.lazy.bind(details, {
+      getData: () => destViewModel(repoName),
+      onRendered: host => wireDestState(host, container, repoName),
+    });
+
+    if (destOpenState[repoName]) GG.lazy.refresh(details);
+  }
+
+  // wireDestState attaches imperative behaviours that aren't carried
+  // by data-lazy-submit — the buttons that don't post a form
+  // (Sync now, Remove, enabled toggle, Add / Edit / Cancel) and the
+  // GG.select / GG.toggle_switch placeholders inside the editor.
+  // Called by GG.lazy after every render of the dest fragment, so
+  // the wiring matches the just-rendered DOM (no stale references
+  // from a previous mode).
+  function wireDestState(host, container, repoName) {
+    const mode = destMode(repoName);
+    if (mode === 'empty') {
+      const addBtn = host.querySelector('.add-dest-btn');
+      if (addBtn) addBtn.addEventListener('click', () => {
         destOpenState[repoName] = true;
-        renderDestinationEditor(container, repoName, null);
+        setDestMode(host, repoName, true);
       });
       return;
     }
+    if (mode === 'view') {
+      wireDestView(host, repoName);
+      return;
+    }
+    wireDestEdit(host, container, repoName);
+  }
 
-    const credPill = dest.credential_name
-      ? '<span class="cred-pill">' + escapeHtml(dest.credential_name) + '</span>'
-      : '<span class="cred-pill missing">(no credential)</span>';
-    // Enabled/disabled is a click-to-toggle button on the display row —
-    // pause/resume is a management gesture on an existing destination,
-    // not a field on the create form.
-    const enabledBadge = dest.enabled
-      ? '<button type="button" class="badge formidable enabled-toggle" title="Click to disable automatic mirror-sync">enabled</button>'
-      : '<button type="button" class="badge empty enabled-toggle" title="Click to enable automatic mirror-sync">disabled</button>';
-    body.innerHTML =
-      '<div class="dest-row">' +
-        '<div class="dest-url"><span class="stat-label">URL</span> <code>' + escapeHtml(dest.url) + '</code></div>' +
-        '<div class="dest-meta">' +
-          '<span class="stat-label">Credential</span> ' + credPill + ' ' + enabledBadge +
-        '</div>' +
-        renderDestSyncBlock(dest) +
-        '<div class="dest-actions">' +
-          '<button type="button" class="small sync-dest-btn">Sync now</button>' +
-          '<button type="button" class="small secondary edit-dest-btn">Edit</button>' +
-          '<button type="button" class="small danger remove-dest-btn">Remove</button>' +
-          '<span class="dest-sync-msg muted"></span>' +
-        '</div>' +
-      '</div>';
+  function wireDestView(host, repoName) {
+    const dest = destinationsByRepo[repoName];
+    if (!dest) return;
 
-    container.querySelector('.edit-dest-btn').addEventListener('click', () => {
+    const editBtn = host.querySelector('.edit-dest-btn');
+    if (editBtn) editBtn.addEventListener('click', () => {
       destOpenState[repoName] = true;
-      renderDestinationEditor(container, repoName, dest);
+      setDestMode(host, repoName, true);
     });
-    container.querySelector('.remove-dest-btn').addEventListener('click', async () => {
+
+    const removeBtn = host.querySelector('.remove-dest-btn');
+    if (removeBtn) removeBtn.addEventListener('click', async () => {
       const ok = await GG.dialog.confirm({
         title: 'Remove mirror destination',
         message: 'Remove mirror destination from "' + repoName + '"?',
@@ -329,25 +455,30 @@
         await GG.dialog.alert('Remove failed', e.message);
       }
     });
-    const syncBtn = container.querySelector('.sync-dest-btn');
-    const syncMsg = container.querySelector('.dest-sync-msg');
-    syncBtn.addEventListener('click', async () => {
-      syncBtn.disabled = true;
-      syncMsg.textContent = 'pushing…';
-      syncMsg.className = 'dest-sync-msg muted';
-      try {
-        const updated = await api.syncDestination(repoName, dest.id);
-        destinationsByRepo[repoName] = updated;
-        renderDestinationSection(container, repoName);
-      } catch (e) {
-        syncBtn.disabled = false;
-        syncMsg.textContent = e.message;
-        syncMsg.className = 'dest-sync-msg error';
-      }
-    });
 
-    const toggleBtn = container.querySelector('.enabled-toggle');
-    toggleBtn.addEventListener('click', async () => {
+    const syncBtn = host.querySelector('.sync-dest-btn');
+    const syncMsg = host.querySelector('.dest-sync-msg');
+    if (syncBtn && syncMsg) {
+      syncBtn.addEventListener('click', async () => {
+        syncBtn.disabled = true;
+        syncMsg.textContent = 'pushing…';
+        syncMsg.className = 'dest-sync-msg muted';
+        try {
+          const updated = await api.syncDestination(repoName, dest.id);
+          destinationsByRepo[repoName] = updated;
+          // Re-render the same host with updated data; no full
+          // refreshRepos so other cards stay untouched.
+          GG.lazy.refresh(host);
+        } catch (e) {
+          syncBtn.disabled = false;
+          syncMsg.textContent = e.message;
+          syncMsg.className = 'dest-sync-msg error';
+        }
+      });
+    }
+
+    const toggleBtn = host.querySelector('.enabled-toggle');
+    if (toggleBtn) toggleBtn.addEventListener('click', async () => {
       toggleBtn.disabled = true;
       try {
         await api.updateDestination(repoName, dest.id, { enabled: !dest.enabled });
@@ -359,118 +490,44 @@
     });
   }
 
-  // shortenUrl produces a compact summary hint like "github.com/org/repo"
-  // so the collapsed summary is informative at a glance without wrapping.
-  function shortenUrl(url) {
-    if (!url) return '';
-    try {
-      const u = new URL(url);
-      return u.host + u.pathname.replace(/\.git$/, '');
-    } catch {
-      return url;
-    }
-  }
+  function wireDestEdit(host, container, repoName) {
+    const existing = destinationsByRepo[repoName] || null;
 
-  function renderDestSyncBlock(dest) {
-    if (!dest.last_sync_status) {
-      return '<div class="dest-sync dest-sync-never"><span class="stat-label">Last sync</span> <span class="muted">never</span></div>';
+    // Mount the credential select into its placeholder span. The
+    // hidden input that GG.select projects has name="credential_name"
+    // so GG.lazy.submit's [name] sweep picks it up automatically.
+    const credHost = host.querySelector('.cred-select-host');
+    if (credHost) {
+      const credSelVal = existing ? (existing.credential_name || '') : '';
+      const credOptions = credentialsCache.length === 0
+        ? [{ value: '', label: '(no credentials in the vault. Add one first)', disabled: true }]
+        : [{ value: '', label: 'Select a credential…' }]
+            .concat(credentialsCache.map(c => ({ value: c.name, label: c.name })));
+      credHost.innerHTML = GG.select.html({
+        name: 'credential_name',
+        value: credSelVal,
+        placeholder: 'Select a credential…',
+        options: credOptions,
+      });
+      GG.select.initAll(credHost);
     }
-    const when = dest.last_sync_at ? formatSyncTime(dest.last_sync_at) : '';
-    if (dest.last_sync_status === 'ok') {
-      return '<div class="dest-sync dest-sync-ok">' +
-        '<span class="stat-label">Last sync</span> ' +
-        '<span class="badge formidable">ok</span> ' +
-        '<span class="muted">' + escapeHtml(when) + '</span>' +
-        '</div>';
+
+    // Privacy ack toggle is create-only (the privacy block hides
+    // entirely on edit via privacy_hidden). The toggle's checkbox
+    // has name="privacy_ack" so GG.lazy.submit collects it as part
+    // of the body; the server validates the field on POST.
+    const privacyHost = host.querySelector('.privacy-toggle-host');
+    if (privacyHost) {
+      privacyHost.innerHTML = GG.toggle_switch.html({
+        name: 'privacy_ack',
+        required: true,
+        ariaLabel: 'Acknowledge destination privacy notice',
+      });
     }
-    const errText = dest.last_sync_error ? escapeHtml(dest.last_sync_error).slice(0, 400) : '';
-    return '<div class="dest-sync dest-sync-err">' +
-      '<span class="stat-label">Last sync</span> ' +
-      '<span class="badge warn">error</span> ' +
-      '<span class="muted">' + escapeHtml(when) + '</span>' +
-      (errText ? '<pre class="dest-sync-err-body">' + errText + '</pre>' : '') +
-      '</div>';
-  }
 
-  function formatSyncTime(iso) {
-    if (!iso) return '';
-    try {
-      const d = new Date(iso);
-      if (isNaN(d.getTime())) return iso;
-      return d.toLocaleString();
-    } catch (_) { return iso; }
-  }
-
-  function renderDestinationEditor(container, repoName, existing) {
-    const isEdit = !!existing;
-    const credSelVal = existing ? (existing.credential_name || '') : '';
-    const credOptions = credentialsCache.length === 0
-      ? [{ value: '', label: '(no credentials in the vault. Add one first)', disabled: true }]
-      : [{ value: '', label: 'Select a credential…' }]
-          .concat(credentialsCache.map(c => ({ value: c.name, label: c.name })));
-    const credSelHtml = GG.select.html({
-      name: 'credential_name',
-      value: credSelVal,
-      placeholder: 'Select a credential…',
-      options: credOptions,
-    });
-    const urlVal = existing ? escapeHtml(existing.url) : '';
-    // Privacy consent per remote-sync.md §3.7: required on every new
-    // destination. Edits skip the re-prompt — the admin already
-    // consented when it was created.
-    const privacyBlock = isEdit ? '' :
-      '<div class="dest-privacy">' +
-        '<div class="dest-privacy-warn">' +
-          '<strong>Privacy notice.</strong> ' +
-          'Adding a mirror destination turns off GiGot\'s sealed-body advantage for this repo. ' +
-          'Git pushes plaintext commits to the destination. Anyone with access to <code>' + escapeHtml(repoName.slice(0, 40)) + '</code> at that remote will be able to read every file and every past version of every file in this repository.' +
-        '</div>' +
-        '<div class="switch-row">' +
-          GG.toggle_switch.html({ name: 'privacy_ack', required: true, ariaLabel: 'Acknowledge destination privacy notice' }) +
-          '<span class="control-label">I understand the contents of this repo will be readable at the destination.</span>' +
-        '</div>' +
-      '</div>';
-    container.innerHTML =
-      '<div class="ic-section-head">' +
-        '<span class="ic-section-title">' + (isEdit ? 'Edit mirror destination' : 'Add mirror destination') + '</span>' +
-      '</div>' +
-      '<form class="dest-form">' +
-        '<label class="dest-field"><span class="stat-label">URL</span>' +
-          '<input type="text" name="url" value="' + urlVal + '" placeholder="https://github.com/org/repo.git" required>' +
-        '</label>' +
-        '<div class="dest-field"><span class="stat-label">Credential</span>' +
-          credSelHtml +
-        '</div>' +
-        privacyBlock +
-        '<div class="dest-actions">' +
-          '<button type="submit" class="small">' + (isEdit ? 'Save' : 'Add') + '</button>' +
-          '<button type="button" class="small secondary cancel-btn">Cancel</button>' +
-          '<span class="dest-err error"></span>' +
-        '</div>' +
-      '</form>';
-    GG.select.initAll(container);
-    const form = container.querySelector('.dest-form');
-    const err = form.querySelector('.dest-err');
-    form.querySelector('.cancel-btn').addEventListener('click', () => {
-      renderDestinationSection(container, repoName);
-    });
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      err.textContent = '';
-      const body = {
-        url: form.url.value.trim(),
-        credential_name: form.credential_name.value,
-      };
-      try {
-        if (isEdit) {
-          await api.updateDestination(repoName, existing.id, body);
-        } else {
-          await api.createDestination(repoName, body);
-        }
-        await refreshRepos();
-      } catch (ex) {
-        err.textContent = ex.message;
-      }
+    const cancelBtn = host.querySelector('.cancel-btn');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => {
+      setDestMode(host, repoName, false);
     });
   }
 
