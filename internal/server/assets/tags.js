@@ -5,6 +5,13 @@
 (function () {
   const { api, escapeHtml, initSidebar, guardSession } = window.Admin;
 
+  // Page-level state. tagsCache is the full catalogue; filterCtl
+  // narrows it via free-text search across name + creator across
+  // refreshes. The filter input value lives in `?q=` so deep-links
+  // and copy-pasted URLs hydrate the search on load.
+  let tagsCache = [];
+  let filterCtl = null;
+
   function formatWhen(ts) {
     if (!ts) return '';
     try { return new Date(ts).toLocaleDateString(); } catch { return ts; }
@@ -30,86 +37,109 @@
     }).map(t => t.name);
   }
 
+  // renderRow builds one catalogue <tr>. Extracted so the
+  // GG.text_filter renderRows callback can render any filtered
+  // subset (the substring search hides rows whose name + creator
+  // don't include the query).
+  function renderRow(t) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td data-label="Name"><span class="tag-pill" data-tag-id="' + escapeHtml(t.id) + '">' + escapeHtml(t.name) + '</span></td>' +
+      '<td data-label="Repos">' + usagePill('repos', t.usage.repos) + '</td>' +
+      '<td data-label="Subs">' + usagePill('subs', t.usage.subscriptions) + '</td>' +
+      '<td data-label="Accounts">' + usagePill('accounts', t.usage.accounts) + '</td>' +
+      '<td data-label="Created" class="muted">' + escapeHtml(formatWhen(t.created_at)) + '</td>' +
+      '<td data-label="By" class="muted">' + escapeHtml(t.created_by || '') + '</td>' +
+      '<td class="row-actions"></td>';
+
+    // Rename opens the rename-tag drawer pre-filled with the
+    // current name. The target's id + name ride on the drawer's
+    // own dataset so the bindForm config (mounted once on boot)
+    // can read which tag the open submit applies to without
+    // closing over a per-row reference.
+    function renameTag() {
+      const drawer = document.querySelector('.drawer[data-drawer-name="rename-tag"]');
+      if (!drawer) return;
+      drawer.dataset.tagId = t.id;
+      drawer.dataset.tagName = t.name;
+      GG.drawer.open('rename-tag');
+    }
+
+    async function deleteTag() {
+      // Cascade-delete is the design-doc default (§11 Q1) — make
+      // the blast radius visible before the admin commits, since
+      // every assignment row referencing this tag goes with it.
+      const total = (t.usage.repos || 0) + (t.usage.subscriptions || 0) + (t.usage.accounts || 0);
+      let message = 'Delete tag "' + t.name + '"?';
+      if (total > 0) {
+        const parts = [];
+        if (t.usage.repos)         parts.push(t.usage.repos + ' repo' + (t.usage.repos === 1 ? '' : 's'));
+        if (t.usage.subscriptions) parts.push(t.usage.subscriptions + ' subscription' + (t.usage.subscriptions === 1 ? '' : 's'));
+        if (t.usage.accounts)      parts.push(t.usage.accounts + ' account' + (t.usage.accounts === 1 ? '' : 's'));
+        message += '\n\nThis will also remove the tag from ' + parts.join(', ') + '.';
+      }
+      const ok = await GG.dialog.confirm({
+        title: 'Delete tag',
+        message,
+        okText: 'Delete',
+        dangerOk: true,
+      });
+      if (!ok) return;
+      try {
+        await api.deleteTag(t.id);
+        await refresh();
+      } catch (e) {
+        await GG.dialog.alert('Delete failed', e.message);
+      }
+    }
+
+    GG.row_menu.attach(tr.querySelector('.row-actions'), [
+      { label: 'Rename', onClick: renameTag },
+      { label: 'Delete', onClick: deleteTag, danger: true },
+    ]);
+    return tr;
+  }
+
   async function refresh() {
     const data = await api.listTags();
-    document.getElementById('tag-count').textContent = data.count;
+    tagsCache = data.tags || [];
     // The "Remove unused" button is enabled iff at least one
     // catalogue row has zero references; otherwise click would do
     // nothing, so the button reflects that as a disabled state.
     const sweepBtn = document.getElementById('btn-sweep-unused');
     if (sweepBtn) {
-      const unused = unusedTagNames(data.tags);
+      const unused = unusedTagNames(tagsCache);
       sweepBtn.disabled = unused.length === 0;
       sweepBtn.title = unused.length === 0
         ? 'No unused tags. Every catalogue row has at least one assignment.'
         : 'Remove ' + unused.length + ' tag' + (unused.length === 1 ? '' : 's') + ' with no assignments';
       sweepBtn._unused = unused;
     }
-    const tbody = document.getElementById('tag-rows');
-    tbody.replaceChildren(...data.tags.map(t => {
-      const tr = document.createElement('tr');
-      tr.innerHTML =
-        '<td data-label="Name"><span class="tag-pill" data-tag-id="' + escapeHtml(t.id) + '">' + escapeHtml(t.name) + '</span></td>' +
-        '<td data-label="Repos">' + usagePill('repos', t.usage.repos) + '</td>' +
-        '<td data-label="Subs">' + usagePill('subs', t.usage.subscriptions) + '</td>' +
-        '<td data-label="Accounts">' + usagePill('accounts', t.usage.accounts) + '</td>' +
-        '<td data-label="Created" class="muted">' + escapeHtml(formatWhen(t.created_at)) + '</td>' +
-        '<td data-label="By" class="muted">' + escapeHtml(t.created_by || '') + '</td>' +
-        '<td class="row-actions"></td>';
-
-      // Rename opens the rename-tag drawer pre-filled with the
-      // current name. The target's id + name ride on the drawer's
-      // own dataset so the bindForm config (mounted once on boot)
-      // can read which tag the open submit applies to without
-      // closing over a per-row reference.
-      function renameTag() {
-        const drawer = document.querySelector('.drawer[data-drawer-name="rename-tag"]');
-        if (!drawer) return;
-        drawer.dataset.tagId = t.id;
-        drawer.dataset.tagName = t.name;
-        GG.drawer.open('rename-tag');
-      }
-
-      async function deleteTag() {
-        // Cascade-delete is the design-doc default (§11 Q1) — make
-        // the blast radius visible before the admin commits, since
-        // every assignment row referencing this tag goes with it.
-        const total = (t.usage.repos || 0) + (t.usage.subscriptions || 0) + (t.usage.accounts || 0);
-        let message = 'Delete tag "' + t.name + '"?';
-        if (total > 0) {
-          const parts = [];
-          if (t.usage.repos)         parts.push(t.usage.repos + ' repo' + (t.usage.repos === 1 ? '' : 's'));
-          if (t.usage.subscriptions) parts.push(t.usage.subscriptions + ' subscription' + (t.usage.subscriptions === 1 ? '' : 's'));
-          if (t.usage.accounts)      parts.push(t.usage.accounts + ' account' + (t.usage.accounts === 1 ? '' : 's'));
-          message += '\n\nThis will also remove the tag from ' + parts.join(', ') + '.';
-        }
-        const ok = await GG.dialog.confirm({
-          title: 'Delete tag',
-          message,
-          okText: 'Delete',
-          dangerOk: true,
-        });
-        if (!ok) return;
-        try {
-          await api.deleteTag(t.id);
-          await refresh();
-        } catch (e) {
-          await GG.dialog.alert('Delete failed', e.message);
-        }
-      }
-
-      GG.row_menu.attach(tr.querySelector('.row-actions'), [
-        { label: 'Rename', onClick: renameTag },
-        { label: 'Delete', onClick: deleteTag, danger: true },
-      ]);
-      return tr;
-    }));
+    if (filterCtl) filterCtl.refresh();
   }
 
   (async function boot() {
     const who = await guardSession();
     if (!who) return;
     initSidebar('tags', who);
+
+    // Free-text search across name + creator. Catalogues can grow
+    // into the dozens with team:* / env:* / contractor:* etc — the
+    // chip-style picker is for the SUBSCRIPTIONS list which filters
+    // by tag membership; here we're searching the catalogue itself
+    // by free text.
+    filterCtl = GG.text_filter.attachClientSide({
+      filterRow:   document.getElementById('tag-search'),
+      placeholder: 'Search by name or creator…',
+      emptyHint:   'No tags in the catalogue yet.',
+      rows:        () => tagsCache,
+      rowText:     t => [t.name, t.created_by].filter(Boolean).join(' '),
+      renderRows:  visible => {
+        document.getElementById('tag-count').textContent = visible.length;
+        const tbody = document.getElementById('tag-rows');
+        tbody.replaceChildren(...visible.map(renderRow));
+      },
+    });
 
     // "Remove unused" sweep — confirm with the list of names before
     // firing, since the action is destructive (each removed row is a

@@ -450,6 +450,26 @@ a:hover { text-decoration: underline; }
 .repo-list-ul { list-style: none; }
 .repo-list-ul li { padding: 0.3rem 0; }
 
+/* GG.text_filter — sibling to .tag-filter for pages where free-text
+   search makes more sense than tag chips (credentials, tags). One
+   row: the search input on the left, a summary count to the right
+   (e.g. "3 of 12 match"). Reuses the global input chrome. */
+.text-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+.text-filter-input {
+  flex: 1;
+  min-width: 12rem;
+  max-width: 28rem;
+}
+.text-filter-summary {
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
 /* Card grid used for repositories and subscription-key lists. */
 .card-grid {
   display: grid;

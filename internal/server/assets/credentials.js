@@ -5,6 +5,12 @@
 (function () {
   const { api, escapeHtml, initSidebar, guardSession } = window.Admin;
 
+  // GG.text_filter.attachClientSide controller. Free-text search
+  // across name + kind + notes — credentials aren't tagged so a
+  // chip filter doesn't fit; substring search does.
+  let filterCtl = null;
+  let credentialsCache = [];
+
   function formatWhen(ts) {
     if (!ts) return 'never';
     try { return new Date(ts).toLocaleString(); } catch { return ts; }
@@ -29,68 +35,84 @@
     try { return new Date(ts).toLocaleDateString(); } catch { return ts; }
   }
 
-  async function refresh() {
-    const data = await api.listCredentials();
-    document.getElementById('cred-count').textContent = data.count;
-    const tbody = document.getElementById('cred-rows');
-    tbody.replaceChildren(...data.credentials.map(c => {
-      const tr = document.createElement('tr');
-      const expBucket = classifyExpires(c.expires);
-      const expClass = expBucket === 'expired'
-        ? 'cred-expired'
-        : expBucket === 'expiring'
-          ? 'cred-expiring'
-          : expBucket === 'none' ? 'muted' : '';
-      const expTitle = expBucket === 'expired'
-        ? ' title="Already expired. Rotate this credential."'
-        : expBucket === 'expiring'
-          ? ' title="Expires within 7 days. Rotate soon."'
-          : '';
-      // data-label drives the mobile card-list rendering — see the
-      // .responsive-table block at the bottom of admin.css. Labels
-      // mirror the column <th> text so the desktop and mobile views
-      // are conceptually identical, just folded differently.
-      tr.innerHTML =
-        '<td data-label="Name"><code>' + escapeHtml(c.name) + '</code></td>' +
-        '<td data-label="Kind">' + escapeHtml(c.kind) + '</td>' +
-        '<td data-label="Expires" class="' + expClass + '"' + expTitle + '>' + escapeHtml(formatExpires(c.expires)) + '</td>' +
-        '<td data-label="Notes">' + escapeHtml(c.notes || '') + '</td>' +
-        '<td data-label="Last used" class="muted">' + escapeHtml(formatWhen(c.last_used)) + '</td>' +
-        '<td class="row-actions"></td>';
+  // renderRow builds one credential <tr> with a notes button (opens
+  // a dialog when clicked) instead of inline notes text. Empty
+  // notes hide the button via the .hidden class instead of leaving
+  // a trailing dash.
+  function renderRow(c) {
+    const tr = document.createElement('tr');
+    const expBucket = classifyExpires(c.expires);
+    const expClass = expBucket === 'expired'
+      ? 'cred-expired'
+      : expBucket === 'expiring'
+        ? 'cred-expiring'
+        : expBucket === 'none' ? 'muted' : '';
+    const expTitle = expBucket === 'expired'
+      ? ' title="Already expired. Rotate this credential."'
+      : expBucket === 'expiring'
+        ? ' title="Expires within 7 days. Rotate soon."'
+        : '';
+    const hasNotes = !!(c.notes && c.notes.trim());
+    // data-label drives the mobile card-list rendering — see the
+    // .responsive-table block at the bottom of admin.css. Labels
+    // mirror the column <th> text so the desktop and mobile views
+    // are conceptually identical, just folded differently.
+    tr.innerHTML =
+      '<td data-label="Name"><code>' + escapeHtml(c.name) + '</code></td>' +
+      '<td data-label="Kind">' + escapeHtml(c.kind) + '</td>' +
+      '<td data-label="Expires" class="' + expClass + '"' + expTitle + '>' + escapeHtml(formatExpires(c.expires)) + '</td>' +
+      '<td data-label="Notes">' +
+        (hasNotes
+          ? '<button type="button" class="small secondary cred-notes-btn" title="Show notes">Note</button>'
+          : '<span class="muted">—</span>') +
+      '</td>' +
+      '<td data-label="Last used" class="muted">' + escapeHtml(formatWhen(c.last_used)) + '</td>' +
+      '<td class="row-actions"></td>';
 
-      async function deleteCredential() {
-        const ok = await GG.dialog.confirm({
-          title: 'Delete credential',
-          message: 'Delete credential "' + c.name + '"? The sealed secret is destroyed. You can\'t recover it from the server.',
-          okText: 'Delete',
-          dangerOk: true,
-        });
-        if (!ok) return;
-        try {
-          await api.deleteCredential(c.name);
-          await refresh();
-        } catch (e) {
-          // 409 means one or more repo destinations still reference
-          // this credential — surface the repo list so the operator
-          // knows where to go clear the references first.
-          if (e.refRepos && e.refRepos.length) {
-            await GG.dialog.alert(
-              'Credential still in use',
-              e.message + '\n\nRepos still referencing this credential:\n  • ' +
-              e.refRepos.join('\n  • ') +
-              '\n\nRetarget or remove those destinations, then try again.'
-            );
-          } else {
-            await GG.dialog.alert('Delete failed', e.message);
-          }
+    if (hasNotes) {
+      tr.querySelector('.cred-notes-btn').addEventListener('click', () => {
+        GG.dialog.alert('Notes for ' + c.name, c.notes);
+      });
+    }
+
+    async function deleteCredential() {
+      const ok = await GG.dialog.confirm({
+        title: 'Delete credential',
+        message: 'Delete credential "' + c.name + '"? The sealed secret is destroyed. You can\'t recover it from the server.',
+        okText: 'Delete',
+        dangerOk: true,
+      });
+      if (!ok) return;
+      try {
+        await api.deleteCredential(c.name);
+        await refresh();
+      } catch (e) {
+        // 409 means one or more repo destinations still reference
+        // this credential — surface the repo list so the operator
+        // knows where to go clear the references first.
+        if (e.refRepos && e.refRepos.length) {
+          await GG.dialog.alert(
+            'Credential still in use',
+            e.message + '\n\nRepos still referencing this credential:\n  • ' +
+            e.refRepos.join('\n  • ') +
+            '\n\nRetarget or remove those destinations, then try again.'
+          );
+        } else {
+          await GG.dialog.alert('Delete failed', e.message);
         }
       }
+    }
 
-      GG.row_menu.attach(tr.querySelector('.row-actions'), [
-        { label: 'Delete', onClick: deleteCredential, danger: true },
-      ]);
-      return tr;
-    }));
+    GG.row_menu.attach(tr.querySelector('.row-actions'), [
+      { label: 'Delete', onClick: deleteCredential, danger: true },
+    ]);
+    return tr;
+  }
+
+  async function refresh() {
+    const data = await api.listCredentials();
+    credentialsCache = data.credentials || [];
+    if (filterCtl) filterCtl.refresh();
   }
 
   // mountCreateCredentialChrome — re-runs the imperative GG.select +
@@ -124,6 +146,23 @@
     const who = await guardSession();
     if (!who) return;
     initSidebar('credentials', who);
+
+    // Free-text search across name + kind + notes. Credentials
+    // aren't tagged so the chip filter doesn't apply; with many
+    // similar PATs ("github-personal", "github-work", "azure-pat-…")
+    // the admin needs substring search to find one fast.
+    filterCtl = GG.text_filter.attachClientSide({
+      filterRow:   document.getElementById('cred-filter'),
+      placeholder: 'Search by name, kind, or notes…',
+      emptyHint:   'No credentials in the vault yet.',
+      rows:        () => credentialsCache,
+      rowText:     c => [c.name, c.kind, c.notes].filter(Boolean).join(' '),
+      renderRows:  visible => {
+        document.getElementById('cred-count').textContent = visible.length;
+        const tbody = document.getElementById('cred-rows');
+        tbody.replaceChildren(...visible.map(renderRow));
+      },
+    });
 
     // Add-credential form lives in a fragment rendered into the
     // create-credential drawer. GG.drawer.bindForm handles the
