@@ -29,7 +29,7 @@ in greater depth.
 | Task | Where |
 | -- | -- |
 | Create a repo | [Repositories](/admin/repositories) — **Create** |
-| Issue a subscription key | [Subscription keys](/admin/subscriptions) — pick repo + account, choose abilities |
+| Issue a subscription key | [Subscription keys](/admin/subscriptions) — one key per user per repo (never one shared team key); pick repo + account, choose abilities |
 | Add a mirror destination | [Repositories](/admin/repositories) — expand a repo's *Mirror* section |
 | Manage credentials | [Credentials](/admin/credentials) — used by mirror targets and OAuth provider configs |
 | Promote / demote a user | [Accounts](/admin/accounts) |

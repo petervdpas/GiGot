@@ -2,7 +2,12 @@
 
 Most GiGot users never sign in to the website at all, Formidable
 talks to the server on their behalf using a **subscription key** the
-operator hands them. The two reasons to actually sign in are:
+operator hands them. That key is yours alone — the operator issues
+one per user per repo, never one shared key for a whole team — so
+treat it like a password: don't paste it into chat, don't share it
+with a teammate, and ask for a new one if you suspect it leaked.
+
+The two reasons to actually sign in are:
 
 - You're an admin (or maintainer) and need to manage repos, keys, or
   accounts via the [admin console](/admin/repositories).
