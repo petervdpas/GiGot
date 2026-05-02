@@ -64,31 +64,45 @@ here. The items below do not overlap with Track B.
 Done and shipping:
 
 - [x] **Tags — slice 3 (design:
-      [`tags.md`](docs/design/tags.md) §5.5, §5.6, §6.3, §10).**
-      Grouped chip filter on `/admin/subscriptions` clusters chips
-      by prefix-before-colon (`team:*`, `env:*`, `contractor:*`,
-      then "Other"); selecting one or more chips intersects (AND)
-      against the **effective** tag set so an admin filtering by
-      `team:marketing` finds subs tagged directly, subs that
-      inherit through their repo, and subs that inherit through
-      their account. URL is the source of truth (`?tag=` repeating)
-      so deep-links and copy-pasted URLs hydrate the filter on
-      load. `GET /api/admin/tokens` accepts the same `?tag=`
-      params for the server-side cut. New
-      `POST /api/admin/subscriptions/revoke-by-tag` endpoint
-      revokes every effective-tag match in one call, gated by a
-      deterministic typed-confirmation phrase
+      [`tags.md`](docs/design/tags.md) §5.5, §5.6, §6.1, §6.3, §10).**
+      Grouped chip filter clusters chips by prefix-before-colon
+      (`team:*`, `env:*`, `contractor:*`, then "Other"); selecting
+      one or more chips intersects (AND) so an admin filtering by
+      `team:marketing` finds rows tagged directly + rows that
+      inherit it. URL is the source of truth (`?tag=` repeating) so
+      deep-links / copy-pasted URLs hydrate the filter on load.
+      Filters now ship on **all three taggable pages**:
+      `/admin/subscriptions` (server-side via
+      `GET /api/admin/tokens?tag=` against the effective tag set —
+      sub.tags ∪ repo.tags ∪ account.tags),
+      `/admin/repositories`, and `/admin/accounts` (client-side
+      narrowing of in-memory rows). One JS controller
+      (`GG.tag_filter` in `assets/tag_filter.js`, symmetric to
+      `GG.tag_picker`) backs all three; each page hands it `rows`,
+      `rowTags`, and a `renderRows` callback, and the controller
+      owns chip rendering, URL state, AND-filter computation, and
+      stale-selection pruning (last assignment removed → chip drops
+      off the URL and the row re-narrows automatically, no manual
+      reload).
+      `POST /api/admin/subscriptions/revoke-by-tag` revokes every
+      effective-tag match in one call, gated by a deterministic
+      typed-confirmation phrase
       (`revoke <comma-joined-lower-tags>`) checked **server-side**
-      so a scripted caller can't bypass it. Each revoked sub
-      emits a `tag.revoked.bulk` event on its repo's
-      `refs/audit/main`. The chip filter card collapses to an
-      empty-state hint when the catalogue is empty; the destructive
-      "Revoke all matching (N)" action only appears when chips are
-      active. Confirm dialog enumerates every sub (account, repo,
-      abilities) before firing. Swagger regenerated, integration
-      scenarios + nine handler tests cover happy path, AND
-      semantics, inherited-tag matches, missing/wrong/empty
-      confirm, auth fence, and audit-chain advance.
+      so a scripted caller can't bypass it. Each revoked sub emits a
+      `tag.revoked.bulk` event on its repo's `refs/audit/main`. The
+      chip filter card auto-hides the destructive button when no
+      chip is selected or no row matches; confirm dialog enumerates
+      every sub (account, repo, abilities) before firing.
+      `POST /api/admin/tags/sweep-unused` bulk-removes catalogue
+      rows with zero references; surfaced on `/admin/tags` as a
+      "Remove unused" header button (auto-disabled when nothing is
+      unused) so the catalogue stays tidy without a one-by-one
+      delete loop. New semantic palette (`assets/theme.css`): tags
+      green, repos orange, roles blue (`.badge[data-role="admin"]`
+      etc., refactor from class proliferation), subscriptions
+      purple — both light and dark variants. Swagger regenerated,
+      integration scenarios + 12 new handler tests across the bulk
+      revoke, listing filter, sweep, and store layers.
 - [x] **Tags — slice 2 (design:
       [`tags.md`](docs/design/tags.md) §6.2, §7.1, §10).**
       Assignment surfaces wired across all three taggable entities:

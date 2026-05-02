@@ -293,12 +293,13 @@ Admin-only, session-gated. Same shape as `/api/admin/credentials` and
 
 ### 6.1 Tag catalogue
 
-| Method | Path                       | What it does |
-| ------ | -------------------------- | ------------ |
-| GET    | `/api/admin/tags`          | List every tag with usage counts. |
-| POST   | `/api/admin/tags`          | Create a tag. Body: `{name}`. 409 on duplicate (case-insensitive). |
-| PATCH  | `/api/admin/tags/{name}`   | Rename. Body: `{name: "..."}`. 409 if the new name collides. |
-| DELETE | `/api/admin/tags/{name}`   | Delete. Cascades through every join table — the tag and all its assignments (repo, subscription, account) disappear in one statement. Response body returns the per-table counts that were swept so the audit log and the UI confirmation both have the blast radius. |
+| Method | Path                                | What it does |
+| ------ | ----------------------------------- | ------------ |
+| GET    | `/api/admin/tags`                   | List every tag with usage counts. |
+| POST   | `/api/admin/tags`                   | Create a tag. Body: `{name}`. 409 on duplicate (case-insensitive). |
+| PATCH  | `/api/admin/tags/{name}`            | Rename. Body: `{name: "..."}`. 409 if the new name collides. |
+| DELETE | `/api/admin/tags/{name}`            | Delete. Cascades through every join table — the tag and all its assignments (repo, subscription, account) disappear in one statement. Response body returns the per-table counts that were swept so the audit log and the UI confirmation both have the blast radius. |
+| POST   | `/api/admin/tags/sweep-unused`      | Bulk-delete every catalogue row with zero references across all three join tables. Body is empty; response is `{removed: ["name1","name2"], count: N}`. Each removed row emits one `tag.deleted` system audit event with `reason: "unused-sweep"` (§7.1) so the chain distinguishes operator sweeps from one-off deletes. The UI on `/admin/tags` wraps this in a confirm dialog that shows the names being removed before firing. |
 
 The UI (§5.1) wraps `DELETE` in a confirm dialog that shows the counts
 before firing — server-side cascade is the simple primitive, the
@@ -418,6 +419,7 @@ Event-type table with destinations:
 | `tag.assigned.account`        | `audit_system.enc`                           | `POST /api/admin/accounts/{id}/tags/{tag}` (and via PUT diff) |
 | `tag.unassigned.account`      | `audit_system.enc`                           | `DELETE /api/admin/accounts/{id}/tags/{tag}` (and via PUT diff) |
 | `tag.revoked.bulk`            | sub's repo's `refs/audit/main`               | `POST /api/admin/subscriptions/revoke-by-tag` (one event per revoked sub) |
+| `tag.deleted` (sweep variant) | `audit_system.enc` — payload carries `reason: "unused-sweep"` so the chain distinguishes operator-driven sweeps from one-off deletes | `POST /api/admin/tags/sweep-unused` (one event per removed catalogue row) |
 
 PUT (replace-the-set) emits one event per actually-changed assignment,
 not one per call — diffing the new set against the existing one keeps
@@ -522,6 +524,38 @@ Three slices, each independently shippable. All three shipped 2026-05-02.
   deep-links / copy-pasted URLs hydrate the filter on load). The
   `Revoke all matching (N)` action enumerates each match (account,
   repo, abilities) before firing.
+
+  **Beyond the original §10 scope, slice 3 also shipped:**
+
+  - **Filter parity across all three taggable pages.** The same chip
+    filter card now appears on `/admin/repositories` and
+    `/admin/accounts` too, with `?tag=` URL-driven, prefix grouping,
+    and the same prune-on-stale rule (§5.5 originally proposed it
+    only for the subscription list — extending it removed the "why
+    is this only on one page?" inconsistency). Repo and account
+    pages filter client-side (no `?tag=` server endpoint, the entire
+    dataset is already in memory); subscriptions filter server-side
+    via `?tag=` because the dataset can grow into the hundreds.
+  - **`GG.tag_filter` shared JS controller** (`assets/tag_filter.js`,
+    symmetric to `GG.tag_picker`). Two entry points: `mount()` for
+    server-side-filter pages, `attachClientSide()` for pages where
+    JS narrows in-memory rows. Each page hands it `rows`, `rowTags`,
+    and a `renderRows` callback; the controller owns chip rendering,
+    URL state, AND-filter computation, and stale-selection pruning.
+  - **Stale-selection prune on every refresh.** When the last
+    assignment of a selected chip goes (via picker × on a sub, repo,
+    or account), the chip drops out of the URL and the row list
+    re-narrows automatically. No "Filter: hunniki / Revoke all
+    matching (0)" combo lingers.
+  - **`POST /api/admin/tags/sweep-unused` (§6.1)** — bulk-removes
+    catalogue rows that no row references. Surfaced on `/admin/tags`
+    as a "Remove unused" header button on the Existing tags card,
+    auto-disabled when nothing is unused.
+  - **Semantic palette** (`assets/theme.css`): tags green, repos
+    orange, roles blue (admin / maintainer / regular as data-role
+    attribute on `.badge`), subscriptions purple. Light + dark
+    variants for each family. Removes the "is this a tag or a repo?"
+    confusion the original mono-coloured chip wall produced.
 
 ---
 
