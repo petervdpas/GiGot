@@ -64,22 +64,28 @@ here. The items below do not overlap with Track B.
 Open work:
 
 - [ ] **`GG.lazy` — slice 2: `data-lazy-submit` + `data-lazy-after`.**
-      Slice 1 (helper + fragments + abilities-render migration) is
-      shipped (see "Done and shipping" below). Slice 2 adds the
-      submit pipeline so a button inside a rendered fragment with
-      `data-lazy-action="submit"` POSTs/PATCHes to
-      `data-lazy-submit`, with the response handled by
-      `data-lazy-after` (render / close / event). First migration
+      Slice 1 + opportunistic migrations shipped (see "Done"
+      below). Slice 2 adds the submit pipeline so a button inside
+      a rendered fragment with `data-lazy-action="submit"`
+      POSTs/PATCHes to `data-lazy-submit`, with the response
+      handled by `data-lazy-after` (render / close / event). First
       target: switch the abilities Save flow on subscription cards
-      to use it (currently still imperative — slice 1 only migrated
-      the chip-rendering side). Design lives in
+      to use it (currently still imperative). Design lives in
       [`docs/design/lazy.md`](docs/design/lazy.md) §4.5.
-- [ ] **`GG.lazy` — slice 3: opportunistic migrations.** Move
-      `tag_picker` mounts, account detail rows, and the mirror
-      destination collapse on repos to GG.lazy when their existing
-      imperative version next needs to change. No big-bang rewrite —
-      each migration only when there's a real reason. Establishes
-      the pattern as the project default, not just a one-off.
+- [ ] **Mirror-destination section migration to GG.lazy.** It's the
+      last imperative section on a repo card. Three states (no
+      destination / view-existing / editor mode) plus sync / remove
+      / enabled-toggle actions, so it's a real refactor, not a
+      mechanical move. Either one fragment with class-toggle
+      states, or split into three fragments (no-dest / view / edit)
+      driven by a state-aware getData. Decide when there's time.
+- [ ] **Template inheritance for admin pages** (the third audit
+      item from the DRY pass). Each admin page repeats ~17 lines
+      of `<head>` boilerplate + identical `<body>` shell. Move
+      to a Go-template base + `{{define "page-content"}}` per
+      page; pass `PageData{Title, ExtraStyles, ExtraScripts}` as
+      the model. Saves ~80 lines of HTML, makes "add a script /
+      stylesheet to every admin page" a one-line change.
 - [ ] **Honest framing for the bulk-revoke confirm phrase.** The
       `revoke <tags>` phrase is deterministic, so it's anti-typo,
       not anti-script. Update `docs/design/tags.md` §5.6 + §6.3 to
@@ -99,6 +105,72 @@ Open work:
       `Remove unused` periodically. Pick one.
 
 Done and shipping:
+
+- [x] **Admin UI helper family + drawer pattern + DRY pass.**
+      Six shared JS helpers under `window.GG` / `window.Admin` now
+      own every admin-page pattern; pages are config, helpers are
+      mechanics:
+      - **`Admin.bootPage(key)`** — `guardSession + initSidebar`
+        prelude on every authenticated admin page (one line
+        replaces three).
+      - **`GG.drawer`** (`assets/drawer.js`) — slide-out drawer
+        controller. `declareAll([{name, title, tpl}])` creates the
+        `<aside class="drawer">` markup at runtime (templates no
+        longer carry asides at all); `bindForm(name, opts)` wires
+        lazy-render + submit + close + error display in one call;
+        `attachAll()` wires triggers + close buttons.
+      - **`GG.lazy`** (`assets/lazy.js`) — fragment fetch + render
+        helper, fragments served at `GET /fragments/{name}` (admin-
+        gated, ETag SHA-256, gzipped at startup, 304 on
+        revalidate). Templating: `{{key}}` + `{{#each}}`. Triggers:
+        `open` on `<details>`, `click`, `now`, `manual`. Both
+        declarative `data-lazy-src` and programmatic
+        `getData` paths. Used by every drawer, every card-body,
+        every collapse on the admin pages.
+      - **`GG.tag_picker`** (existing) — per-entity tag assignment
+        UI, reused on repo / sub / account detail rows.
+      - **`GG.tag_filter`** (existing) — chip-filter controller.
+        `mount` for server-side-filter pages
+        (`/admin/subscriptions`); `attachClientSide({rows, rowTags,
+        renderRows})` for client-side
+        (`/admin/repositories`, `/admin/accounts`).
+      - **`GG.text_filter`** (`assets/text_filter.js`) — substring
+        search sibling for pages where chip filtering doesn't fit
+        (`/admin/credentials`, `/admin/tags`). URL-driven via
+        `?q=`, summary line shows "N of M match".
+
+      All five admin pages migrated to use these helpers
+      end-to-end:
+      - `/admin/repositories`: chip filter + create-repository
+        drawer + repo-card-body fragment + nested
+        repo-subscriptions fragment.
+      - `/admin/subscriptions`: chip filter + issue-subscription
+        drawer + token-card-body fragment + nested abilities
+        fragment.
+      - `/admin/credentials`: text filter + create-credential +
+        edit-credential drawers + Note button → dialog.
+      - `/admin/tags`: text filter + create-tag + rename-tag
+        drawers + Remove-unused sweep.
+      - `/admin/accounts`: chip filter + create-account drawer +
+        account-detail row fragment.
+      - `/user`: dedicated user-subscription-card fragment (does
+        not reuse `Admin.renderTokenCard` — that's admin-shaped).
+
+      Plus a DRY refactor pass that bled out ~50 lines of HTML +
+      ~15 lines of JS boilerplate without behaviour change:
+      drawer asides moved from templates into `declareAll` calls,
+      `Admin.bootPage` consolidated the boot prelude. Memory file
+      `admin_ui_helpers.md` documents the helper family + when to
+      reach for which.
+
+- [x] **Credentials edit drawer.** Row menu gains an "Edit" entry
+      that opens a drawer pre-filled with the credential's current
+      notes + expires. PATCH `/api/admin/credentials/{name}` was
+      already exposed server-side; the work was the UI.
+      Deliberately scoped to metadata only — name (orphans
+      destinations), kind (changes secret meaning), and secret
+      (use delete + re-add per credential-vault.md §3) are not
+      editable through this flow.
 
 - [x] **`GG.lazy` — slice 1 (design:
       [`lazy.md`](docs/design/lazy.md)).** Generic

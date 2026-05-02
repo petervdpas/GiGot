@@ -1,14 +1,28 @@
 # GG.lazy
 
-Status: **design draft, no code yet**. Generic `data-*`-attribute-driven
-render helper for the admin UI. Replaces per-page imperative DOM glue
-(`querySelector` + `addEventListener` setups that build the same shape
-in three places) with declarative bindings: HTML carries the intent,
-one tiny JS module reads it.
+Status: **slice 1 + opportunistic migrations shipped 2026-05-02.**
+Generic `data-*`-attribute-driven render helper for the admin UI.
+Replaces per-page imperative DOM glue (`querySelector` +
+`addEventListener` setups that build the same shape in three places)
+with declarative bindings: HTML carries the intent, one tiny JS
+module reads it.
 
-In the same family as `GG.tag_picker`, `GG.tag_filter`, and
-`GG.toggle_switch` — page code stays thin, the helper owns the
-fetch / template / event wiring.
+In the same family as `GG.tag_picker`, `GG.tag_filter`,
+`GG.text_filter`, `GG.drawer`, and `GG.toggle_switch` — page code
+stays thin, the helper owns the fetch / template / event wiring.
+
+Real-world fragments shipped to date (in
+`internal/server/templates/fragments/`):
+
+- `abilities.html` — abilities collapse body on subscription cards
+- `account-detail.html` — accounts table detail row
+- `create-account.html` / `create-credential.html` /
+  `create-repository.html` / `create-tag.html` / `edit-credential.html` /
+  `issue-subscription.html` / `rename-tag.html` — drawer form bodies
+- `repo-card-body.html` — repository card details body
+- `repo-subscriptions.html` — repo card's nested subs collapse
+- `token-card-body.html` — admin subscription card body
+- `user-subscription-card.html` — `/user` page card body
 
 ---
 
@@ -326,14 +340,21 @@ caller wants it.
 
 ## 8. Slice plan
 
-- **Slice 1 — Helper + fragments + first migration.** Everything
-  in this doc. One PR. Open-work item closes when the abilities
-  collapse on `/admin/subscriptions` is rendering through GG.lazy
-  end-to-end (fetch + render only; save still imperative).
-- **Slice 2 — `data-lazy-submit` + abilities save flow.** Adds the
-  submit + after behaviour. Migrates the abilities save to use it.
-  Establishes the second caller before extending.
-- **Slice 3 — Migrate the rest opportunistically.** Tag picker
-  mounts, account detail rows, mirror destination collapse on
-  repos. No big-bang rewrite; each migration only when its existing
-  imperative version next needs to change anyway.
+- **Slice 1 — Helper + fragments + first migration.** ✅ shipped
+  2026-05-02. Helper landed in `assets/lazy.js`, fragments served
+  raw at `GET /fragments/{name}` (admin-gated, ETag-cached,
+  gzipped at startup, 304 on revalidate). First migration was the
+  abilities collapse on `/admin/subscriptions`.
+- **Slice 2 — `data-lazy-submit` + abilities save flow.** Open.
+  Adds the submit + after behaviour. Migrates the abilities save
+  to use it. Establishes the second caller before extending.
+- **Slice 3 — Migrate the rest opportunistically.** ✅ mostly
+  shipped 2026-05-02. Token-card body, repo-card body, account
+  detail row, repo-subscriptions collapse, and every drawer form
+  body now render through GG.lazy from a fragment. The `/user`
+  page got its own dedicated `user-subscription-card` fragment +
+  a bespoke renderer (admin-shaped `renderTokenCard` didn't fit
+  the read-only paste-three-values shape). The mirror-destination
+  collapse on repos is the last imperative section that hasn't
+  migrated; tracked as its own item in the README open work
+  because of the three-state (no-dest / view / edit) shape.
