@@ -42,9 +42,9 @@
           ? 'cred-expiring'
           : expBucket === 'none' ? 'muted' : '';
       const expTitle = expBucket === 'expired'
-        ? ' title="Already expired — rotate this credential."'
+        ? ' title="Already expired. Rotate this credential."'
         : expBucket === 'expiring'
-          ? ' title="Expires within 7 days — rotate soon."'
+          ? ' title="Expires within 7 days. Rotate soon."'
           : '';
       // data-label drives the mobile card-list rendering — see the
       // .responsive-table block at the bottom of admin.css. Labels
@@ -61,7 +61,7 @@
       async function deleteCredential() {
         const ok = await GG.dialog.confirm({
           title: 'Delete credential',
-          message: 'Delete credential "' + c.name + '"? The sealed secret is destroyed — you can\'t recover it from the server.',
+          message: 'Delete credential "' + c.name + '"? The sealed secret is destroyed. You can\'t recover it from the server.',
           okText: 'Delete',
           dangerOk: true,
         });
@@ -93,14 +93,13 @@
     }));
   }
 
-  (async function boot() {
-    const who = await guardSession();
-    if (!who) return;
-    initSidebar('credentials', who);
-
-    // Render the Kind dropdown (.gsel) into its placeholder so it
-    // matches the rest of the form chrome.
-    const kindHost = document.getElementById('kind-host');
+  // mountCreateCredentialChrome — re-runs the imperative GG.select +
+  // GG.datepicker initialisation against the freshly rendered
+  // create-credential fragment. Kind dropdown picker and the
+  // calendar popup on the Expires field both live outside the
+  // simple `<input>` set the helper handles by default.
+  function mountCreateCredentialChrome(host) {
+    const kindHost = host.querySelector('#kind-host');
     if (kindHost) {
       kindHost.innerHTML = GG.select.html({
         name: 'kind',
@@ -114,37 +113,43 @@
       });
       GG.select.initAll(kindHost);
     }
-    // Bind the custom calendar popup to the expires field — the
-    // native <input type="date"> popup ignores our CSS tokens on
-    // Firefox/Linux.
-    GG.datepicker.initAll(document.getElementById('cred-form'));
+    // The data-gdp attribute on the Expires input is the cue
+    // GG.datepicker.initAll picks up; scope the call to this
+    // host so other date inputs on the page (none today, but
+    // future-proof) stay untouched.
+    if (window.GG && GG.datepicker) GG.datepicker.initAll(host);
+  }
 
-    document.getElementById('cred-form').addEventListener('submit', async e => {
-      e.preventDefault();
-      const f = e.target;
-      const msg = document.getElementById('cred-msg');
-      msg.textContent = '';
-      msg.className = 'muted';
-      try {
+  (async function boot() {
+    const who = await guardSession();
+    if (!who) return;
+    initSidebar('credentials', who);
+
+    // Add-credential form lives in a fragment rendered into the
+    // create-credential drawer. GG.drawer.bindForm handles the
+    // lazy bind + submit + close + error-into-#cred-msg dance;
+    // this page only declares the picker/datepicker mounts
+    // (onRendered), the API call (submit), and the post-success
+    // refresh.
+    GG.drawer.bindForm('create-credential', {
+      onRendered: mountCreateCredentialChrome,
+      submit: async data => {
         const body = {
-          name: f.name.value.trim(),
-          kind: f.kind.value,
-          secret: f.secret.value,
-          notes: f.notes.value.trim(),
+          name: (data.name || '').trim(),
+          kind: data.kind,
+          secret: data.secret,
+          notes: (data.notes || '').trim(),
         };
-        // <input type="text" data-gdp> yields "YYYY-MM-DD" when
-        // filled, "" when cleared. Normalise to a UTC midnight
-        // timestamp so server-side *time.Time is unambiguous.
-        const expRaw = f.expires.value.trim();
+        // data-gdp yields "YYYY-MM-DD" when filled, "" when cleared.
+        // Normalise to a UTC midnight timestamp so server-side
+        // *time.Time is unambiguous.
+        const expRaw = (data.expires || '').trim();
         if (expRaw) body.expires = new Date(expRaw + 'T00:00:00Z').toISOString();
-        await api.createCredential(body);
-        f.reset();
-        await refresh();
-      } catch (ex) {
-        msg.textContent = ex.message;
-        msg.className = 'error';
-      }
+        return api.createCredential(body);
+      },
+      onSuccess: refresh,
     });
+    GG.drawer.attachAll();
 
     await refresh();
   })();

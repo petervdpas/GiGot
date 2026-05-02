@@ -76,7 +76,7 @@
       host.innerHTML = GG.select.html({
         name: 'repo',
         value: '',
-        options: [{ value: '', label: 'No repos exist yet — create one on the Repositories page.', disabled: true }],
+        options: [{ value: '', label: 'No repos exist yet. Create one on the Repositories page.', disabled: true }],
       });
       GG.select.initAll(host);
       return;
@@ -218,7 +218,7 @@
           escapeHtml(resolved.provider) + ':' + escapeHtml(resolved.identifier) + '</code>'
       : null;
     const leftChips = t.has_account ? null :
-      '<span class="badge" title="This key was issued before the accounts model shipped. Click Bind to create a regular account for it.">legacy — no account</span>';
+      '<span class="badge" title="This key was issued before the accounts model shipped. Click Bind to create a regular account for it.">legacy, no account</span>';
 
     const actions = [];
     if (!t.has_account) {
@@ -488,7 +488,7 @@
     if (!filterRow || !actionsRow || !actionButton || !summary) return;
     tagFilterCtl = GG.tag_filter.mount({
       filterRow, actionsRow, actionButton, summary,
-      emptyHint: 'No tags in use on any subscription yet — add one to a key, repo, or account and the chip will appear here.',
+      emptyHint: 'No tags in use on any subscription yet. Add one to a key, repo, or account and the chip will appear here.',
       actionLabel: n => 'Revoke all matching (' + n + ')',
       getFilterableTags: filterableTagNames,
       // tokensCache is the AND-filtered server response, so its
@@ -786,7 +786,7 @@
       value,
       options: opts.length
         ? opts
-        : [{ value: '', label: 'No accounts yet — register or create one first', disabled: true }],
+        : [{ value: '', label: 'No accounts yet. Register or create one first.', disabled: true }],
     });
     GG.select.initAll(host);
     const sel = host.querySelector('.gsel');

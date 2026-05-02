@@ -196,7 +196,7 @@
         // hint replaces the loading state so the user sees something.
         console.error('lazy render failed', e);
         const target = host.tagName === 'DETAILS' ? ensureDetailsBody(host) : host;
-        target.innerHTML = '<div class="muted">Render failed — see console.</div>';
+        target.innerHTML = '<div class="muted">Render failed. See console.</div>';
       }
     }
 

@@ -159,10 +159,48 @@
 }
 .drawer-form input[type="text"],
 .drawer-form input[type="password"],
-.drawer-form input:not([type]) {
+.drawer-form input:not([type]),
+.drawer-form textarea {
   width: 100%;
   min-width: 0;
 }
+
+/* Textarea picks up the same chrome as text inputs but allows
+   vertical resize only — horizontal would push the row past the
+   drawer width and lateral resize on a fixed-grid layout reads as
+   broken. min-height keeps the box honest at the row default; the
+   user-agent's default ~1-line height collapses too small for a
+   "what is this for?" notes field. */
+.drawer-form textarea {
+  background: var(--field-bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 4.6rem;
+}
+.drawer-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+/* Tall-row variant for fields that benefit from the label sitting
+   at the top of the control (textarea, multi-line picker) rather
+   than vertically centred against a single-line input. Used by
+   adding `.drawer-form-row-tall` on the `<label>`. */
+.drawer-form label.drawer-form-row-tall {
+  align-items: start;
+}
+.drawer-form label.drawer-form-row-tall .field-label {
+  /* Nudge the label down a hair so it visually aligns with the
+     first line of text in the textarea (which has its own padding). */
+  padding-top: 0.45rem;
+}
+
 /* GG.select renders a `.gsel` div as its outer host; make sure it
    fills the control column without overflowing on narrow drawers. */
 .drawer-form label .gsel {
@@ -212,6 +250,7 @@
    rather than filled — "chip" here means "small inline element"
    regardless of fill. */
 .code-chip {
+  display: inline-block;
   background: transparent;
   color: var(--accent);
   border: 1px solid var(--accent-line);
@@ -219,4 +258,8 @@
   padding: 1px 5px;
   font-family: ui-monospace, monospace;
   font-size: 0.85rem;
+  /* Keep the whole token on one line so it wraps as a unit, not
+     mid-word. Prevents the orphan-character look ("github-wor /
+     k") when a chip lands at the right edge of a banner. */
+  white-space: nowrap;
 }

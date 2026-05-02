@@ -41,7 +41,7 @@
       const unused = unusedTagNames(data.tags);
       sweepBtn.disabled = unused.length === 0;
       sweepBtn.title = unused.length === 0
-        ? 'No unused tags — every catalogue row has at least one assignment'
+        ? 'No unused tags. Every catalogue row has at least one assignment.'
         : 'Remove ' + unused.length + ' tag' + (unused.length === 1 ? '' : 's') + ' with no assignments';
       sweepBtn._unused = unused;
     }
@@ -57,22 +57,17 @@
         '<td data-label="By" class="muted">' + escapeHtml(t.created_by || '') + '</td>' +
         '<td class="row-actions"></td>';
 
-      async function renameTag() {
-        const next = await GG.dialog.prompt({
-          title: 'Rename tag',
-          message: 'New name for "' + t.name + '":',
-          value: t.name,
-          okText: 'Rename',
-        });
-        if (next == null) return;
-        const trimmed = next.trim();
-        if (!trimmed || trimmed === t.name) return;
-        try {
-          await api.renameTag(t.id, trimmed);
-          await refresh();
-        } catch (e) {
-          await GG.dialog.alert('Rename failed', e.message);
-        }
+      // Rename opens the rename-tag drawer pre-filled with the
+      // current name. The target's id + name ride on the drawer's
+      // own dataset so the bindForm config (mounted once on boot)
+      // can read which tag the open submit applies to without
+      // closing over a per-row reference.
+      function renameTag() {
+        const drawer = document.querySelector('.drawer[data-drawer-name="rename-tag"]');
+        if (!drawer) return;
+        drawer.dataset.tagId = t.id;
+        drawer.dataset.tagName = t.name;
+        GG.drawer.open('rename-tag');
       }
 
       async function deleteTag() {
@@ -156,6 +151,28 @@
       submit: async data => api.createTag((data.name || '').trim()),
       onSuccess: refresh,
     });
+
+    // Rename-tag drawer. The target tag's id + current name ride on
+    // the drawer's `data-tag-id` / `data-tag-name` attributes —
+    // populated by renameTag() in renderRow() before each open.
+    // getData reads the current name to pre-fill the form; submit
+    // reads the id to address the API call.
+    GG.drawer.bindForm('rename-tag', {
+      getData: () => {
+        const drawer = document.querySelector('.drawer[data-drawer-name="rename-tag"]');
+        return { name: (drawer && drawer.dataset.tagName) || '' };
+      },
+      submit: async data => {
+        const drawer = document.querySelector('.drawer[data-drawer-name="rename-tag"]');
+        const id = drawer && drawer.dataset.tagId;
+        if (!id) throw new Error('rename target missing');
+        const next = (data.name || '').trim();
+        if (!next) throw new Error('name is required');
+        return api.renameTag(id, next);
+      },
+      onSuccess: refresh,
+    });
+
     GG.drawer.attachAll();
 
     await refresh();

@@ -39,7 +39,7 @@
 
     const badges = [];
     if (r.has_formidable) badges.push('<span class="badge formidable" title="Scaffolded as a Formidable context">Formidable</span>');
-    if (r.empty) badges.push('<span class="badge empty" title="No commits yet — nothing has been pushed to this repo">empty</span>');
+    if (r.empty) badges.push('<span class="badge empty" title="No commits yet. Nothing has been pushed to this repo">empty</span>');
 
     const stats = [];
     const commitLabel = r.commits === 1 ? 'commit' : 'commits';
@@ -127,7 +127,7 @@
     card.querySelector('.delete-btn').addEventListener('click', async () => {
       const ok = await GG.dialog.confirm({
         title: 'Delete repository',
-        message: 'Delete repo "' + r.name + '"?\n\nThis is destructive — the bare repo and any attached destinations are dropped.',
+        message: 'Delete repo "' + r.name + '"?\n\nThis is destructive. The bare repo and any attached destinations are dropped.',
         okText: 'Delete',
         dangerOk: true,
       });
@@ -375,7 +375,7 @@
     const isEdit = !!existing;
     const credSelVal = existing ? (existing.credential_name || '') : '';
     const credOptions = credentialsCache.length === 0
-      ? [{ value: '', label: '(no credentials in the vault — add one first)', disabled: true }]
+      ? [{ value: '', label: '(no credentials in the vault. Add one first)', disabled: true }]
       : [{ value: '', label: 'Select a credential…' }]
           .concat(credentialsCache.map(c => ({ value: c.name, label: c.name })));
     const credSelHtml = GG.select.html({
@@ -393,7 +393,7 @@
         '<div class="dest-privacy-warn">' +
           '<strong>Privacy notice.</strong> ' +
           'Adding a mirror destination turns off GiGot\'s sealed-body advantage for this repo. ' +
-          'Git pushes plaintext commits to the destination — anyone with access to <code>' + escapeHtml(repoName.slice(0, 40)) + '</code> at that remote will be able to read every file and every past version of every file in this repository.' +
+          'Git pushes plaintext commits to the destination. Anyone with access to <code>' + escapeHtml(repoName.slice(0, 40)) + '</code> at that remote will be able to read every file and every past version of every file in this repository.' +
         '</div>' +
         '<div class="switch-row">' +
           GG.toggle_switch.html({ name: 'privacy_ack', required: true, ariaLabel: 'Acknowledge destination privacy notice' }) +
@@ -492,7 +492,7 @@
     // callback that paints the visible cards into the grid.
     tagFilterCtl = GG.tag_filter.attachClientSide({
       filterRow: document.getElementById('tag-filter'),
-      emptyHint: 'No tags in use on any repository yet — add one to a card and the chip will appear here.',
+      emptyHint: 'No tags in use on any repository yet. Add one to a card and the chip will appear here.',
       rows:    () => repoInfoCache,
       rowTags: r => r.tags || [],
       renderRows: visible => {

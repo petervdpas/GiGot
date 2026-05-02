@@ -285,7 +285,7 @@
     // ?tag= URL state, and narrows the visible row list.
     tagFilterCtl = GG.tag_filter.attachClientSide({
       filterRow: document.getElementById('tag-filter'),
-      emptyHint: 'No tags in use on any account yet — add one to a row and the chip will appear here.',
+      emptyHint: 'No tags in use on any account yet. Add one to a row and the chip will appear here.',
       rows:    () => accountsCache,
       rowTags: a => a.tags || [],
       renderRows: visible => {

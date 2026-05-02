@@ -1,0 +1,16 @@
+<div class="drawer-form-info">
+  Renaming <code class="code-chip">{{name}}</code>.
+  The new name replaces this one everywhere it's used: repos,
+  subscriptions, accounts. Names are case-insensitive unique;
+  the new name can't collide with another tag.
+</div>
+<form id="tag-rename-form" class="drawer-form">
+  <label>
+    <span class="field-label">New name</span>
+    <input name="name" value="{{name}}" required>
+  </label>
+  <div id="tag-rename-msg" class="muted"></div>
+  <div class="drawer-form-actions">
+    <button type="submit">Rename</button>
+  </div>
+</form>

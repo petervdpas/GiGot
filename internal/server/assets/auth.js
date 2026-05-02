@@ -34,7 +34,7 @@
     initSidebar('auth', who);
 
     const state = await api.getAuth();
-    document.getElementById('cfg-path').textContent = state.config_path || '(unset — changes not persisted)';
+    document.getElementById('cfg-path').textContent = state.config_path || '(unset, changes not persisted)';
 
     // Allow-local toggle.
     document.getElementById('allow-local-host').innerHTML = GG.toggle_switch.html({
@@ -149,7 +149,7 @@
       msg.textContent = 'Applied. Old state replaced atomically.';
       msg.className = 'ok';
     } catch (err) {
-      msg.textContent = 'Reload rejected: ' + err.message + ' — previous state still live.';
+      msg.textContent = 'Reload rejected: ' + err.message + '. Previous state still live.';
       msg.className = 'err';
     }
   }

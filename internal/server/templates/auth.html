@@ -26,7 +26,7 @@
         <p class="muted auth-lede">
           Hot-swappable strategies. Changes apply immediately and are
           persisted to <code id="cfg-path">gigot.json</code>. Rebuilds
-          run under a lock — if a new <code>secret_ref</code> or
+          run under a lock. If a new <code>secret_ref</code> or
           discovery URL fails, the old state stays live.
         </p>
 
@@ -48,7 +48,7 @@
           <div id="oauth-panels"></div>
           <div class="muted auth-hint">
             <code>client_secret_ref</code> names a credential in the
-            vault — edit the secret value in
+            vault. Edit the secret value in
             <a href="/admin/credentials">Credentials</a>.
           </div>
         </div>
