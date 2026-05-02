@@ -1,0 +1,18 @@
+<div class="copy-row">
+  <div class="copy-row-label">Repository</div>
+  <div class="token-field copy-row-field">
+    <code class="token-value">{{repo}}</code>
+    <button type="button" class="copy-btn copy-repo">Copy</button>
+  </div>
+</div>
+<div class="copy-row-label">Subscription key</div>
+<div class="token-field" data-revealed="0">
+  <code class="token-value token-masked">{{masked}}</code>
+  <button type="button" class="icon-btn eye-btn" aria-label="Show key" title="Show key">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  </button>
+  <button type="button" class="copy-btn copy-token">Copy</button>
+</div>

@@ -1,27 +1,30 @@
 // /user — self-serve account page. Role-aware sidebar via
-// Admin.initSidebar; the body only shows things a regular user is
+// Admin.bootPage; the body only shows things a regular user is
 // entitled to see (their own subscription keys). Admins landing
 // here get the same view plus the full nav in the sidebar.
 //
-// The card layout differs from /admin/subscriptions: this page is
-// "copy these three values into Formidable" in order — Server URL,
-// Repository, Subscription key — so we render them as three
-// labelled copy-rows instead of only exposing the token. Admins
-// editing access go to /admin/subscriptions; regulars just need
-// the paste-ready values.
+// Layout differs from /admin/subscriptions: this page is "copy
+// these three values into Formidable" in order — Server URL (top
+// card, once for the whole page), then per-key Repository +
+// Subscription key copy rows. Each key card is collapsible:
+// summary shows the repo name + abilities; body shows the copy
+// rows. Collapsed-by-default so a user with many repos scans by
+// repo name first, then expands the one they need.
 //
-// Each key card is collapsible: summary shows the repo name and
-// abilities badge; expanded body shows the Repository + Subscription
-// key copy rows. Collapsed-by-default so a user with many repos
-// scans by repo name first, then expands only the one they need.
+// /user does NOT reuse Admin.renderTokenCard — that helper is
+// admin-specific (tags + abilities collapse + Bind/Revoke actions),
+// and twisting it into the regular-user shape via post-render DOM
+// mutation produced nested <details>. This page has its own
+// `user-subscription-card` fragment + renderer. Same GG.lazy +
+// drawer style, just /user-shaped data.
 (function () {
   const Admin = window.Admin;
-  const { renderTokenCard, initSidebar, escapeHtml, copyToClipboard } = Admin;
+  const { escapeHtml, copyToClipboard } = Admin;
 
-  // Per-repo expand state is remembered across session but not
-  // across a reload — page boots with all cards closed, and the
-  // user expands the one they need. Keyed by token string so two
-  // cards with the same repo (different holders) don't share state.
+  // Per-card expand state across this session. Keyed by token so
+  // two cards with the same repo (different holders) don't share
+  // state. Page boots with all cards closed; user expands what
+  // they need.
   const cardOpenState = Object.create(null);
 
   async function loadMe() {
@@ -34,10 +37,9 @@
     return res.json();
   }
 
-  // makeCopyRow builds a labelled, copy-enabled row for a plain
-  // (non-secret) value — no eye toggle, no masking. Uses the same
-  // .token-field chrome as the secret row below so the stack reads
-  // as three aligned "paste me into Formidable" inputs.
+  // makeCopyRow builds the labelled copy row used for the page-level
+  // Server URL block. Per-key Repository copy rows live inside the
+  // user-subscription-card fragment instead of being assembled here.
   function makeCopyRow(label, value) {
     const wrap = document.createElement('div');
     wrap.className = 'copy-row';
@@ -52,80 +54,98 @@
     return wrap;
   }
 
-  // augmentCardForFormidable rewrites a standard token card into the
-  // paste-ready layout: drops the repo chip row (redundant — the
-  // repo is now a copy-row above the key), keeps the abilities
-  // badge, and prepends a Repository + Subscription key label stack.
-  // The server URL is rendered ONCE at the page level (it's the same
-  // host for every key), not per card.
-  function augmentCardForFormidable(card, t) {
-    const tokenField = card.querySelector('.token-field');
-    if (!tokenField) return;
+  // renderUserCard builds one subscription card. Outer <details>
+  // collapses to summary (repo name + identifier subtitle +
+  // abilities chips). Body lazy-renders from the
+  // user-subscription-card fragment on first open; copy + eye
+  // handlers wire in onRendered.
+  function renderUserCard(t) {
+    const card = document.createElement('details');
+    card.className = 'info-card user-sub-card';
+    card.dataset.token = t.token;
+    card.dataset.lazyTpl = 'user-subscription-card';
 
-    // Drop the redundant body chip rows — a regular user seeing
-    // their own keys doesn't benefit from a "repo chip" that
-    // repeats the repo they're about to copy from the row above it.
-    const bodyChips = card.querySelectorAll(':scope > .ic-chips');
-    bodyChips.forEach(el => el.remove());
+    const repo = t.repo || '(unbound)';
+    const acctSubtitle = t.username
+      ? '<span class="muted sub-card-acct">' + escapeHtml(t.username) + '</span>'
+      : '';
+    const abilitiesChips = (t.abilities || [])
+      .map(a => '<span class="ability-badge">' + escapeHtml(a) + '</span>')
+      .join('');
 
-    // Abilities go into the card HEADER (as a chip next to the
-    // title) so they stay visible when the card is collapsed —
-    // users scanning a list need to see at a glance which key has
-    // mirror privileges.
-    if (t.abilities && t.abilities.length) {
-      const header = card.querySelector('.ic-header');
-      if (header) {
-        let chipsHost = header.querySelector('.ic-chips');
-        if (!chipsHost) {
-          chipsHost = document.createElement('div');
-          chipsHost.className = 'ic-chips';
-          header.appendChild(chipsHost);
-        }
-        chipsHost.innerHTML = t.abilities
-          .map(a => '<span class="ability-badge">' + escapeHtml(a) + '</span>')
-          .join('');
-      }
+    // Mask length scales with token length so the field width stays
+    // plausible — same convention as the admin token card.
+    const masked = '•'.repeat(Math.min(48, Math.max(16, (t.token || '').length)));
+
+    card.innerHTML =
+      '<summary class="ic-header user-sub-card-head">' +
+        '<span class="card-chevron" aria-hidden="true">▶</span>' +
+        '<div class="ic-title-wrap">' +
+          '<div class="ic-title">' + escapeHtml(repo) + '</div>' +
+          acctSubtitle +
+        '</div>' +
+        (abilitiesChips ? '<div class="ic-chips">' + abilitiesChips + '</div>' : '') +
+      '</summary>';
+
+    GG.lazy.bind(card, {
+      getData: () => ({ repo, masked }),
+      onRendered: host => wireUserCardBody(host, t, masked),
+    });
+
+    if (cardOpenState[t.token]) {
+      card.open = true;
+      GG.lazy.refresh(card);
     }
+    card.addEventListener('toggle', () => { cardOpenState[t.token] = card.open; });
 
-    tokenField.parentNode.insertBefore(makeCopyRow('Repository', t.repo || ''), tokenField);
-
-    const tokenLabel = document.createElement('div');
-    tokenLabel.className = 'copy-row-label';
-    tokenLabel.textContent = 'Subscription key';
-    tokenField.parentNode.insertBefore(tokenLabel, tokenField);
+    return card;
   }
 
-  // wrapCardAsCollapsible takes a fully-rendered subscription card
-  // and rewraps it as a <details>/<summary> disclosure. The card's
-  // first child (the ic-header row with title + chips) becomes the
-  // summary; the remaining rows become the body. Preserves the
-  // inner DOM (including the token-field's eye toggle + copy
-  // handlers), so behaviour survives the reshape.
-  function wrapCardAsCollapsible(card, t) {
-    const children = Array.from(card.children);
-    if (children.length === 0) return;
-    const [header, ...rest] = children;
+  // wireUserCardBody attaches the copy + eye-toggle handlers after
+  // each body render. The Repository row's copy button copies the
+  // repo name; the token field's eye toggles masked/revealed and
+  // its copy button copies the actual token value (ignoring the
+  // mask state — we want to copy the real secret either way).
+  function wireUserCardBody(host, t, masked) {
+    const repoCopy = host.querySelector('.copy-repo');
+    if (repoCopy) {
+      repoCopy.addEventListener('click', e => copyToClipboard(t.repo || '', e.currentTarget));
+    }
 
-    const details = document.createElement('details');
-    details.className = 'ic-collapse sub-card-collapse';
-    if (cardOpenState[t.token]) details.setAttribute('open', '');
-
-    const summary = document.createElement('summary');
-    summary.className = 'sub-card-summary';
-    while (header.firstChild) summary.appendChild(header.firstChild);
-    header.remove();
-
-    const body = document.createElement('div');
-    body.className = 'ic-collapse-body';
-    for (const el of rest) body.appendChild(el);
-
-    details.appendChild(summary);
-    details.appendChild(body);
-    card.appendChild(details);
-
-    details.addEventListener('toggle', () => {
-      cardOpenState[t.token] = details.open;
-    });
+    const field = host.querySelector('.token-field[data-revealed]');
+    if (field) {
+      const valueEl = field.querySelector('.token-value');
+      const eyeBtn = field.querySelector('.eye-btn');
+      const copyBtn = field.querySelector('.copy-token');
+      if (valueEl && eyeBtn) {
+        eyeBtn.addEventListener('click', () => {
+          const revealed = field.dataset.revealed === '1';
+          const next = !revealed;
+          field.dataset.revealed = next ? '1' : '0';
+          valueEl.textContent = next ? t.token : masked;
+          valueEl.classList.toggle('token-masked', !next);
+          eyeBtn.setAttribute('aria-label', next ? 'Hide key' : 'Show key');
+          eyeBtn.setAttribute('title', next ? 'Hide key' : 'Show key');
+          // Swap the SVG to the crossed-eye variant when revealed.
+          // Not adding a separate icon helper — this is the only
+          // /user surface that needs it, and inlining keeps the
+          // SVG bytes in one place.
+          eyeBtn.innerHTML = next
+            ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
+                '<circle cx="12" cy="12" r="3"/>' +
+                '<line x1="3" y1="3" x2="21" y2="21"/>' +
+              '</svg>'
+            : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>' +
+                '<circle cx="12" cy="12" r="3"/>' +
+              '</svg>';
+        });
+      }
+      if (copyBtn) {
+        copyBtn.addEventListener('click', e => copyToClipboard(t.token, e.currentTarget));
+      }
+    }
   }
 
   function renderSubscriptions(subs) {
@@ -138,27 +158,14 @@
     }
     empty.classList.add('hidden');
     for (const t of subs) {
-      const repo = t.repo || 'Subscription key';
-      // A user can hold accounts on multiple providers (github + microsoft,
-      // etc.); show provider:identifier in small print after the repo name
-      // so they can tell which account a key was issued to without
-      // expanding the card. Falls back to plain repo when the token has
-      // no scoped username (legacy / unbound shouldn't happen here, but
-      // the empty state stays clean if it does).
-      const titleHTML = t.username
-        ? escapeHtml(repo) + ' <span class="muted sub-card-acct">' + escapeHtml(t.username) + '</span>'
-        : escapeHtml(repo);
-      const card = renderTokenCard(t, { title: repo, titleHTML });
-      augmentCardForFormidable(card, t);
-      wrapCardAsCollapsible(card, t);
-      grid.appendChild(card);
+      grid.appendChild(renderUserCard(t));
     }
   }
 
   (async function boot() {
     const me = await loadMe();
     if (!me) return;
-    initSidebar('me', me);
+    Admin.initSidebar('me', me);
 
     // Server URL is the same host for every key this account holds
     // (they all talk to THIS gigot instance), so render it once at
