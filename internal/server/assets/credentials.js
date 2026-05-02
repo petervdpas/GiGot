@@ -103,7 +103,23 @@
       }
     }
 
+    function editCredential() {
+      const drawer = document.querySelector('.drawer[data-drawer-name="edit-credential"]');
+      if (!drawer) return;
+      // Stash the credential's identity + current values on the
+      // drawer's dataset. The bindForm config (mounted once on
+      // boot) reads them via getData / submit so this row-level
+      // handler doesn't need a closure over the credential.
+      drawer.dataset.credName  = c.name;
+      drawer.dataset.credNotes = c.notes || '';
+      drawer.dataset.credExpiresDate = c.expires
+        ? new Date(c.expires).toISOString().slice(0, 10)
+        : '';
+      GG.drawer.open('edit-credential');
+    }
+
     GG.row_menu.attach(tr.querySelector('.row-actions'), [
+      { label: 'Edit', onClick: editCredential },
       { label: 'Delete', onClick: deleteCredential, danger: true },
     ]);
     return tr;
@@ -162,6 +178,44 @@
         const tbody = document.getElementById('cred-rows');
         tbody.replaceChildren(...visible.map(renderRow));
       },
+    });
+
+    // Edit-credential drawer. The target's identity + current
+    // values ride on the drawer's `data-cred-*` attributes —
+    // populated by editCredential() in renderRow() before each
+    // open. getData reads them to pre-fill the form; submit
+    // PATCHes only notes + expires (the safe metadata fields).
+    // Secret rotation and renaming are deliberately not surfaced
+    // here — both use delete + re-add per credential-vault.md §3.
+    GG.drawer.bindForm('edit-credential', {
+      getData: () => {
+        const drawer = document.querySelector('.drawer[data-drawer-name="edit-credential"]');
+        return {
+          name:         (drawer && drawer.dataset.credName) || '',
+          notes:        (drawer && drawer.dataset.credNotes) || '',
+          expires_date: (drawer && drawer.dataset.credExpiresDate) || '',
+        };
+      },
+      onRendered: host => {
+        if (window.GG && GG.datepicker) GG.datepicker.initAll(host);
+      },
+      submit: async data => {
+        const drawer = document.querySelector('.drawer[data-drawer-name="edit-credential"]');
+        const name = drawer && drawer.dataset.credName;
+        if (!name) throw new Error('edit target missing');
+        // Empty expires input means "leave unchanged" — we don't
+        // include the field in the patch. The server's PATCH path
+        // can't currently distinguish "absent" from "null", so
+        // there's no way to genuinely clear the expiry through
+        // this flow. To clear, delete + re-add without an expiry.
+        const patch = { notes: (data.notes || '') };
+        const expRaw = (data.expires || '').trim();
+        if (expRaw) {
+          patch.expires = new Date(expRaw + 'T00:00:00Z').toISOString();
+        }
+        return api.updateCredential(name, patch);
+      },
+      onSuccess: refresh,
     });
 
     // Add-credential form lives in a fragment rendered into the

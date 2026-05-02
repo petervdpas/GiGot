@@ -190,6 +190,16 @@
       if (!r.ok) throw new Error((await r.json()).error || 'create failed');
       return r.json();
     },
+    async updateCredential(name, patch) {
+      const r = await fetch('/api/admin/credentials/' + encodeURIComponent(name), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(patch),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'update failed');
+      return r.json();
+    },
     async deleteCredential(name) {
       const r = await fetch('/api/admin/credentials/' + encodeURIComponent(name), {
         method: 'DELETE', credentials: 'same-origin',
