@@ -501,6 +501,16 @@ definitions:
         type: string
       last_sync_status:
         type: string
+      remote_check_error:
+        type: string
+      remote_checked_at:
+        type: string
+      remote_refs:
+        items:
+          $ref: '#/definitions/server.RemoteRefStatusView'
+        type: array
+      remote_status:
+        type: string
       url:
         type: string
     type: object
@@ -729,6 +739,17 @@ definitions:
       password:
         type: string
       username:
+        type: string
+    type: object
+  server.RemoteRefStatusView:
+    properties:
+      local:
+        type: string
+      ref:
+        type: string
+      remote:
+        type: string
+      state:
         type: string
     type: object
   server.RenameTagRequest:
@@ -2208,6 +2229,66 @@ paths:
       - SessionAuth: []
       - BearerAuth: []
       summary: Patch one mirror-sync destination
+      tags:
+      - destinations
+  /admin/repos/{name}/destinations/{id}/status/refresh:
+    post:
+      description: |-
+        Invokes `git ls-remote --refs` against the destination's URL
+        using the vault credential referenced by `credential_name`,
+        compares the result against local refs/heads/* + refs/audit/*,
+        and writes the outcome onto the destination as
+        `remote_status`, `remote_checked_at`, optional
+        `remote_check_error`, and per-ref `remote_refs[]`. Returns the
+        updated destination view. No push is performed — this is the
+        read-side companion to /sync. Disabled destinations still
+        accept this call (manual is explicit operator intent); the
+        flag gates only the post-receive auto-mirror.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Destination id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: 'Subscriber route: missing mirror ability, regular role, or
+            repo out of scope'
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Repo, destination, or credential (deleted) not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Credential referenced by destination no longer exists in the
+            vault
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "502":
+          description: ls-remote failed (auth/network); the destination is still updated
+            with status=error so the admin UI badge reflects it
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
+      - BearerAuth: []
+      summary: Refresh a mirror destination's remote-status
       tags:
       - destinations
   /admin/repos/{name}/destinations/{id}/sync:
@@ -4092,6 +4173,66 @@ paths:
       - SessionAuth: []
       - BearerAuth: []
       summary: Patch one mirror-sync destination
+      tags:
+      - destinations
+  /repos/{name}/destinations/{id}/status/refresh:
+    post:
+      description: |-
+        Invokes `git ls-remote --refs` against the destination's URL
+        using the vault credential referenced by `credential_name`,
+        compares the result against local refs/heads/* + refs/audit/*,
+        and writes the outcome onto the destination as
+        `remote_status`, `remote_checked_at`, optional
+        `remote_check_error`, and per-ref `remote_refs[]`. Returns the
+        updated destination view. No push is performed — this is the
+        read-side companion to /sync. Disabled destinations still
+        accept this call (manual is explicit operator intent); the
+        flag gates only the post-receive auto-mirror.
+      parameters:
+      - description: Repo name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Destination id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.DestinationView'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: 'Subscriber route: missing mirror ability, regular role, or
+            repo out of scope'
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Repo, destination, or credential (deleted) not found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Credential referenced by destination no longer exists in the
+            vault
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "502":
+          description: ls-remote failed (auth/network); the destination is still updated
+            with status=error so the admin UI badge reflects it
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
+      - BearerAuth: []
+      summary: Refresh a mirror destination's remote-status
       tags:
       - destinations
   /repos/{name}/destinations/{id}/sync:

@@ -23,8 +23,30 @@
     <span class="muted">{{when}}</span>
     <pre class="dest-sync-err-body {{err_body_hidden}}">{{err_text}}</pre>
   </div>
+  <div class="dest-remote dest-remote-never {{remote_never_hidden}}">
+    <span class="stat-label">Remote</span>
+    <span class="muted">not yet checked</span>
+  </div>
+  <div class="dest-remote dest-remote-in-sync {{remote_in_sync_hidden}}">
+    <span class="stat-label">Remote</span>
+    <span class="badge formidable">in sync</span>
+    <span class="muted">{{remote_when}}</span>
+  </div>
+  <div class="dest-remote dest-remote-diverged {{remote_diverged_hidden}}">
+    <span class="stat-label">Remote</span>
+    <span class="badge warn">diverged</span>
+    <span class="muted">{{remote_when}} &middot; {{remote_diff_count}} ref(s) differ</span>
+    <pre class="dest-remote-detail {{remote_detail_hidden}}">{{remote_detail}}</pre>
+  </div>
+  <div class="dest-remote dest-remote-err {{remote_err_hidden}}">
+    <span class="stat-label">Remote</span>
+    <span class="badge warn">check failed</span>
+    <span class="muted">{{remote_when}}</span>
+    <pre class="dest-remote-err-body {{remote_err_body_hidden}}">{{remote_err_text}}</pre>
+  </div>
   <div class="dest-actions">
     <button type="button" class="small sync-dest-btn">Sync now</button>
+    <button type="button" class="small secondary refresh-status-btn">Refresh status</button>
     <button type="button" class="small secondary edit-dest-btn">Edit</button>
     <button type="button" class="small danger remove-dest-btn">Remove</button>
     <span class="dest-sync-msg muted"></span>

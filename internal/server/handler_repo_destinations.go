@@ -10,9 +10,11 @@ import (
 
 // splitRepoDestinationsPath pulls the {repo}, optional {id}, and
 // optional trailing action out of a path of the form
-// /api/repos/{repo}/destinations[/{id}[/{action}]]. Mirrors
-// splitDestinationsPath but for the subscriber-facing route — the
-// admin path has the /api/admin/ prefix, this one does not.
+// /api/repos/{repo}/destinations[/{id}[/{action}[/{subaction}]]].
+// Mirrors splitDestinationsPath but for the subscriber-facing route —
+// the admin path has the /api/admin/ prefix, this one does not.
+// Two-segment actions are joined with "/" so the dispatcher keeps a
+// single string switch (e.g. "status/refresh").
 func splitRepoDestinationsPath(p string) (repo, id, action string, ok bool) {
 	rest := strings.TrimPrefix(p, "/api/repos/")
 	if rest == p {
@@ -29,10 +31,13 @@ func splitRepoDestinationsPath(p string) (repo, id, action string, ok bool) {
 	if len(parts) >= 3 {
 		id = parts[2]
 	}
-	if len(parts) >= 4 {
+	if len(parts) == 4 {
 		action = parts[3]
 	}
-	if len(parts) > 4 {
+	if len(parts) == 5 {
+		action = parts[3] + "/" + parts[4]
+	}
+	if len(parts) > 5 {
 		return "", "", "", false
 	}
 	return repo, id, action, true
@@ -105,9 +110,15 @@ func (s *Server) handleRepoDestinations(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if action != "" {
-		if action == "sync" && r.Method == http.MethodPost {
-			s.syncDestination(w, r, repo, id)
-			return
+		if r.Method == http.MethodPost {
+			switch action {
+			case "sync":
+				s.syncDestination(w, r, repo, id)
+				return
+			case "status/refresh":
+				s.refreshDestinationStatus(w, r, repo, id)
+				return
+			}
 		}
 		writeError(w, http.StatusNotFound, "unknown destination action")
 		return

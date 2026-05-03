@@ -86,6 +86,18 @@ type Server struct {
 	// stub the shell-out without running real git against a real remote.
 	pushDest pushDestinationFn
 
+	// lsRemote runs `git ls-remote` against a destination. Injected
+	// for the same reason as pushDest — the remote-status check is
+	// network-bound, so tests stub it to assert behaviour without
+	// hitting the real internet.
+	lsRemote lsRemoteFn
+
+	// statusPoller is the background goroutine that periodically
+	// re-checks each enabled destination's remote-status. Optional —
+	// nil when the configured interval is zero (disabled) or when
+	// tests replace the wiring.
+	statusPoller *mirrorStatusPoller
+
 	// mirrorWorker is the post-receive fan-out queue (slice 2b). After
 	// every accepted client push, the receive-pack handler enqueues
 	// the repo name; the worker then fires one push per enabled
@@ -269,6 +281,7 @@ func New(cfg *config.Config) *Server {
 		policy:          policy.TokenRepoPolicy{},
 		mux:             http.NewServeMux(),
 		pushDest:        executeMirrorPush,
+		lsRemote:        executeLsRemote,
 		oauthProviders:  oauthRegistry,
 		oauthState:      oauth.NewStateStore(10 * time.Minute),
 		gatewayStrategy: gwStrategy,
@@ -306,6 +319,20 @@ func New(cfg *config.Config) *Server {
 	}
 	s.load = newLoadTracker()
 	s.pushSlots = newSlotPool(cfg.Limits.PushSlots)
+	// Background remote-status poller. Disabled when the configured
+	// interval is non-positive — the operator can still trigger a
+	// manual refresh per destination via the admin UI.
+	if cfg.Mirror.StatusPollSec > 0 {
+		s.statusPoller = newMirrorStatusPoller(
+			time.Duration(cfg.Mirror.StatusPollSec)*time.Second,
+			func() []repoDestination { return s.enabledDestinations() },
+			func(ctx context.Context, repo, id string) {
+				if err := s.refreshRemoteStatus(ctx, repo, id); err != nil {
+					log.Printf("mirror-status: poll repo=%q dest=%q: %v", repo, id, err)
+				}
+			},
+		)
+	}
 	s.routes()
 	return s
 }

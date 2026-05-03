@@ -134,6 +134,20 @@ func (s *Server) syncOnce(ctx context.Context, repo string, dest *destinations.D
 		// Best-effort bookkeeping for "last used 2 days ago" in the
 		// credentials UI. Touch failure is not a sync failure.
 		_ = s.credentials.Touch(dest.CredentialName)
+		// A successful mirror push (force-mirror refspecs) means the
+		// remote's mirrored namespaces now exactly equal the local
+		// refs we just pushed. Record that inferred in_sync state on
+		// the destination so the admin UI's remote-status badge moves
+		// in step with last_sync_status — no extra ls-remote round
+		// trip needed. The next manual refresh or background poll
+		// will replace this with an authoritative read.
+		s.markRemoteInSyncFromPush(repo, dest.ID)
+		// Re-fetch so the wire view carries the just-written remote
+		// fields. Best-effort: a transient read failure here just
+		// means the response shows the pre-mark snapshot.
+		if fresh, err := s.destinations.Get(repo, dest.ID); err == nil {
+			updated = fresh
+		}
 	}
 	return updated, nil
 }

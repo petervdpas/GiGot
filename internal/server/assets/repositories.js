@@ -271,6 +271,19 @@
     } catch (_) { return iso; }
   }
 
+  // formatRemoteRef renders one diverged-ref row in the detail
+  // block. Local/remote SHAs are short-form; only_local shows just
+  // the local SHA, only_remote just the remote, different shows both.
+  function formatRemoteRef(r) {
+    const ref = r.ref || '';
+    const local = r.local ? shortSha(r.local) : '—';
+    const remote = r.remote ? shortSha(r.remote) : '—';
+    if (r.state === 'only_local')  return ref + '  local=' + local + '  remote=(missing)';
+    if (r.state === 'only_remote') return ref + '  local=(missing)  remote=' + remote;
+    if (r.state === 'different')   return ref + '  local=' + local + '  remote=' + remote;
+    return ref + '  ' + r.state;
+  }
+
   // destMode picks the fragment for the section's current state.
   // Edit mode wins when set even if a destination exists (the user
   // clicked Edit on an existing dest); otherwise an existing dest
@@ -294,6 +307,18 @@
       const status = d.last_sync_status || '';
       const when = d.last_sync_at ? formatSyncTime(d.last_sync_at) : '';
       const errText = d.last_sync_error ? d.last_sync_error.slice(0, 400) : '';
+
+      // Remote-status block. Distinct from last-sync: last-sync = "did
+      // our most recent push succeed", remote-status = "what does
+      // ls-remote say is out there now". Four states drive four
+      // pre-rendered blocks via the same *_hidden class-toggle trick
+      // the sync block uses.
+      const remoteStatus = d.remote_status || '';
+      const remoteWhen = d.remote_checked_at ? formatSyncTime(d.remote_checked_at) : '';
+      const remoteErr = d.remote_check_error ? d.remote_check_error.slice(0, 400) : '';
+      const refs = Array.isArray(d.remote_refs) ? d.remote_refs : [];
+      const diffRefs = refs.filter(r => r && r.state && r.state !== 'same');
+      const remoteDetail = diffRefs.map(r => formatRemoteRef(r)).join('\n');
       return {
         url:           d.url || '',
         cred_label:    d.credential_name ? d.credential_name : '(no credential)',
@@ -309,6 +334,16 @@
         never_hidden:  status === ''   ? '' : 'hidden',
         ok_hidden:     status === 'ok' ? '' : 'hidden',
         err_hidden:    (status && status !== 'ok') ? '' : 'hidden',
+        remote_when:              remoteWhen,
+        remote_diff_count:        diffRefs.length,
+        remote_detail:             remoteDetail,
+        remote_err_text:           remoteErr,
+        remote_err_body_hidden:    remoteErr ? '' : 'hidden',
+        remote_detail_hidden:      remoteDetail ? '' : 'hidden',
+        remote_never_hidden:       remoteStatus === ''         ? '' : 'hidden',
+        remote_in_sync_hidden:     remoteStatus === 'in_sync'  ? '' : 'hidden',
+        remote_diverged_hidden:    remoteStatus === 'diverged' ? '' : 'hidden',
+        remote_err_hidden:         remoteStatus === 'error'    ? '' : 'hidden',
       };
     }
     // edit
@@ -471,6 +506,27 @@
           GG.lazy.refresh(host);
         } catch (e) {
           syncBtn.disabled = false;
+          syncMsg.textContent = e.message;
+          syncMsg.className = 'dest-sync-msg error';
+        }
+      });
+    }
+
+    // Refresh status — runs ls-remote against the destination, no
+    // push. Same in-place refresh pattern as Sync now: re-render the
+    // host with the updated dest, leave other cards alone.
+    const refreshBtn = host.querySelector('.refresh-status-btn');
+    if (refreshBtn && syncMsg) {
+      refreshBtn.addEventListener('click', async () => {
+        refreshBtn.disabled = true;
+        syncMsg.textContent = 'checking…';
+        syncMsg.className = 'dest-sync-msg muted';
+        try {
+          const updated = await api.refreshDestinationStatus(repoName, dest.id);
+          destinationsByRepo[repoName] = updated;
+          GG.lazy.refresh(host);
+        } catch (e) {
+          refreshBtn.disabled = false;
           syncMsg.textContent = e.message;
           syncMsg.className = 'dest-sync-msg error';
         }

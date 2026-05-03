@@ -12,32 +12,54 @@ import (
 
 // destinationView projects a stored Destination onto its wire shape.
 func destinationView(d destinations.Destination) DestinationView {
+	var refs []RemoteRefStatusView
+	if len(d.RemoteRefs) > 0 {
+		refs = make([]RemoteRefStatusView, 0, len(d.RemoteRefs))
+		for _, r := range d.RemoteRefs {
+			refs = append(refs, RemoteRefStatusView{
+				Ref:    r.Ref,
+				Local:  r.Local,
+				Remote: r.Remote,
+				State:  r.State,
+			})
+		}
+	}
 	return DestinationView{
-		ID:             d.ID,
-		URL:            d.URL,
-		CredentialName: d.CredentialName,
-		Enabled:        d.Enabled,
-		LastSyncAt:     d.LastSyncAt,
-		LastSyncStatus: d.LastSyncStatus,
-		LastSyncError:  d.LastSyncError,
-		CreatedAt:      d.CreatedAt,
+		ID:               d.ID,
+		URL:              d.URL,
+		CredentialName:   d.CredentialName,
+		Enabled:          d.Enabled,
+		LastSyncAt:       d.LastSyncAt,
+		LastSyncStatus:   d.LastSyncStatus,
+		LastSyncError:    d.LastSyncError,
+		CreatedAt:        d.CreatedAt,
+		RemoteStatus:     d.RemoteStatus,
+		RemoteCheckedAt:  d.RemoteCheckedAt,
+		RemoteCheckError: d.RemoteCheckError,
+		RemoteRefs:       refs,
 	}
 }
 
 // splitDestinationsPath pulls the {repo}, optional {id}, and optional
 // trailing action out of a path of the form
-// /api/admin/repos/{repo}/destinations[/{id}[/{action}]]. Returns empty
-// strings for segments that aren't present. Currently the only action
-// recognised is "sync"; unknown actions still return ok=true and the
-// dispatcher decides what to do with them (so a 404 surfaces the
-// typo rather than a misleading 400).
+// /api/admin/repos/{repo}/destinations[/{id}[/{action}[/{subaction}]]].
+// Returns empty strings for segments that aren't present. Recognised
+// action shapes:
+//
+//   - "sync"             — POST runs one outbound mirror push
+//   - "status/refresh"   — POST runs one outbound `git ls-remote`
+//
+// Anything else still returns ok=true with action set to the
+// unrecognised string and the dispatcher 404s — that way a typo
+// surfaces as "unknown destination action" rather than a misleading
+// 400 invalid-path error.
 func splitDestinationsPath(p string) (repo, id, action string, ok bool) {
 	rest := strings.TrimPrefix(p, "/api/admin/repos/")
 	if rest == p {
 		return "", "", "", false
 	}
 	parts := strings.Split(rest, "/")
-	// parts: [repo, "destinations", id?, action?]
+	// parts: [repo, "destinations", id?, action?, subaction?]
 	if len(parts) < 2 || parts[1] != "destinations" {
 		return "", "", "", false
 	}
@@ -48,10 +70,15 @@ func splitDestinationsPath(p string) (repo, id, action string, ok bool) {
 	if len(parts) >= 3 {
 		id = parts[2]
 	}
-	if len(parts) >= 4 {
+	if len(parts) == 4 {
 		action = parts[3]
 	}
-	if len(parts) > 4 {
+	if len(parts) == 5 {
+		// Two-segment action — e.g. "status/refresh". Joined with "/"
+		// so the dispatcher can keep its existing single-string switch.
+		action = parts[3] + "/" + parts[4]
+	}
+	if len(parts) > 5 {
 		return "", "", "", false
 	}
 	return repo, id, action, true
@@ -89,9 +116,15 @@ func (s *Server) handleAdminRepoDestinations(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if action != "" {
-		if action == "sync" && r.Method == http.MethodPost {
-			s.syncDestination(w, r, repo, id)
-			return
+		if r.Method == http.MethodPost {
+			switch action {
+			case "sync":
+				s.syncDestination(w, r, repo, id)
+				return
+			case "status/refresh":
+				s.refreshDestinationStatus(w, r, repo, id)
+				return
+			}
 		}
 		writeError(w, http.StatusNotFound, "unknown destination action")
 		return

@@ -1497,6 +1497,80 @@
                 }
             }
         },
+        "/admin/repos/{name}/destinations/{id}/status/refresh": {
+            "post": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Invokes `git ls-remote --refs` against the destination's URL\nusing the vault credential referenced by `credential_name`,\ncompares the result against local refs/heads/* + refs/audit/*,\nand writes the outcome onto the destination as\n`remote_status`, `remote_checked_at`, optional\n`remote_check_error`, and per-ref `remote_refs[]`. Returns the\nupdated destination view. No push is performed — this is the\nread-side companion to /sync. Disabled destinations still\naccept this call (manual is explicit operator intent); the\nflag gates only the post-receive auto-mirror.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "destinations"
+                ],
+                "summary": "Refresh a mirror destination's remote-status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Subscriber route: missing mirror ability, regular role, or repo out of scope",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Repo, destination, or credential (deleted) not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Credential referenced by destination no longer exists in the vault",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "ls-remote failed (auth/network); the destination is still updated with status=error so the admin UI badge reflects it",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/repos/{name}/destinations/{id}/sync": {
             "post": {
                 "security": [
@@ -4020,6 +4094,80 @@
                 }
             }
         },
+        "/repos/{name}/destinations/{id}/status/refresh": {
+            "post": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Invokes `git ls-remote --refs` against the destination's URL\nusing the vault credential referenced by `credential_name`,\ncompares the result against local refs/heads/* + refs/audit/*,\nand writes the outcome onto the destination as\n`remote_status`, `remote_checked_at`, optional\n`remote_check_error`, and per-ref `remote_refs[]`. Returns the\nupdated destination view. No push is performed — this is the\nread-side companion to /sync. Disabled destinations still\naccept this call (manual is explicit operator intent); the\nflag gates only the post-receive auto-mirror.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "destinations"
+                ],
+                "summary": "Refresh a mirror destination's remote-status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Subscriber route: missing mirror ability, regular role, or repo out of scope",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Repo, destination, or credential (deleted) not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Credential referenced by destination no longer exists in the vault",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "ls-remote failed (auth/network); the destination is still updated with status=error so the admin UI badge reflects it",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/repos/{name}/destinations/{id}/sync": {
             "post": {
                 "security": [
@@ -5409,6 +5557,21 @@
                 "last_sync_status": {
                     "type": "string"
                 },
+                "remote_check_error": {
+                    "type": "string"
+                },
+                "remote_checked_at": {
+                    "type": "string"
+                },
+                "remote_refs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.RemoteRefStatusView"
+                    }
+                },
+                "remote_status": {
+                    "type": "string"
+                },
                 "url": {
                     "type": "string"
                 }
@@ -5709,6 +5872,23 @@
                     "type": "string"
                 },
                 "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.RemoteRefStatusView": {
+            "type": "object",
+            "properties": {
+                "local": {
+                    "type": "string"
+                },
+                "ref": {
+                    "type": "string"
+                },
+                "remote": {
+                    "type": "string"
+                },
+                "state": {
                     "type": "string"
                 }
             }

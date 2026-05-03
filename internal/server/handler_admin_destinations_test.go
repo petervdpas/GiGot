@@ -364,8 +364,16 @@ func TestDestinations_BadPathShapes(t *testing.T) {
 		t.Fatalf("want 404 for unknown action, got %d body=%s", rec.Code, rec.Body.String())
 	}
 
-	// Five segments past /destinations is still not a thing we serve.
+	// {id}/{action}/{subaction} is also valid now that
+	// /status/refresh exists. An unknown two-segment action still
+	// 404s (same shape as the one-segment unknown above).
 	rec = do(t, srv, http.MethodGet, "/api/admin/repos/addresses/destinations/a/b/c", nil, sess)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("want 404 for unknown two-segment action, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Six segments past /destinations is still not a thing we serve.
+	rec = do(t, srv, http.MethodGet, "/api/admin/repos/addresses/destinations/a/b/c/d", nil, sess)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("want 400 for too-deep path, got %d", rec.Code)
 	}

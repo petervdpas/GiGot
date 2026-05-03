@@ -36,6 +36,35 @@ type Destination struct {
 	LastSyncStatus string     `json:"last_sync_status,omitempty"`
 	LastSyncError  string     `json:"last_sync_error,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
+
+	// Remote-status tracking (separate from LastSync*). LastSync*
+	// records whether the most recent push succeeded; Remote* records
+	// what we observed on the remote via `git ls-remote`. They move
+	// together on a successful push (the refs we just wrote ARE on
+	// the remote) but RemoteStatus can also be refreshed independently
+	// without triggering a push (manual refresh button + background
+	// poller).
+	//
+	// RemoteStatus is one of: "" (never checked), "in_sync",
+	// "diverged" (at least one mirrored ref differs or is missing on
+	// either side), or "error" (ls-remote itself failed — auth,
+	// network, DNS).
+	RemoteStatus     string             `json:"remote_status,omitempty"`
+	RemoteCheckedAt  *time.Time         `json:"remote_checked_at,omitempty"`
+	RemoteCheckError string             `json:"remote_check_error,omitempty"`
+	RemoteRefs       []RemoteRefStatus  `json:"remote_refs,omitempty"`
+}
+
+// RemoteRefStatus is one row of the per-ref breakdown produced by a
+// remote-status check. Covers every ref present on either side of the
+// mirrored namespaces (refs/heads/* + refs/audit/*); refs outside those
+// namespaces are ignored because the mirror push doesn't touch them.
+type RemoteRefStatus struct {
+	Ref    string `json:"ref"`
+	Local  string `json:"local,omitempty"`
+	Remote string `json:"remote,omitempty"`
+	// State: "same" | "different" | "only_local" | "only_remote".
+	State string `json:"state"`
 }
 
 // Store holds destinations keyed by repo name, persisted to an encrypted

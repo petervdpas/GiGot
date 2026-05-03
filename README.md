@@ -67,6 +67,35 @@ Open work:
 
 Done and shipping:
 
+- [x] **Mirror remote-status tracking + admin Refresh button +
+      background poller.** Closes the long-standing "GiGot
+      pushes blind" gap: every mirror destination now carries
+      a `remote_status` field (`in_sync` | `diverged` | `error`
+      | `""` not yet checked), a `remote_checked_at` timestamp,
+      and a per-ref breakdown (`refs/heads/*` + `refs/audit/*`
+      only — non-mirrored namespaces like `refs/pull/*` on
+      GitHub are filtered out so the badge isn't misleading).
+      Three call sites populate it: a manual Refresh button in
+      the per-repo Mirror destination block on
+      `/admin/repositories`, an inferred `in_sync` write on
+      every successful push (force-mirror refspecs guarantee it
+      with no extra round-trip), and a background ticker that
+      re-checks every enabled destination on a configurable
+      cadence (`cfg.Mirror.StatusPollSec`, default 600 s; 0
+      disables). Detection primitive is `git ls-remote --refs`
+      reusing the existing `mirror.go` askpass shim — no new
+      binary on the image, no new Go dependency, no working
+      tree needed (bare repos can't `git status`). New routes
+      `POST /api/admin/repos/{name}/destinations/{id}/status/refresh`
+      and the matching subscriber-bearer path; the handler 502s
+      on ls-remote failure but still records `status="error"`
+      on the destination so the badge in the admin UI reflects
+      it. Tests: 4 unit cases (parser; compare logic across all
+      same / different / only_local / only_remote shapes;
+      non-mirror refs ignored) + 5 handler cases (in_sync,
+      diverged, ls-remote failure, missing dest 404, push-time
+      piggyback) + the existing path-shape test extended for the
+      new two-segment action. Swagger regenerated.
 - [x] **Push admission gate + admin-tunable limits at
       `/admin/limits`.** Sits on top of the load gauge: the gauge
       is advisory (header reflects "I'm getting busy"), the gate

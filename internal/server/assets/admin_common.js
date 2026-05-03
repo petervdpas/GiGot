@@ -168,6 +168,13 @@
       if (!r.ok) throw new Error((await r.json()).error || 'sync failed');
       return r.json();
     },
+    async refreshDestinationStatus(repo, id) {
+      const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/destinations/' + encodeURIComponent(id) + '/status/refresh', {
+        method: 'POST', credentials: 'same-origin',
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'refresh failed');
+      return r.json();
+    },
     async convertToFormidable(repo) {
       const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/formidable', {
         method: 'POST', credentials: 'same-origin',

@@ -35,6 +35,22 @@ type DestinationView struct {
 	LastSyncStatus string     `json:"last_sync_status,omitempty"`
 	LastSyncError  string     `json:"last_sync_error,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
+
+	RemoteStatus     string                  `json:"remote_status,omitempty"`
+	RemoteCheckedAt  *time.Time              `json:"remote_checked_at,omitempty"`
+	RemoteCheckError string                  `json:"remote_check_error,omitempty"`
+	RemoteRefs       []RemoteRefStatusView   `json:"remote_refs,omitempty"`
+}
+
+// RemoteRefStatusView is the wire shape of one per-ref entry in the
+// remote-status breakdown. Mirrors destinations.RemoteRefStatus 1:1 but
+// keeps a distinct type at the wire so the storage type can evolve
+// without leaking into swagger.
+type RemoteRefStatusView struct {
+	Ref    string `json:"ref"`
+	Local  string `json:"local,omitempty"`
+	Remote string `json:"remote,omitempty"`
+	State  string `json:"state"`
 }
 
 // DestinationListResponse is the body of

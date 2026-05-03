@@ -19,6 +19,7 @@ type Config struct {
 	Crypto  CryptoConfig  `json:"crypto"`
 	Logging LoggingConfig `json:"logging"`
 	Limits  LimitsConfig  `json:"limits"`
+	Mirror  MirrorConfig  `json:"mirror"`
 	// Admins is the bootstrap seed list of admin accounts — NOT a
 	// live allowlist. On startup, entries not yet in the accounts
 	// store are upserted with role=admin; after that the store is the
@@ -169,6 +170,17 @@ type LoggingConfig struct {
 	Level string `json:"level"`
 }
 
+// MirrorConfig controls mirror-related background behaviours that
+// don't belong on a per-request handler. StatusPollSec is the cadence
+// at which the server re-checks each enabled destination's remote
+// status via `git ls-remote` (so the admin UI's "in sync / diverged"
+// badge stays fresh without an admin clicking Refresh on every
+// destination). 0 disables the poller; the manual refresh button on
+// the admin UI still works either way.
+type MirrorConfig struct {
+	StatusPollSec int `json:"status_poll_sec"`
+}
+
 // LimitsConfig controls server-side admission limits — concurrency
 // caps and the retry-after hints they hand back to clients on
 // rejection. PushSlots gates concurrent git-receive-pack handlers
@@ -214,6 +226,13 @@ func Defaults() *Config {
 		Limits: LimitsConfig{
 			PushSlots:         10,
 			PushRetryAfterSec: 5,
+		},
+		Mirror: MirrorConfig{
+			// 10-minute default — see docs/design/remote-sync.md when
+			// the design doc lands. Trade-off: smaller = fresher badge
+			// + faster auth-failure detection; larger = less log noise
+			// + fewer credential reads. Set to 0 to disable.
+			StatusPollSec: 600,
 		},
 		Admins: []AdminSeed{
 			{Provider: accounts.ProviderLocal, Identifier: "admin", DisplayName: "Primary admin"},
