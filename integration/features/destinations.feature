@@ -154,6 +154,67 @@ Feature: Mirror-sync destinations (admin)
     When I request "/api/repos/addresses/destinations" with that token
     Then the response status should be 200
 
+  Scenario: Subscriber without mirror ability can READ a single destination by id
+    # Read split applies to the per-id GET as well, not just the
+    # list. A no-mirror token in scope can read either shape; a
+    # future refactor that re-tightens one of them will fail here.
+    Given the server is running with auth enabled
+    And an admin "alice" exists with password "hunter2"
+    And a repository "addresses" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/credentials" with body '{"name":"c","kind":"pat","secret":"s"}'
+    And I POST "/api/admin/repos/addresses/destinations" with body '{"url":"https://x","credential_name":"c"}'
+    And I save the JSON response "id" as "dest_id"
+    Given a token is issued for user "alice" with repos "addresses"
+    When I request "/api/repos/addresses/destinations/${dest_id}" with that token
+    Then the response status should be 200
+    And the JSON response "id" should equal saved "dest_id"
+
+  Scenario: Subscriber without mirror ability is 403 on PATCH
+    # Writes (POST/PATCH/DELETE/sync) keep the role+ability fence even
+    # though reads dropped it. PATCH is exercised independently from
+    # POST/DELETE/sync so a one-off relaxation of any single verb's
+    # gate doesn't slip past CI.
+    Given the server is running with auth enabled
+    And an admin "alice" exists with password "hunter2"
+    And a repository "addresses" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/credentials" with body '{"name":"c","kind":"pat","secret":"s"}'
+    And I POST "/api/admin/repos/addresses/destinations" with body '{"url":"https://x","credential_name":"c"}'
+    And I save the JSON response "id" as "dest_id"
+    Given a token is issued for user "alice" with repos "addresses"
+    When I PATCH "/api/repos/addresses/destinations/${dest_id}" with body '{"enabled":false}' with that token
+    Then the response status should be 403
+
+  Scenario: Subscriber without mirror ability is 403 on DELETE
+    Given the server is running with auth enabled
+    And an admin "alice" exists with password "hunter2"
+    And a repository "addresses" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/credentials" with body '{"name":"c","kind":"pat","secret":"s"}'
+    And I POST "/api/admin/repos/addresses/destinations" with body '{"url":"https://x","credential_name":"c"}'
+    And I save the JSON response "id" as "dest_id"
+    Given a token is issued for user "alice" with repos "addresses"
+    When I DELETE "/api/repos/addresses/destinations/${dest_id}" with that token
+    Then the response status should be 403
+
+  Scenario: Out-of-scope token is 403 on a single-destination read
+    # The mirror gate dropped on reads, but the repo-scope gate did
+    # not. A token bound to a different repo cannot reach this repo's
+    # destinations, regardless of ability.
+    Given the server is running with auth enabled
+    And an admin "alice" exists with password "hunter2"
+    And a regular account "bob" exists
+    And a repository "addresses" exists
+    And a repository "elsewhere" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/credentials" with body '{"name":"c","kind":"pat","secret":"s"}'
+    And I POST "/api/admin/repos/addresses/destinations" with body '{"url":"https://x","credential_name":"c"}'
+    And I save the JSON response "id" as "dest_id"
+    Given a token is issued for user "bob" with repos "elsewhere"
+    When I request "/api/repos/addresses/destinations/${dest_id}" with that token
+    Then the response status should be 403
+
   Scenario: Subscriber without mirror ability is 403 on the /sync route
     # Writes (POST/PATCH/DELETE/sync) keep the role+ability fence even
     # though reads dropped it. /sync is a write — it triggers an

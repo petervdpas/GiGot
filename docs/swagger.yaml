@@ -713,6 +713,61 @@ definitions:
       name:
         type: string
     type: object
+  server.RepoContextDestinations:
+    properties:
+      auto_mirror_enabled:
+        type: integer
+      total:
+        type: integer
+    type: object
+  server.RepoContextRepo:
+    properties:
+      commits:
+        type: integer
+      default_branch:
+        type: string
+      destinations:
+        $ref: '#/definitions/server.RepoContextDestinations'
+      empty:
+        type: boolean
+      head_sha:
+        type: string
+      is_formidable:
+        type: boolean
+      name:
+        type: string
+    type: object
+  server.RepoContextResponse:
+    properties:
+      repo:
+        $ref: '#/definitions/server.RepoContextRepo'
+      subscription:
+        $ref: '#/definitions/server.RepoContextSubscription'
+      user:
+        $ref: '#/definitions/server.RepoContextUser'
+    type: object
+  server.RepoContextSubscription:
+    properties:
+      abilities:
+        items:
+          type: string
+        type: array
+      repo:
+        type: string
+    type: object
+  server.RepoContextUser:
+    properties:
+      display_name:
+        type: string
+      email:
+        type: string
+      provider:
+        type: string
+      role:
+        type: string
+      username:
+        type: string
+    type: object
   server.RepoInfo:
     properties:
       commits:
@@ -3278,10 +3333,10 @@ paths:
   /me:
     get:
       description: |-
-        Returns the signed-in caller's account row plus the
-        subscription keys bound to it. Requires a valid
-        session cookie; NOT admin-gated — any authenticated
-        user reaches their own profile.
+        Returns the caller's account row plus subscription
+        keys. Accepts either a session cookie (returns every
+        subscription bound to the account) or a bearer token
+        (returns the single subscription that token represents).
       produces:
       - application/json
       responses:
@@ -3293,6 +3348,8 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
       summary: Current user profile and subscription keys
       tags:
       - me
@@ -3632,6 +3689,49 @@ paths:
       summary: Multi-file atomic commit
       tags:
       - sync
+  /repos/{name}/context:
+    get:
+      description: |-
+        Single-call answer to "who am I, what can I do here,
+        what does this repo offer." Designed for API clients
+        (Formidable etc.) that need to render permission-aware
+        UI without probing per-feature endpoints. Read-only;
+        requires only repo-scope read access — the caller's
+        abilities are reported, not gated.
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.RepoContextResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Bootstrap context for a repo connection
+      tags:
+      - repos
   /repos/{name}/destinations:
     get:
       consumes:

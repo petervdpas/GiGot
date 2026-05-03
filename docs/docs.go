@@ -2936,7 +2936,12 @@ const docTemplate = `{
         },
         "/me": {
             "get": {
-                "description": "Returns the signed-in caller's account row plus the\nsubscription keys bound to it. Requires a valid\nsession cookie; NOT admin-gated — any authenticated\nuser reaches their own profile.",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the caller's account row plus subscription\nkeys. Accepts either a session cookie (returns every\nsubscription bound to the account) or a bearer token\n(returns the single subscription that token represents).",
                 "produces": [
                     "application/json"
                 ],
@@ -3431,6 +3436,64 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/repos/{name}/context": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Single-call answer to \"who am I, what can I do here,\nwhat does this repo offer.\" Designed for API clients\n(Formidable etc.) that need to render permission-aware\nUI without probing per-feature endpoints. Read-only;\nrequires only repo-scope read access — the caller's\nabilities are reported, not gated.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Bootstrap context for a repo connection",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.RepoContextResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -5462,6 +5525,91 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.RepoContextDestinations": {
+            "type": "object",
+            "properties": {
+                "auto_mirror_enabled": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "server.RepoContextRepo": {
+            "type": "object",
+            "properties": {
+                "commits": {
+                    "type": "integer"
+                },
+                "default_branch": {
+                    "type": "string"
+                },
+                "destinations": {
+                    "$ref": "#/definitions/server.RepoContextDestinations"
+                },
+                "empty": {
+                    "type": "boolean"
+                },
+                "head_sha": {
+                    "type": "string"
+                },
+                "is_formidable": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.RepoContextResponse": {
+            "type": "object",
+            "properties": {
+                "repo": {
+                    "$ref": "#/definitions/server.RepoContextRepo"
+                },
+                "subscription": {
+                    "$ref": "#/definitions/server.RepoContextSubscription"
+                },
+                "user": {
+                    "$ref": "#/definitions/server.RepoContextUser"
+                }
+            }
+        },
+        "server.RepoContextSubscription": {
+            "type": "object",
+            "properties": {
+                "abilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "repo": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.RepoContextUser": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "username": {
                     "type": "string"
                 }
             }

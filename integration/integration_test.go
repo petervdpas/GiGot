@@ -129,6 +129,18 @@ func (tc *testContext) theResponseStatusShouldBe(code int) error {
 	return nil
 }
 
+// theResponseStatusShouldNotBe is the negative-status companion.
+// Useful for scenarios that pin "the gate must not deny" without
+// over-specifying which 2xx the inner handler returns (e.g. the
+// mirror /sync route may return 200 on success but 502 if the
+// stubbed outbound push fails — both prove the auth gate passed).
+func (tc *testContext) theResponseStatusShouldNotBe(code int) error {
+	if tc.resp.StatusCode == code {
+		return fmt.Errorf("expected status NOT to be %d, got %d (body=%s)", code, tc.resp.StatusCode, tc.respBody)
+	}
+	return nil
+}
+
 func (tc *testContext) theResponseShouldContainJSONKeyWithValue(key, value string) error {
 	var body map[string]string
 	if err := json.Unmarshal([]byte(tc.respBody), &body); err != nil {
@@ -904,6 +916,44 @@ func (tc *testContext) postWithToken(path, token string) error {
 	return nil
 }
 
+// requestWithBodyAndToken is the verb-agnostic plumbing behind the
+// "...with body '...' with that token" steps. Mirrors doRequest's
+// json+save-expand handling so scenarios can chain saved values
+// across token-authenticated writes the same way they do across
+// session-authenticated ones.
+func (tc *testContext) requestWithBodyAndToken(method, path, body, token string) error {
+	expanded := tc.expandSaved(body)
+	req, err := http.NewRequest(method, tc.ts.URL+tc.expandSaved(path), strings.NewReader(expanded))
+	if err != nil {
+		return err
+	}
+	if expanded != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := tc.client.Do(req)
+	if err != nil {
+		return err
+	}
+	tc.resp = resp
+	respBody, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	tc.respBody = string(respBody)
+	return nil
+}
+
+func (tc *testContext) iPOSTWithBodyAndThatToken(path, body string) error {
+	return tc.requestWithBodyAndToken(http.MethodPost, path, body, tc.currentToken)
+}
+
+func (tc *testContext) iPATCHWithBodyAndThatToken(path, body string) error {
+	return tc.requestWithBodyAndToken(http.MethodPatch, path, body, tc.currentToken)
+}
+
+func (tc *testContext) iDELETEWithThatToken(path string) error {
+	return tc.requestWithBodyAndToken(http.MethodDelete, path, "", tc.currentToken)
+}
+
 func (tc *testContext) iRequestWithSavedToken(path, saveKey string) error {
 	token, ok := tc.savedValues[saveKey]
 	if !ok {
@@ -917,7 +967,10 @@ func (tc *testContext) iRequestWithToken(path, token string) error {
 }
 
 func (tc *testContext) requestWithToken(path, token string) error {
-	req, err := http.NewRequest(http.MethodGet, tc.ts.URL+path, nil)
+	// Expand saved values like ${dest_id} in the path so token-auth'd
+	// scenarios can chain off earlier admin/session writes the same
+	// way iGET/iPOSTWithBody do.
+	req, err := http.NewRequest(http.MethodGet, tc.ts.URL+tc.expandSaved(path), nil)
 	if err != nil {
 		return err
 	}
@@ -1376,6 +1429,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the server is running in formidable-first mode$`, tc.theServerIsRunningInFormidableFirstMode)
 	ctx.Step(`^I request "([^"]*)"$`, tc.iRequest)
 	ctx.Step(`^the response status should be (\d+)$`, tc.theResponseStatusShouldBe)
+	ctx.Step(`^the response status should not be (\d+)$`, tc.theResponseStatusShouldNotBe)
 	ctx.Step(`^the response should contain JSON key "([^"]*)" with value "([^"]*)"$`, tc.theResponseShouldContainJSONKeyWithValue)
 	ctx.Step(`^the response content type should contain "([^"]*)"$`, tc.theResponseContentTypeShouldContain)
 	ctx.Step(`^the response header "([^"]*)" should be one of "([^"]*)"$`, tc.theResponseHeaderShouldBeOneOf)
@@ -1450,6 +1504,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I request "([^"]*)" without a token$`, tc.iRequestWithoutAToken)
 	ctx.Step(`^I request "([^"]*)" with that token$`, tc.iRequestWithThatToken)
 	ctx.Step(`^I POST "([^"]*)" with that token$`, tc.iPOSTWithThatToken)
+	ctx.Step(`^I POST "([^"]*)" with body '([^']*)' with that token$`, tc.iPOSTWithBodyAndThatToken)
+	ctx.Step(`^I PATCH "([^"]*)" with body '([^']*)' with that token$`, tc.iPATCHWithBodyAndThatToken)
+	ctx.Step(`^I DELETE "([^"]*)" with that token$`, tc.iDELETEWithThatToken)
 	ctx.Step(`^I request "([^"]*)" with token "([^"]*)"$`, tc.iRequestWithToken)
 	ctx.Step(`^I request "([^"]*)" with saved token "([^"]*)"$`, tc.iRequestWithSavedToken)
 	ctx.Step(`^that token is revoked$`, tc.thatTokenIsRevoked)

@@ -33,6 +33,8 @@ func (s *Server) handleRepoRouter(w http.ResponseWriter, r *http.Request) {
 		s.handleRepoBranches(w, r)
 	case strings.HasSuffix(path, "/log"):
 		s.handleRepoLog(w, r)
+	case strings.HasSuffix(path, "/context"):
+		s.handleRepoContext(w, r)
 	default:
 		s.handleRepo(w, r)
 	}
