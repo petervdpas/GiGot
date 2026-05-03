@@ -319,6 +319,24 @@
       const refs = Array.isArray(d.remote_refs) ? d.remote_refs : [];
       const diffRefs = refs.filter(r => r && r.state && r.state !== 'same');
       const remoteDetail = diffRefs.map(r => formatRemoteRef(r)).join('\n');
+      // The remote-status field on the destination is just
+      // "diverged" whenever any ref differs. The UI wants more nuance:
+      // if EVERY differing ref is `only_local`, the remote is just
+      // behind a local push (auto-mirror off + a client push) — Sync
+      // now resolves it. If anything is `only_remote` or `different`,
+      // there's a real two-sided fork worth flagging more loudly.
+      const onlyLocalCount  = diffRefs.filter(r => r.state === 'only_local').length;
+      const onlyRemoteCount = diffRefs.filter(r => r.state === 'only_remote').length;
+      const differentCount  = diffRefs.filter(r => r.state === 'different').length;
+      const allLocalOnly = diffRefs.length > 0 && onlyLocalCount === diffRefs.length;
+      let remoteBadgeLabel = 'out of sync';
+      let remoteBadgeClass = 'warn';
+      let remoteHint = '';
+      if (onlyRemoteCount > 0 || differentCount > 0) {
+        remoteBadgeLabel = 'diverged';
+      } else if (allLocalOnly) {
+        remoteHint = 'Local has changes since the last sync. Click Sync now to push.';
+      }
       return {
         url:           d.url || '',
         cred_label:    d.credential_name ? d.credential_name : '(no credential)',
@@ -337,6 +355,10 @@
         remote_when:              remoteWhen,
         remote_diff_count:        diffRefs.length,
         remote_detail:             remoteDetail,
+        remote_badge_label:        remoteBadgeLabel,
+        remote_badge_class:        remoteBadgeClass,
+        remote_hint:               remoteHint,
+        remote_hint_hidden:        remoteHint ? '' : 'hidden',
         remote_err_text:           remoteErr,
         remote_err_body_hidden:    remoteErr ? '' : 'hidden',
         remote_detail_hidden:      remoteDetail ? '' : 'hidden',

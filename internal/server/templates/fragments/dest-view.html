@@ -34,9 +34,13 @@
   </div>
   <div class="dest-remote dest-remote-diverged {{remote_diverged_hidden}}">
     <span class="stat-label">Remote</span>
-    <span class="badge warn">diverged</span>
+    <span class="badge {{remote_badge_class}}">{{remote_badge_label}}</span>
     <span class="muted">{{remote_when}} &middot; {{remote_diff_count}} ref(s) differ</span>
-    <pre class="dest-remote-detail {{remote_detail_hidden}}">{{remote_detail}}</pre>
+    <span class="dest-remote-hint {{remote_hint_hidden}}">{{remote_hint}}</span>
+    <details class="dest-remote-detail-wrap {{remote_detail_hidden}}">
+      <summary class="muted">Show details</summary>
+      <pre class="dest-remote-detail">{{remote_detail}}</pre>
+    </details>
   </div>
   <div class="dest-remote dest-remote-err {{remote_err_hidden}}">
     <span class="stat-label">Remote</span>

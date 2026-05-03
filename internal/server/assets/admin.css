@@ -1603,6 +1603,27 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
 .limits-field input { width: 8rem; }
 .limits-bound { font-size: 0.75rem; }
 .limits-state { margin-bottom: 0.6rem; font-size: 0.85rem; }
+/* Hint text below a remote-status badge when the diff shape implies
+ * a one-click fix (everything diverging is local-only, so Sync now
+ * pushes the gap closed). Italic + slightly muted so it reads as
+ * guidance rather than another state badge. */
+.dest-remote-hint {
+  font-style: italic;
+  color: var(--text);
+  opacity: 0.85;
+  display: block;
+  margin: 0.25rem 0 0;
+}
+/* Wrap around the per-ref SHA listing. <details> default chevron is
+ * fine; the summary stays muted so closed state doesn't compete with
+ * the badge for attention. */
+.dest-remote-detail-wrap > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+}
+.dest-remote-detail-wrap[open] > summary { margin-bottom: 0.25rem; }
+
 /* /admin/settings — mirror polling toggle row. Lines up with the
  * existing limits-row + limits-field shapes so the card holds its
  * shape with or without the toggle present. */
