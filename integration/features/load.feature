@@ -37,7 +37,7 @@ Feature: Load gauge — X-GiGot-Load header + GET /api/health/load
 
   Scenario: Load endpoint rejects non-GET methods
     Given the server is running
-    When I POST "/api/health/load" with body "{}"
+    When I POST "/api/health/load" with body '{}'
     Then the response status should be 405
 
   Scenario: Load endpoint is public — no session required

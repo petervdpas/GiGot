@@ -81,19 +81,29 @@ func (s *Server) handleRepoDestinations(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "invalid destinations path")
 		return
 	}
-	// Gate order matters for informativeness: if the token isn't scoped
-	// to the repo, that's the more specific failure to report. The role
-	// gate is the structural fence — a `regular` account holding a stale
-	// `mirror`-bearing key still gets denied here, even though the
-	// ability check below would otherwise pass.
-	if !s.requireAllow(w, r, policy.ActionWriteRepo, repo) {
-		return
-	}
-	if !s.requireMaintainerOrAdmin(w, r) {
-		return
-	}
-	if !s.requireAbility(w, r, auth.AbilityMirror) {
-		return
+	// Read vs. write split: GETs are informational and only need
+	// repo-scope read access — a regular subscriber may want to see
+	// which mirrors are configured even though they can't manage
+	// them. Writes (POST/PATCH/DELETE and the /sync action) keep the
+	// full three-gate stack (write-scope policy + maintainer-or-admin
+	// role + the per-key `mirror` ability), so the role and ability
+	// fences still hold for anything that mutates state or triggers
+	// an outbound push.
+	isWrite := r.Method != http.MethodGet
+	if isWrite {
+		if !s.requireAllow(w, r, policy.ActionWriteRepo, repo) {
+			return
+		}
+		if !s.requireMaintainerOrAdmin(w, r) {
+			return
+		}
+		if !s.requireAbility(w, r, auth.AbilityMirror) {
+			return
+		}
+	} else {
+		if !s.requireAllow(w, r, policy.ActionReadRepo, repo) {
+			return
+		}
 	}
 	if !s.git.Exists(repo) {
 		writeError(w, http.StatusNotFound, "repo not found")

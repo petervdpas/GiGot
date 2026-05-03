@@ -165,16 +165,27 @@ func (tc *testContext) theResponseHeaderShouldBeOneOf(name, allowed string) erro
 	return fmt.Errorf("header %q = %q, want one of %q", name, got, allowed)
 }
 
+// unescapeStepArg turns the literal escape sequences godog passes
+// through (it does NOT unescape captured groups) into their real
+// characters so JSON snippets like "\"username\":\"alice\"" match
+// the server's response body. Only \" and \\ are recognised — the
+// step args don't carry other JSON escapes today.
+func unescapeStepArg(s string) string {
+	return strings.NewReplacer(`\"`, `"`, `\\`, `\`).Replace(s)
+}
+
 func (tc *testContext) theResponseBodyShouldContain(text string) error {
-	if !contains(tc.respBody, text) {
-		return fmt.Errorf("expected body to contain %q", text)
+	want := unescapeStepArg(text)
+	if !contains(tc.respBody, want) {
+		return fmt.Errorf("expected body to contain %q, got: %s", want, tc.respBody)
 	}
 	return nil
 }
 
 func (tc *testContext) theResponseBodyShouldNotContain(text string) error {
-	if contains(tc.respBody, text) {
-		return fmt.Errorf("expected body NOT to contain %q, got: %s", text, tc.respBody)
+	want := unescapeStepArg(text)
+	if contains(tc.respBody, want) {
+		return fmt.Errorf("expected body NOT to contain %q, got: %s", want, tc.respBody)
 	}
 	return nil
 }
@@ -1368,8 +1379,13 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the response should contain JSON key "([^"]*)" with value "([^"]*)"$`, tc.theResponseShouldContainJSONKeyWithValue)
 	ctx.Step(`^the response content type should contain "([^"]*)"$`, tc.theResponseContentTypeShouldContain)
 	ctx.Step(`^the response header "([^"]*)" should be one of "([^"]*)"$`, tc.theResponseHeaderShouldBeOneOf)
-	ctx.Step(`^the response body should contain "([^"]*)"$`, tc.theResponseBodyShouldContain)
-	ctx.Step(`^the response body should not contain "([^"]*)"$`, tc.theResponseBodyShouldNotContain)
+	// The capture group accepts escape sequences (\" \\) so scenarios
+	// can pin literal JSON snippets like "\"username\":\"alice\"".
+	// The plain [^"]* form doesn't tolerate any " inside the arg and
+	// silently fails to match — exactly the failure mode that hid
+	// many scenarios before Strict was turned on.
+	ctx.Step(`^the response body should contain "((?:[^"\\]|\\.)*)"$`, tc.theResponseBodyShouldContain)
+	ctx.Step(`^the response body should not contain "((?:[^"\\]|\\.)*)"$`, tc.theResponseBodyShouldNotContain)
 	ctx.Step(`^a repository "([^"]*)" exists$`, tc.aRepositoryExists)
 	ctx.Step(`^a local git source "([^"]*)" exists$`, tc.aLocalGitSourceExists)
 	ctx.Step(`^a local git source "([^"]*)" exists with a formidable marker$`, tc.aLocalGitSourceExistsWithMarker)
@@ -1420,6 +1436,11 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the server is running with auth enabled$`, tc.theServerIsRunningWithAuthEnabled)
 	ctx.Step(`^a token is issued for user "([^"]*)"$`, tc.aTokenIsIssuedForUser)
 	ctx.Step(`^a token is issued for user "([^"]*)" on repo "([^"]*)"$`, tc.aTokenIsIssuedForUserOnRepo)
+	// "with repos" is a long-standing phrasing in destinations.feature.
+	// Without this alias, godog silently skipped those scenarios
+	// (see Strict comment in TestFeatures). Same single-repo binding;
+	// the plural is cosmetic at the .feature level.
+	ctx.Step(`^a token is issued for user "([^"]*)" with repos "([^"]*)"$`, tc.aTokenIsIssuedForUserOnRepo)
 	ctx.Step(`^the admin rebinds that token to "([^"]*)"$`, tc.adminRebindsThatTokenTo)
 	ctx.Step(`^the admin issues another key for "([^"]*)" on repo "([^"]*)"$`, tc.adminIssuesAnotherKeyFor)
 	ctx.Step(`^that token has ability "([^"]*)"$`, tc.thatTokenHasAbility)
@@ -1473,8 +1494,16 @@ func TestFeatures(t *testing.T) {
 	suite := godog.TestSuite{
 		ScenarioInitializer: InitializeScenario,
 		Options: &godog.Options{
-			Format:   "pretty",
-			Paths:    []string{"features"},
+			Format: "pretty",
+			Paths:  []string{"features"},
+			// Strict makes undefined/pending steps fail the suite.
+			// Without it, godog silently skips the rest of a scenario
+			// when a step phrase doesn't match any registered handler
+			// — which is exactly how the "with repos" typo in
+			// destinations.feature went unnoticed and let the
+			// subscriber-mirror gate scenarios pass without ever
+			// firing their assertions.
+			Strict:   true,
 			TestingT: t,
 		},
 	}

@@ -143,14 +143,21 @@ Feature: Mirror-sync destinations (admin)
     When I request "/api/repos/addresses/destinations" with that token
     Then the response status should be 200
 
-  Scenario: Subscriber without mirror ability is 403 on the subscriber API
+  Scenario: Subscriber without mirror ability can READ the destinations list
+    # Read/write split (see handler_repo_destinations.go): a token in
+    # repo scope without the mirror ability gets the informational list.
+    # Lets a Formidable client know "destinations are configured" even
+    # for a subscriber that can't manage them.
     Given the server is running with auth enabled
     And a repository "addresses" exists
     And a token is issued for user "alice" with repos "addresses"
     When I request "/api/repos/addresses/destinations" with that token
-    Then the response status should be 403
+    Then the response status should be 200
 
   Scenario: Subscriber without mirror ability is 403 on the /sync route
+    # Writes (POST/PATCH/DELETE/sync) keep the role+ability fence even
+    # though reads dropped it. /sync is a write — it triggers an
+    # outbound mirror push.
     Given the server is running with auth enabled
     And a repository "addresses" exists
     And a token is issued for user "alice" with repos "addresses"

@@ -9,6 +9,7 @@ import (
 
 	"github.com/petervdpas/GiGot/internal/accounts"
 	"github.com/petervdpas/GiGot/internal/credentials"
+	"github.com/petervdpas/GiGot/internal/destinations"
 )
 
 // subscriberTestServer spins up a fresh server with auth enabled, one
@@ -111,10 +112,12 @@ func TestRepoDestinations_TokenWithMirrorAllowed(t *testing.T) {
 	}
 }
 
-// TestRepoDestinations_TokenWithoutMirrorDenied is the key negative:
-// a token that has the repo in scope but lacks the mirror ability
-// gets 403 on every destinations verb. Without this gate, granting
-// any subscription would implicitly grant remote-sync configuration.
+// TestRepoDestinations_TokenWithoutMirrorDenied locks in the
+// read/write split: a token in repo scope but without the mirror
+// ability can read the destinations list (it's informational data
+// scoped to a repo the token already reaches) but cannot write —
+// POST/PATCH/DELETE/sync still 403. The mirror ability gates only
+// the writes, never the read.
 func TestRepoDestinations_TokenWithoutMirrorDenied(t *testing.T) {
 	srv := subscriberTestServer(t)
 	token, err := srv.tokenStrategy.Issue("alice", "addresses", nil) // no abilities
@@ -125,8 +128,8 @@ func TestRepoDestinations_TokenWithoutMirrorDenied(t *testing.T) {
 	req := bearer(t, http.MethodGet, "/api/repos/addresses/destinations", nil, token)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("GET without mirror ability want 403, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET without mirror ability want 200, got %d body=%s", rec.Code, rec.Body.String())
 	}
 
 	req = bearer(t, http.MethodPost, "/api/repos/addresses/destinations",
@@ -138,11 +141,171 @@ func TestRepoDestinations_TokenWithoutMirrorDenied(t *testing.T) {
 	}
 }
 
+// TestRepoDestinations_GETSingleAllowedWithoutMirror locks in the
+// read/write split for the per-id GET (`/destinations/{id}`), not
+// just the list. A no-mirror token in repo scope can read either
+// shape; the gate split applies to all GETs uniformly so a future
+// refactor can't accidentally retighten one of them.
+func TestRepoDestinations_GETSingleAllowedWithoutMirror(t *testing.T) {
+	srv := subscriberTestServer(t)
+	// Seed a destination via the store (no admin/auth flow needed).
+	dest, err := srv.destinations.Add("addresses", destinations.Destination{
+		URL:            "https://github.com/alice/addresses.git",
+		CredentialName: "github-personal",
+		Enabled:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", nil) // no abilities
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := bearer(t, http.MethodGet, "/api/repos/addresses/destinations/"+dest.ID, nil, token)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET single without mirror ability want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var got DestinationView
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != dest.ID || got.URL != dest.URL {
+		t.Fatalf("response did not round-trip: %+v", got)
+	}
+}
+
+// TestRepoDestinations_AllWritesDeniedWithoutMirror exercises every
+// write verb (PATCH, DELETE, POST .../sync) with a no-mirror token to
+// guarantee the role+ability gate fires for each one independently.
+// The list-POST case is covered by TokenWithoutMirrorDenied; this
+// test fans out across the remaining verbs so a one-off relaxation of
+// any single handler entry doesn't slip past CI.
+func TestRepoDestinations_AllWritesDeniedWithoutMirror(t *testing.T) {
+	srv := subscriberTestServer(t)
+	dest, err := srv.destinations.Add("addresses", destinations.Destination{
+		URL:            "https://github.com/alice/addresses.git",
+		CredentialName: "github-personal",
+		Enabled:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", nil) // no abilities
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   any
+	}{
+		{"PATCH", http.MethodPatch, "/api/repos/addresses/destinations/" + dest.ID,
+			map[string]any{"enabled": false}},
+		{"DELETE", http.MethodDelete, "/api/repos/addresses/destinations/" + dest.ID, nil},
+		{"POST sync", http.MethodPost, "/api/repos/addresses/destinations/" + dest.ID + "/sync", nil},
+	}
+	for _, tc := range cases {
+		req := bearer(t, tc.method, tc.path, tc.body, token)
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("%s without mirror ability want 403, got %d body=%s",
+				tc.name, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// TestRepoDestinations_GETSingleOutOfScopeDenied confirms the read
+// gate still enforces repo scope on the per-id GET — having a token
+// for *some* repo doesn't open up reads on every repo's
+// destinations. Pairs with GETSingleAllowedWithoutMirror: the
+// ability gate dropped, the scope gate did not.
+func TestRepoDestinations_GETSingleOutOfScopeDenied(t *testing.T) {
+	srv := subscriberTestServer(t)
+	dest, err := srv.destinations.Add("addresses", destinations.Destination{
+		URL:            "https://github.com/alice/addresses.git",
+		CredentialName: "github-personal",
+		Enabled:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Token scoped to a different repo.
+	token, err := srv.tokenStrategy.Issue("alice", "some-other-repo", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := bearer(t, http.MethodGet, "/api/repos/addresses/destinations/"+dest.ID, nil, token)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("GET single out-of-scope want 403, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestRepoDestinations_AllWritesDeniedAsRegular fans the role gate
+// across every write verb (PATCH, DELETE, POST .../sync) the same
+// way AllWritesDeniedWithoutMirror fans the ability gate. Both
+// fences must fire independently for each verb so a relaxation of
+// one doesn't quietly leak through another.
+func TestRepoDestinations_AllWritesDeniedAsRegular(t *testing.T) {
+	srv := subscriberTestServer(t)
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: "bob",
+		Role:       accounts.RoleRegular,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	dest, err := srv.destinations.Add("addresses", destinations.Destination{
+		URL:            "https://github.com/alice/addresses.git",
+		CredentialName: "github-personal",
+		Enabled:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Stale-key shape: regular account, but key carries mirror.
+	token, err := srv.tokenStrategy.Issue("bob", "addresses", []string{"mirror"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   any
+	}{
+		{"PATCH", http.MethodPatch, "/api/repos/addresses/destinations/" + dest.ID,
+			map[string]any{"enabled": false}},
+		{"DELETE", http.MethodDelete, "/api/repos/addresses/destinations/" + dest.ID, nil},
+		{"POST sync", http.MethodPost, "/api/repos/addresses/destinations/" + dest.ID + "/sync", nil},
+	}
+	for _, tc := range cases {
+		req := bearer(t, tc.method, tc.path, tc.body, token)
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("%s as regular want 403, got %d body=%s",
+				tc.name, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 // TestRepoDestinations_RegularRoleDenied is the role-gate negative:
 // even a token with the mirror ability AND the right repo scope is
-// rejected if the issuing account's role is `regular`. Mirroring is
-// fenced to admin + maintainer roles regardless of stale ability bits
-// on previously-issued keys (see accounts.md §1).
+// rejected on writes if the issuing account's role is `regular`.
+// Mirroring writes are fenced to admin + maintainer roles regardless
+// of stale ability bits on previously-issued keys (see accounts.md
+// §1). The role gate, like the ability gate, only applies to writes
+// — reads stay open at the repo-scope level.
 func TestRepoDestinations_RegularRoleDenied(t *testing.T) {
 	srv := subscriberTestServer(t)
 	if _, err := srv.accounts.Put(accounts.Account{
@@ -154,7 +317,7 @@ func TestRepoDestinations_RegularRoleDenied(t *testing.T) {
 	}
 	// Issue directly through the strategy to bypass the issue-time
 	// ability check — simulates a stale key from before the role
-	// fence existed. The runtime gate must still deny.
+	// fence existed. The runtime gate must still deny writes.
 	token, err := srv.tokenStrategy.Issue("bob", "addresses", []string{"mirror"})
 	if err != nil {
 		t.Fatal(err)
@@ -163,8 +326,8 @@ func TestRepoDestinations_RegularRoleDenied(t *testing.T) {
 	req := bearer(t, http.MethodGet, "/api/repos/addresses/destinations", nil, token)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("GET as regular want 403, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET as regular want 200, got %d body=%s", rec.Code, rec.Body.String())
 	}
 
 	req = bearer(t, http.MethodPost, "/api/repos/addresses/destinations",
