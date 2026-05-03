@@ -533,6 +533,29 @@ definitions:
         example: repository not found
         type: string
     type: object
+  server.FormidableMarkerView:
+    properties:
+      scaffolded_at:
+        type: string
+      scaffolded_by:
+        type: string
+      version:
+        type: integer
+    type: object
+  server.FormidableStorage:
+    properties:
+      files:
+        type: integer
+      template:
+        type: string
+    type: object
+  server.FormidableTemplate:
+    properties:
+      name:
+        type: string
+      path:
+        type: string
+    type: object
   server.GatewayRuntimeView:
     properties:
       allow_register:
@@ -767,6 +790,21 @@ definitions:
         type: string
       username:
         type: string
+    type: object
+  server.RepoFormidableResponse:
+    properties:
+      marker:
+        $ref: '#/definitions/server.FormidableMarkerView'
+      marker_present:
+        type: boolean
+      storage:
+        items:
+          $ref: '#/definitions/server.FormidableStorage'
+        type: array
+      templates:
+        items:
+          $ref: '#/definitions/server.FormidableTemplate'
+        type: array
     type: object
   server.RepoInfo:
     properties:
@@ -4270,6 +4308,109 @@ paths:
       summary: Single-file write
       tags:
       - sync
+  /repos/{name}/formidable:
+    get:
+      description: |-
+        One-call read of the Formidable-specific shape of a
+        repo: scaffold marker (version/by/at), templates list
+        under templates/, and storage layout under storage/.
+        Non-Formidable repos return 200 with marker_present
+        false and empty arrays so clients can distinguish
+        "not Formidable" from "doesn't exist" or "no access."
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.RepoFormidableResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Formidable-shape bootstrap for a repo
+      tags:
+      - repos
+  /repos/{name}/formidable/records/{template}:
+    get:
+      description: |-
+        Lists all Formidable records under storage/{template}/ at
+        HEAD. Optional where/sort/limit query params apply the
+        minimal filter DSL from §10.8 — equality/inequality on
+        scalar data.<key> values and numeric range comparisons.
+        Sort accepts a data key, optionally prefixed with "-"
+        for descending. Limit defaults to no limit.
+      parameters:
+      - description: Repository name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Template directory name under storage/
+        in: path
+        name: template
+        required: true
+        type: string
+      - description: Filter expression (e.g. city=London, count>5)
+        in: query
+        name: where
+        type: string
+      - description: Data key to sort by (prefix with - for descending)
+        in: query
+        name: sort
+        type: string
+      - description: Maximum number of records
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.RecordQueryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Record query endpoint (Formidable-first)
+      tags:
+      - sync
   /repos/{name}/head:
     get:
       description: |-
@@ -4330,66 +4471,6 @@ paths:
       security:
       - BearerAuth: []
       summary: Commit log
-      tags:
-      - sync
-  /repos/{name}/records/{template}:
-    get:
-      description: |-
-        Lists all Formidable records under storage/{template}/ at
-        HEAD. Optional where/sort/limit query params apply the
-        minimal filter DSL from §10.8 — equality/inequality on
-        scalar data.<key> values and numeric range comparisons.
-        Sort accepts a data key, optionally prefixed with "-"
-        for descending. Limit defaults to no limit.
-      parameters:
-      - description: Repository name
-        in: path
-        name: name
-        required: true
-        type: string
-      - description: Template directory name under storage/
-        in: path
-        name: template
-        required: true
-        type: string
-      - description: Filter expression (e.g. city=London, count>5)
-        in: query
-        name: where
-        type: string
-      - description: Data key to sort by (prefix with - for descending)
-        in: query
-        name: sort
-        type: string
-      - description: Maximum number of records
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/server.RecordQueryResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-        "405":
-          description: Method Not Allowed
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Record query endpoint (Formidable-first)
       tags:
       - sync
   /repos/{name}/snapshot:

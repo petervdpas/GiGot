@@ -19,8 +19,10 @@ func (s *Server) handleRepoRouter(w http.ResponseWriter, r *http.Request) {
 		s.handleRepoSnapshot(w, r)
 	case strings.Contains(path, "/files/"):
 		s.handleRepoFile(w, r)
-	case strings.Contains(path, "/records/"):
+	case strings.Contains(path, "/formidable/records/"):
 		s.handleRepoRecords(w, r)
+	case strings.HasSuffix(path, "/formidable"):
+		s.handleRepoFormidable(w, r)
 	case strings.HasSuffix(path, "/destinations") || strings.Contains(path, "/destinations/"):
 		s.handleRepoDestinations(w, r)
 	case strings.HasSuffix(path, "/commits"):

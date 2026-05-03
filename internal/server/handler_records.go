@@ -11,7 +11,8 @@ import (
 	"github.com/petervdpas/GiGot/internal/policy"
 )
 
-// RecordQueryResponse is the 200 body for GET /records/{template}.
+// RecordQueryResponse is the 200 body for GET
+// /repos/{name}/formidable/records/{template}.
 // Version is the HEAD SHA the query was evaluated against; Records
 // holds the filtered+sorted+limited slice of parsed records.
 type RecordQueryResponse struct {
@@ -40,7 +41,7 @@ type RecordQueryResponse struct {
 // @Failure      405       {object}  ErrorResponse
 // @Failure      409       {object}  ErrorResponse
 // @Security     BearerAuth
-// @Router       /repos/{name}/records/{template} [get]
+// @Router       /repos/{name}/formidable/records/{template} [get]
 func (s *Server) handleRepoRecords(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -132,12 +133,12 @@ func (s *Server) handleRepoRecords(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolveRepoRecords extracts {name, template} from
-// /api/repos/{name}/records/{template}, runs the read-policy +
-// existence checks. Template must be a simple directory name (no
-// slashes, no dots, non-empty).
+// /api/repos/{name}/formidable/records/{template}, runs the
+// read-policy + existence checks. Template must be a simple
+// directory name (no slashes, no dots, non-empty).
 func (s *Server) resolveRepoRecords(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	trimmed := strings.TrimPrefix(r.URL.Path, "/api/repos/")
-	name, rest, found := strings.Cut(trimmed, "/records/")
+	name, rest, found := strings.Cut(trimmed, "/formidable/records/")
 	if !found || rest == "" {
 		writeError(w, http.StatusBadRequest, "template is required")
 		return "", "", false

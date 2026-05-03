@@ -47,7 +47,7 @@ func TestRecordsQuery_ListsAllAtHead(t *testing.T) {
 	repo := "rq-list"
 	seedMultipleRecords(t, srv, repo)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/records/addresses", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/formidable/records/addresses", nil)
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, req)
 
@@ -68,7 +68,7 @@ func TestRecordsQuery_FilterByEquality(t *testing.T) {
 	repo := "rq-eq"
 	seedMultipleRecords(t, srv, repo)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/records/addresses?where=city=London", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/formidable/records/addresses?where=city=London", nil)
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, req)
 
@@ -92,7 +92,7 @@ func TestRecordsQuery_NumericRangeSortLimit(t *testing.T) {
 	repo := "rq-range"
 	seedMultipleRecords(t, srv, repo)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/records/addresses?where=count>5&sort=-count&limit=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/formidable/records/addresses?where=count>5&sort=-count&limit=1", nil)
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, req)
 
@@ -114,7 +114,7 @@ func TestRecordsQuery_IgnoresImagesSubdir(t *testing.T) {
 	repo := "rq-img"
 	seedMultipleRecords(t, srv, repo)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/records/addresses", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/formidable/records/addresses", nil)
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, req)
 
@@ -130,7 +130,7 @@ func TestRecordsQuery_InvalidFilter(t *testing.T) {
 	repo := "rq-bad"
 	seedMultipleRecords(t, srv, repo)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/records/addresses?where=bogus", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/formidable/records/addresses?where=bogus", nil)
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, req)
 
@@ -144,7 +144,7 @@ func TestRecordsQuery_RejectsSlashInTemplate(t *testing.T) {
 	repo := "rq-slash"
 	seedMultipleRecords(t, srv, repo)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/records/addresses/extra", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/formidable/records/addresses/extra", nil)
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, req)
 

@@ -4184,6 +4184,147 @@
                 }
             }
         },
+        "/repos/{name}/formidable": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "One-call read of the Formidable-specific shape of a\nrepo: scaffold marker (version/by/at), templates list\nunder templates/, and storage layout under storage/.\nNon-Formidable repos return 200 with marker_present\nfalse and empty arrays so clients can distinguish\n\"not Formidable\" from \"doesn't exist\" or \"no access.\"",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Formidable-shape bootstrap for a repo",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.RepoFormidableResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/repos/{name}/formidable/records/{template}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists all Formidable records under storage/{template}/ at\nHEAD. Optional where/sort/limit query params apply the\nminimal filter DSL from §10.8 — equality/inequality on\nscalar data.\u003ckey\u003e values and numeric range comparisons.\nSort accepts a data key, optionally prefixed with \"-\"\nfor descending. Limit defaults to no limit.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sync"
+                ],
+                "summary": "Record query endpoint (Formidable-first)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repository name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Template directory name under storage/",
+                        "name": "template",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter expression (e.g. city=London, count\u003e5)",
+                        "name": "where",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Data key to sort by (prefix with - for descending)",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of records",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.RecordQueryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/repos/{name}/head": {
             "get": {
                 "security": [
@@ -4270,89 +4411,6 @@
                     },
                     "404": {
                         "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/repos/{name}/records/{template}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Lists all Formidable records under storage/{template}/ at\nHEAD. Optional where/sort/limit query params apply the\nminimal filter DSL from §10.8 — equality/inequality on\nscalar data.\u003ckey\u003e values and numeric range comparisons.\nSort accepts a data key, optionally prefixed with \"-\"\nfor descending. Limit defaults to no limit.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sync"
-                ],
-                "summary": "Record query endpoint (Formidable-first)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Repository name",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Template directory name under storage/",
-                        "name": "template",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter expression (e.g. city=London, count\u003e5)",
-                        "name": "where",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Data key to sort by (prefix with - for descending)",
-                        "name": "sort",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Maximum number of records",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/server.RecordQueryResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "405": {
-                        "description": "Method Not Allowed",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -5296,6 +5354,42 @@
                 }
             }
         },
+        "server.FormidableMarkerView": {
+            "type": "object",
+            "properties": {
+                "scaffolded_at": {
+                    "type": "string"
+                },
+                "scaffolded_by": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "server.FormidableStorage": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "integer"
+                },
+                "template": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.FormidableTemplate": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
         "server.GatewayRuntimeView": {
             "type": "object",
             "properties": {
@@ -5605,6 +5699,29 @@
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "server.RepoFormidableResponse": {
+            "type": "object",
+            "properties": {
+                "marker": {
+                    "$ref": "#/definitions/server.FormidableMarkerView"
+                },
+                "marker_present": {
+                    "type": "boolean"
+                },
+                "storage": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.FormidableStorage"
+                    }
+                },
+                "templates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.FormidableTemplate"
+                    }
                 }
             }
         },

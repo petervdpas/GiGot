@@ -9,7 +9,7 @@ Feature: Binary image transport and record queries (Phases F3, F4)
   # Covers §10.5 (descoped to transport-only), §10.8, and §11 F3/F4.
   # F3: binary files under storage/<template>/images/ round-trip and
   #     same-path overwrite is accepted (no 409).
-  # F4: GET /records/{template} returns parsed records at HEAD, with
+  # F4: GET /formidable/records/{template} returns parsed records at HEAD, with
   #     optional equality/range filter, sort, and limit.
 
   Scenario: A binary image blob round-trips through the sync API
@@ -54,7 +54,7 @@ Feature: Binary image transport and record queries (Phases F3, F4)
     And I save the JSON response "version" as "head1"
     And I put a record "storage/addresses/elm.meta.json" in repo "rq-all" with data '{"city":"Paris","count":3}' updated "2025-01-02T00:00:00Z" and parent "${head1}"
     And the response status should be 200
-    When I GET "/api/repos/rq-all/records/addresses"
+    When I GET "/api/repos/rq-all/formidable/records/addresses"
     Then the response status should be 200
     And the records response contains 2 records
 
@@ -74,7 +74,7 @@ Feature: Binary image transport and record queries (Phases F3, F4)
     And I save the JSON response "version" as "head2"
     And I put a record "storage/addresses/ash.meta.json" in repo "rq-filter" with data '{"city":"London","count":12}' updated "2025-01-03T00:00:00Z" and parent "${head2}"
     And the response status should be 200
-    When I GET "/api/repos/rq-filter/records/addresses?where=city=London&sort=-count&limit=1"
+    When I GET "/api/repos/rq-filter/formidable/records/addresses?where=city=London&sort=-count&limit=1"
     Then the response status should be 200
     And the records response contains 1 records
     And the records response record 0 has data field "count" equal to "12"
