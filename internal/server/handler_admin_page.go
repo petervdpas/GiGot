@@ -83,12 +83,22 @@ func (s *Server) handleBenchmarkPage(w http.ResponseWriter, r *http.Request) {
 	s.adminPageHandler(benchmarkPageTmpl, "/admin/benchmark", "/admin/benchmark/")(w, r)
 }
 
-// handleLimitsPage serves the /admin/limits console — operator
-// tunables (push concurrency, retry-after delay) editable hot-
-// reload via PATCH /api/admin/limits. Same static-shell-plus-JS
-// pattern as the other admin sections.
-func (s *Server) handleLimitsPage(w http.ResponseWriter, r *http.Request) {
-	s.adminPageHandler(limitsPageTmpl, "/admin/limits", "/admin/limits/")(w, r)
+// handleSettingsPage serves the /admin/settings console — every
+// hot-reloadable operator tunable on one page, organised into named
+// sections (push concurrency, mirror remote-status polling, …). One
+// page is the deliberate framing per the project rule: per-feature
+// pages like /admin/limits and /admin/mirror are an anti-pattern;
+// settings live under one roof.
+func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
+	s.adminPageHandler(settingsPageTmpl, "/admin/settings", "/admin/settings/")(w, r)
+}
+
+// handleLimitsRedirect 302s the legacy /admin/limits URL to the new
+// /admin/settings page (anchored on the push-concurrency section so
+// an old bookmark lands roughly where the user expected). Kept so
+// existing bookmarks and dashboards don't 404 after the move.
+func (s *Server) handleLimitsRedirect(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/admin/settings#push-concurrency", http.StatusFound)
 }
 
 // handleUserPage serves the /user self-serve account page. Public

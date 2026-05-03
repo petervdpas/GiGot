@@ -618,7 +618,7 @@
     { key: 'tags',          label: 'Tags',              href: '/admin/tags',          adminOnly: true },
     { key: 'accounts',      label: 'Accounts',          href: '/admin/accounts',      adminOnly: true },
     { key: 'auth',          label: 'Authentication',    href: '/admin/auth',          adminOnly: true },
-    { key: 'limits',        label: 'Limits',            href: '/admin/limits',        adminOnly: true },
+    { key: 'settings',      label: 'Settings',          href: '/admin/settings',      adminOnly: true },
     { key: 'benchmark',     label: 'Benchmark',         href: '/admin/benchmark',     adminOnly: true },
   ];
 

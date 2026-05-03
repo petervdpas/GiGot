@@ -67,6 +67,31 @@ Open work:
 
 Done and shipping:
 
+- [x] **Operator tunables consolidated on `/admin/settings`.**
+      Replaces the per-feature `/admin/limits` page (now a 302
+      redirect that preserves old bookmarks) with one
+      Settings console organised into named cards. Two
+      sections shipped: **Push concurrency** (push slots +
+      retry-after, lifted from the old Limits page unchanged)
+      and **Mirror remote-status polling** (the cadence knob
+      from the previous slice, exposed as a hot-reloadable
+      tunable instead of JSON-only). Each card has its own
+      Save + dirty check so a Save on one section never writes
+      a stale value from the other. New `GET/PATCH
+      /api/admin/mirror` validates `0 ≤ status_poll_sec ≤ 86400`
+      (0 disables the poller entirely; the per-destination
+      Refresh button stays the manual escape hatch); PATCH
+      hot-swaps the running poller goroutine — stops the old
+      one, starts a fresh one with the new cadence — under a
+      mutex so concurrent admin clicks can't race the swap.
+      `/api/admin/limits` kept untouched for backwards compat;
+      both endpoints persist via `cfg.Save` on success
+      following the existing `/admin/auth` apply-first /
+      persist-best-effort pattern. Sidebar entry renamed
+      "Limits" → "Settings". Tests: 7 new (mirror GET, PATCH
+      updates poller, PATCH 0 tears down, three validation
+      gates, auth fence, method gate, and the legacy URL
+      redirect). Swagger regenerated.
 - [x] **Mirror remote-status tracking + admin Refresh button +
       background poller.** Closes the long-standing "GiGot
       pushes blind" gap: every mirror destination now carries

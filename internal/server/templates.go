@@ -40,7 +40,7 @@ var (
 	accountsPageTmpl    = parseAdminPage("accounts.html")
 	authPageTmpl        = parseAdminPage("auth.html")
 	benchmarkPageTmpl   = parseAdminPage("benchmark.html")
-	limitsPageTmpl      = parseAdminPage("limits.html")
+	settingsPageTmpl    = parseAdminPage("settings.html")
 	userPageTmpl        = parseAdminPage("user.html")
 	helpTmpl            = template.Must(template.ParseFS(templatesFS, "templates/help.html"))
 )

@@ -695,6 +695,20 @@ definitions:
         example: repository created
         type: string
     type: object
+  server.MirrorSettingsRequest:
+    properties:
+      status_poll_sec:
+        type: integer
+    type: object
+  server.MirrorSettingsResponse:
+    properties:
+      enabled_destinations:
+        example: 3
+        type: integer
+      status_poll_sec:
+        example: 600
+        type: integer
+    type: object
   server.OAuthProviderView:
     properties:
       display_name:
@@ -1982,6 +1996,93 @@ paths:
       summary: Admin logout
       tags:
       - auth
+  /admin/mirror:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the persisted cadence + live count of
+        enabled destinations. PATCH validates and applies
+        status_poll_sec, hot-swaps the background poller
+        (stops the old one, starts a new one with the
+        configured cadence; 0 disables and tears the poller
+        down without replacement), and persists to gigot.json.
+        Bound: 0 ≤ status_poll_sec ≤ 86400 (one day cap;
+        longer cadences should disable the poller and rely
+        on the manual Refresh button instead).
+      parameters:
+      - description: Patch body (PATCH only)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.MirrorSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET / PATCH response
+          schema:
+            $ref: '#/definitions/server.MirrorSettingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
+      summary: Read or update mirror-related operator settings
+      tags:
+      - system
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        GET returns the persisted cadence + live count of
+        enabled destinations. PATCH validates and applies
+        status_poll_sec, hot-swaps the background poller
+        (stops the old one, starts a new one with the
+        configured cadence; 0 disables and tears the poller
+        down without replacement), and persists to gigot.json.
+        Bound: 0 ≤ status_poll_sec ≤ 86400 (one day cap;
+        longer cadences should disable the poller and rely
+        on the manual Refresh button instead).
+      parameters:
+      - description: Patch body (PATCH only)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/server.MirrorSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: GET / PATCH response
+          schema:
+            $ref: '#/definitions/server.MirrorSettingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
+      summary: Read or update mirror-related operator settings
+      tags:
+      - system
   /admin/providers:
     get:
       description: |-

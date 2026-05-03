@@ -666,8 +666,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/admin/auth/", s.handleAuthPage)
 	s.mux.HandleFunc("/admin/benchmark", s.handleBenchmarkPage)
 	s.mux.HandleFunc("/admin/benchmark/", s.handleBenchmarkPage)
-	s.mux.HandleFunc("/admin/limits", s.handleLimitsPage)
-	s.mux.HandleFunc("/admin/limits/", s.handleLimitsPage)
+	s.mux.HandleFunc("/admin/settings", s.handleSettingsPage)
+	s.mux.HandleFunc("/admin/settings/", s.handleSettingsPage)
+	// Legacy /admin/limits URL → 302 to /admin/settings#push-concurrency.
+	// Kept indefinitely so old bookmarks and external links don't 404.
+	s.mux.HandleFunc("/admin/limits", s.handleLimitsRedirect)
+	s.mux.HandleFunc("/admin/limits/", s.handleLimitsRedirect)
 	s.mux.HandleFunc("/user", s.handleUserPage)
 	s.mux.HandleFunc("/user/", s.handleUserPage)
 	// /help and /help/<slug> render embedded markdown via goldmark.
@@ -690,6 +694,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/admin/auth", s.handleAdminAuth)
 	s.mux.HandleFunc("/api/admin/benchmark", s.handleAdminBenchmark)
 	s.mux.HandleFunc("/api/admin/limits", s.handleAdminLimits)
+	s.mux.HandleFunc("/api/admin/mirror", s.handleAdminMirror)
 	// Admin per-repo subroutes live under /api/admin/repos/{name}/...:
 	//   /destinations[/{id}] — mirror-sync targets
 	//   /formidable          — convert plain repo to a Formidable context

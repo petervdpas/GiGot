@@ -1,19 +1,17 @@
-{{define "title"}}Admin - Limits{{end}}
+{{define "title"}}Admin - Settings{{end}}
 {{define "scripts"}}
-<script src="/assets/limits.js"></script>
+<script src="/assets/settings.js"></script>
 {{end}}
 {{define "content"}}
 <div class="page-header">
-  <h1>Limits</h1>
+  <h1>Settings</h1>
 </div>
 <div class="admin-forms-info">
   Operator tunables. Changes apply immediately and persist to
-  <code class="code-chip" id="cfg-path">gigot.json</code>; in-flight
-  pushes finish on the previous capacity, new pushes are gated by
-  the new one.
+  <code class="code-chip" id="cfg-path">gigot.json</code>.
 </div>
 
-<div class="card">
+<div class="card" id="push-concurrency">
   <h2>Push concurrency</h2>
   <p class="muted limits-hint">
     Caps how many <code>git-receive-pack</code> requests run at the
@@ -38,6 +36,30 @@
   <div class="limits-actions">
     <button type="button" id="limits-save-btn" class="primary" disabled>Save</button>
     <span id="limits-msg" class="muted limits-msg"></span>
+  </div>
+</div>
+
+<div class="card" id="mirror-status-polling">
+  <h2>Mirror remote-status polling</h2>
+  <p class="muted limits-hint">
+    How often the server runs <code>git ls-remote</code> against each
+    enabled mirror destination to refresh the in-sync / diverged
+    badge. Set to <code>0</code> to disable the background poller;
+    the per-destination Refresh button on Repositories still works.
+    Successful pushes also mark the destination in-sync without an
+    extra round-trip.
+  </p>
+  <div class="limits-row">
+    <label class="limits-field">
+      <span class="field-label">Poll interval (seconds)</span>
+      <input type="number" id="mirror-status-poll-sec" min="0" max="86400" value="600">
+      <span class="muted limits-bound">0 - 86400 (0 disables)</span>
+    </label>
+  </div>
+  <div class="limits-state muted" id="mirror-state"></div>
+  <div class="limits-actions">
+    <button type="button" id="mirror-save-btn" class="primary" disabled>Save</button>
+    <span id="mirror-msg" class="muted limits-msg"></span>
   </div>
 </div>
 {{end}}

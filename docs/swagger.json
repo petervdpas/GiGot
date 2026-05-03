@@ -1154,6 +1154,116 @@
                 }
             }
         },
+        "/admin/mirror": {
+            "get": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
+                "description": "GET returns the persisted cadence + live count of\nenabled destinations. PATCH validates and applies\nstatus_poll_sec, hot-swaps the background poller\n(stops the old one, starts a new one with the\nconfigured cadence; 0 disables and tears the poller\ndown without replacement), and persists to gigot.json.\nBound: 0 ≤ status_poll_sec ≤ 86400 (one day cap;\nlonger cadences should disable the poller and rely\non the manual Refresh button instead).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Read or update mirror-related operator settings",
+                "parameters": [
+                    {
+                        "description": "Patch body (PATCH only)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.MirrorSettingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET / PATCH response",
+                        "schema": {
+                            "$ref": "#/definitions/server.MirrorSettingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
+                "description": "GET returns the persisted cadence + live count of\nenabled destinations. PATCH validates and applies\nstatus_poll_sec, hot-swaps the background poller\n(stops the old one, starts a new one with the\nconfigured cadence; 0 disables and tears the poller\ndown without replacement), and persists to gigot.json.\nBound: 0 ≤ status_poll_sec ≤ 86400 (one day cap;\nlonger cadences should disable the poller and rely\non the manual Refresh button instead).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Read or update mirror-related operator settings",
+                "parameters": [
+                    {
+                        "description": "Patch body (PATCH only)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/server.MirrorSettingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "GET / PATCH response",
+                        "schema": {
+                            "$ref": "#/definitions/server.MirrorSettingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/providers": {
             "get": {
                 "description": "Returns the providers the login page should render\nbuttons for. Public — the login card needs this\nbefore any session exists. One entry per enabled\nprovider, in a stable order.",
@@ -5802,6 +5912,27 @@
                 "message": {
                     "type": "string",
                     "example": "repository created"
+                }
+            }
+        },
+        "server.MirrorSettingsRequest": {
+            "type": "object",
+            "properties": {
+                "status_poll_sec": {
+                    "type": "integer"
+                }
+            }
+        },
+        "server.MirrorSettingsResponse": {
+            "type": "object",
+            "properties": {
+                "enabled_destinations": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "status_poll_sec": {
+                    "type": "integer",
+                    "example": 600
                 }
             }
         },
