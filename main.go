@@ -15,6 +15,11 @@
 //
 // @securityDefinitions.basic BasicAuth
 // @description HTTP Basic with the subscription token as the password. The username is ignored — tokens are self-identifying. This is the form `git clone http://user:<token>@host/git/repo` produces, so git-over-HTTP works out of the box.
+//
+// @securityDefinitions.apikey SessionAuth
+// @in cookie
+// @name gigot_session
+// @description Session cookie minted by POST /api/admin/login (or any successful OAuth callback). Required by every /api/admin/* endpoint and the /fragments/* template server. Browsers attach it automatically; programmatic callers must include the cookie header on every request.
 package main
 
 import "github.com/petervdpas/GiGot/internal/cli"

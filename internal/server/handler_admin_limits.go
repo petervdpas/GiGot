@@ -46,6 +46,7 @@ type LimitsRequest struct {
 // @Failure      400   {object}  ErrorResponse
 // @Failure      401   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
+// @Security    SessionAuth
 // @Router       /admin/limits [get]
 // @Router       /admin/limits [patch]
 func (s *Server) handleAdminLimits(w http.ResponseWriter, r *http.Request) {

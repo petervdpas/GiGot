@@ -48,6 +48,7 @@ type EntityTagsResponse struct {
 // @Failure      401   {object}  ErrorResponse
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
+// @Security    SessionAuth
 // @Router       /admin/repos/{name}/tags [get]
 // @Router       /admin/repos/{name}/tags [put]
 func (s *Server) handleAdminRepoTags(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +94,7 @@ func (s *Server) handleAdminRepoTags(w http.ResponseWriter, r *http.Request) {
 // @Failure      401   {object}  ErrorResponse
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
+// @Security    SessionAuth
 // @Router       /admin/accounts/{provider}/{identifier}/tags [get]
 // @Router       /admin/accounts/{provider}/{identifier}/tags [put]
 func (s *Server) handleAdminAccountTags(w http.ResponseWriter, r *http.Request) {

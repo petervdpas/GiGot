@@ -178,6 +178,7 @@ var benchmarkTopics = map[string]benchmarkTopicFn{
 // @Failure      400   {object}  ErrorResponse
 // @Failure      401   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
+// @Security    SessionAuth
 // @Router       /admin/benchmark [post]
 func (s *Server) handleAdminBenchmark(w http.ResponseWriter, r *http.Request) {
 	if s.requireAdminSession(w, r) == nil {

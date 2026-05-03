@@ -27,6 +27,7 @@ import (
 // @Success      201   {object}  TokenResponse
 // @Success      200   {object}  MessageResponse
 // @Failure      400   {object}  ErrorResponse
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Security     BearerAuth

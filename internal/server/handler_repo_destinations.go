@@ -38,43 +38,27 @@ func splitRepoDestinationsPath(p string) (repo, id, action string, ok bool) {
 	return repo, id, action, true
 }
 
-// handleRepoDestinations godoc
-// @Summary      Manage mirror-sync destinations on a repo (subscriber)
-// @Description  Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
-// @Description  Three-layer gate (see accounts.md §6.1, remote-sync.md §2.6):
-// @Description
-// @Description    1. TokenRepoPolicy — repo in the bearer token's allowlist.
-// @Description    2. requireMaintainerOrAdmin — issuing account's role is
-// @Description       admin or maintainer; regular accounts are denied even
-// @Description       if their key carries the `mirror` ability bit (the
-// @Description       role is a structural fence on top of per-token bits).
-// @Description    3. TokenAbilityPolicy("mirror") — the per-key opt-in.
-// @Description
-// @Description  Any layer denying writes 403. The admin-session route at
-// @Description  /api/admin/repos/{name}/destinations remains the override
-// @Description  for full server administration.
-// @Tags         repos
-// @Accept       json
-// @Produce      json
-// @Param        name  path      string                     true  "Repo name"
-// @Param        id    path      string                     false "Destination id"
-// @Param        body  body      CreateDestinationRequest   false "Create body (POST)"
-// @Param        body  body      UpdateDestinationRequest   false "Patch body (PATCH)"
-// @Success      200   {object}  DestinationListResponse    "GET list response"
-// @Success      201   {object}  DestinationView            "POST response"
-// @Success      200   {object}  DestinationView            "GET/PATCH response"
-// @Success      204   "DELETE response"
-// @Failure      400   {object}  ErrorResponse
-// @Failure      401   {object}  ErrorResponse
-// @Failure      403   {object}  ErrorResponse              "Missing mirror ability, regular role, or repo out of scope"
-// @Failure      404   {object}  ErrorResponse
-// @Failure      405   {object}  ErrorResponse
-// @Security     BearerAuth
-// @Router       /repos/{name}/destinations [get]
-// @Router       /repos/{name}/destinations [post]
-// @Router       /repos/{name}/destinations/{id} [get]
-// @Router       /repos/{name}/destinations/{id} [patch]
-// @Router       /repos/{name}/destinations/{id} [delete]
+// handleRepoDestinations dispatches /api/repos/{name}/destinations
+// (collection) and /api/repos/{name}/destinations/{id}[/sync] (single
+// + action) by method. Per-operation godoc lives on the helper
+// functions in handler_admin_destinations.go (listDestinations,
+// createDestination, getDestination, updateDestination,
+// deleteDestination) — the same helpers are reused for the admin
+// route, so each godoc carries dual @Router lines for both.
+//
+// Three-layer gate for writes (see accounts.md §6.1,
+// remote-sync.md §2.6):
+//
+//  1. TokenRepoPolicy — repo in the bearer token's allowlist.
+//  2. requireMaintainerOrAdmin — issuing account's role is admin or
+//     maintainer; regular accounts are denied even if their key
+//     carries the `mirror` ability bit (the role is a structural
+//     fence on top of per-token bits).
+//  3. TokenAbilityPolicy("mirror") — the per-key opt-in.
+//
+// Reads (GET) require only the first layer — the read/write split
+// lets any in-scope subscriber inspect destinations without the
+// mirror ability.
 func (s *Server) handleRepoDestinations(w http.ResponseWriter, r *http.Request) {
 	repo, id, action, ok := splitRepoDestinationsPath(r.URL.Path)
 	if !ok {

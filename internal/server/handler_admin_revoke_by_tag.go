@@ -46,6 +46,7 @@ import (
 // @Failure      400   {object}  ErrorResponse
 // @Failure      401   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
+// @Security    SessionAuth
 // @Router       /admin/subscriptions/revoke-by-tag [post]
 func (s *Server) handleAdminRevokeByTag(w http.ResponseWriter, r *http.Request) {
 	caller := s.requireAdminSession(w, r)

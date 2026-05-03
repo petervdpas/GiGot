@@ -38,6 +38,7 @@ func credentialView(c credentials.Credential) CredentialView {
 // @Failure      401   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Failure      409   {object}  ErrorResponse            "Name already exists"
+// @Security    SessionAuth
 // @Router       /admin/credentials [get]
 // @Router       /admin/credentials [post]
 func (s *Server) handleAdminCredentials(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +71,7 @@ func (s *Server) handleAdminCredentials(w http.ResponseWriter, r *http.Request) 
 // @Failure      401   {object}  ErrorResponse
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
+// @Security    SessionAuth
 // @Router       /admin/credentials/{name} [get]
 // @Router       /admin/credentials/{name} [patch]
 // @Router       /admin/credentials/{name} [delete]

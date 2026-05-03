@@ -22,6 +22,11 @@ const docTemplate = `{
     "paths": {
         "/admin/accounts": {
             "get": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET lists every known account (admins and regulars);\nPOST creates one. Session-cookie authenticated. See\ndocs/design/accounts.md for the data model.",
                 "consumes": [
                     "application/json"
@@ -83,6 +88,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET lists every known account (admins and regulars);\nPOST creates one. Session-cookie authenticated. See\ndocs/design/accounts.md for the data model.",
                 "consumes": [
                     "application/json"
@@ -146,6 +156,11 @@ const docTemplate = `{
         },
         "/admin/accounts/{provider}/{identifier}": {
             "delete": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "PATCH updates role, display_name, and/or password\n(local only). DELETE removes the account; the server\nrefuses to remove the last admin so the console can't\nlock itself out. Session-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -224,6 +239,11 @@ const docTemplate = `{
                 }
             },
             "patch": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "PATCH updates role, display_name, and/or password\n(local only). DELETE removes the account; the server\nrefuses to remove the last admin so the console can't\nlock itself out. Session-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -304,6 +324,11 @@ const docTemplate = `{
         },
         "/admin/accounts/{provider}/{identifier}/tags": {
             "get": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET returns the direct tag list; PUT replaces it.\nAccount tags propagate to every subscription the\naccount holds (effective_tags on the token list\nresponses unions account + repo + sub tags).\nCatalogue + assignment diffs land in the system\naudit log. Session-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -373,6 +398,11 @@ const docTemplate = `{
                 }
             },
             "put": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET returns the direct tag list; PUT replaces it.\nAccount tags propagate to every subscription the\naccount holds (effective_tags on the token list\nresponses unions account + repo + sub tags).\nCatalogue + assignment diffs land in the system\naudit log. Session-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -444,6 +474,11 @@ const docTemplate = `{
         },
         "/admin/auth": {
             "get": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET returns the current allow_local + OAuth + gateway\nconfig snapshot. PATCH applies a new snapshot: the\nOAuth registry and gateway strategy are rebuilt,\natomically swapped into place on success, and the\nchange is persisted to the config file. Rejects with\n400 when a secret ref fails to resolve or a provider\ndiscovery URL is unreachable — old state stays live.",
                 "consumes": [
                     "application/json"
@@ -493,6 +528,11 @@ const docTemplate = `{
                 }
             },
             "patch": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET returns the current allow_local + OAuth + gateway\nconfig snapshot. PATCH applies a new snapshot: the\nOAuth registry and gateway strategy are rebuilt,\natomically swapped into place on success, and the\nchange is persisted to the config file. Rejects with\n400 when a secret ref fails to resolve or a provider\ndiscovery URL is unreachable — old state stays live.",
                 "consumes": [
                     "application/json"
@@ -544,6 +584,11 @@ const docTemplate = `{
         },
         "/admin/benchmark": {
             "post": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "Spins up a fresh sandbox ` + "`" + `*Server` + "`" + ` against a temp\ndirectory, seeds it with N synthetic accounts + subs +\ntags, runs the requested topics for the requested\niteration count, tears down the sandbox, and returns\nper-topic timing summaries (median / p95 / p99 / total).\n\nAlways runs against synthetic data — the point is to\ncharacterise the host hardware, not the live dataset.\nMode \"sequential\" runs each topic in turn; \"concurrent\"\nruns all selected topics in parallel goroutines so the\ntimings include cross-topic contention.",
                 "consumes": [
                     "application/json"
@@ -596,6 +641,11 @@ const docTemplate = `{
         },
         "/admin/credentials": {
             "get": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET lists credential metadata; POST creates a new credential.\nThe secret is write-only — it is never returned on any\nresponse. Session-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -657,6 +707,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET lists credential metadata; POST creates a new credential.\nThe secret is write-only — it is never returned on any\nresponse. Session-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -720,6 +775,11 @@ const docTemplate = `{
         },
         "/admin/credentials/{name}": {
             "get": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET returns metadata; PATCH updates any of kind/secret/\nexpires/notes (omitted fields are left unchanged); DELETE\nremoves the credential. Session-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -785,6 +845,11 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET returns metadata; PATCH updates any of kind/secret/\nexpires/notes (omitted fields are left unchanged); DELETE\nremoves the credential. Session-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -850,6 +915,11 @@ const docTemplate = `{
                 }
             },
             "patch": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET returns metadata; PATCH updates any of kind/secret/\nexpires/notes (omitted fields are left unchanged); DELETE\nremoves the credential. Session-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -917,6 +987,11 @@ const docTemplate = `{
         },
         "/admin/limits": {
             "get": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET returns the current LimitsConfig plus live\nin-flight slot count. PATCH updates push_slots\nand/or push_retry_after_sec; both fields are\noptional, omitted fields are left unchanged.\nSuccessful PATCH persists the new values to the\nconfig file (cfg.Save) so changes survive restart,\nand resizes the live slot pool — in-flight pushes\nfinish on the old capacity, new pushes are gated\nby the new one. Bounds: push_slots 1-1000,\npush_retry_after_sec 1-3600.",
                 "consumes": [
                     "application/json"
@@ -966,6 +1041,11 @@ const docTemplate = `{
                 }
             },
             "patch": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET returns the current LimitsConfig plus live\nin-flight slot count. PATCH updates push_slots\nand/or push_retry_after_sec; both fields are\noptional, omitted fields are left unchanged.\nSuccessful PATCH persists the new values to the\nconfig file (cfg.Save) so changes survive restart,\nand resizes the live slot pool — in-flight pushes\nfinish on the old capacity, new pushes are gated\nby the new one. Bounds: push_slots 1-1000,\npush_retry_after_sec 1-3600.",
                 "consumes": [
                     "application/json"
@@ -1102,17 +1182,23 @@ const docTemplate = `{
         },
         "/admin/repos/{name}/destinations": {
             "get": {
-                "description": "GET lists destinations; POST adds a new one. Each\ndestination points at a named credential in the vault —\nsee docs/design/credential-vault.md §5 and\ndocs/design/remote-sync.md §3.1. Session-cookie authenticated.",
-                "consumes": [
-                    "application/json"
+                "security": [
+                    {
+                        "SessionAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
                 ],
+                "description": "Returns every destination attached to the named repo,\nwith last-sync status fields populated. Read-only;\nthe per-bearer mirror ability is NOT required — repo\nscope alone is sufficient (see remote-sync.md §2.6,\nthe read/write split). Admin-session callers reach\nthe same handler via the /api/admin/* path.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "admin",
+                    "repos"
                 ],
-                "summary": "List or create mirror-sync destinations on a repo (admin only)",
+                "summary": "List mirror-sync destinations on a repo",
                 "parameters": [
                     {
                         "type": "string",
@@ -1120,49 +1206,29 @@ const docTemplate = `{
                         "name": "name",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "description": "Create body (POST)",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/server.CreateDestinationRequest"
-                        }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "GET response",
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.DestinationListResponse"
                         }
                     },
-                    "201": {
-                        "description": "POST response",
-                        "schema": {
-                            "$ref": "#/definitions/server.DestinationView"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
+                    "401": {
+                        "description": "Missing session cookie / bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
-                    "401": {
-                        "description": "Unauthorized",
+                    "403": {
+                        "description": "Subscriber: token not in scope for this repo",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Repo not found, or credential_name unknown",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "405": {
-                        "description": "Method Not Allowed",
+                        "description": "Repo not found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -1170,7 +1236,15 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "GET lists destinations; POST adds a new one. Each\ndestination points at a named credential in the vault —\nsee docs/design/credential-vault.md §5 and\ndocs/design/remote-sync.md §3.1. Session-cookie authenticated.",
+                "security": [
+                    {
+                        "SessionAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Attaches a new destination pointing at a named credential\nin the vault (see credential-vault.md §5,\nremote-sync.md §3.1). Returns 201 with the stored\ndestination on success. Subscriber callers must hold\nadmin/maintainer role AND the ` + "`" + `mirror` + "`" + ` ability — see\naccounts.md §6.1; admin-session callers bypass.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1178,9 +1252,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "admin",
+                    "repos"
                 ],
-                "summary": "List or create mirror-sync destinations on a repo (admin only)",
+                "summary": "Add a mirror-sync destination to a repo",
                 "parameters": [
                     {
                         "type": "string",
@@ -1190,23 +1265,18 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Create body (POST)",
+                        "description": "Destination payload",
                         "name": "body",
                         "in": "body",
+                        "required": true,
                         "schema": {
                             "$ref": "#/definitions/server.CreateDestinationRequest"
                         }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "GET response",
-                        "schema": {
-                            "$ref": "#/definitions/server.DestinationListResponse"
-                        }
-                    },
                     "201": {
-                        "description": "POST response",
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/server.DestinationView"
                         }
@@ -1218,19 +1288,19 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing session cookie / bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Subscriber: missing mirror ability or role, or out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Repo not found, or credential_name unknown",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "405": {
-                        "description": "Method Not Allowed",
+                        "description": "Repo or credential_name not found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -1240,17 +1310,23 @@ const docTemplate = `{
         },
         "/admin/repos/{name}/destinations/{id}": {
             "get": {
-                "description": "GET returns the destination; PATCH updates any of url/\ncredential_name/enabled (omitted fields are left\nunchanged); DELETE removes it. Session-cookie authenticated.",
-                "consumes": [
-                    "application/json"
+                "security": [
+                    {
+                        "SessionAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
                 ],
+                "description": "Returns the destination's stored configuration plus its\nmost recent sync attempt (status / timestamp / error).\nRead-only; per-bearer mirror ability NOT required —\nthe read/write split lets any in-scope subscriber\ninspect the configuration without managing it.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "admin",
+                    "repos"
                 ],
-                "summary": "Manage one destination by id (admin only)",
+                "summary": "Read one mirror-sync destination by id",
                 "parameters": [
                     {
                         "type": "string",
@@ -1265,14 +1341,6 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "description": "Patch body (PATCH)",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/server.UpdateDestinationRequest"
-                        }
                     }
                 ],
                 "responses": {
@@ -1282,29 +1350,20 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.DestinationView"
                         }
                     },
-                    "204": {
-                        "description": "DELETE response"
-                    },
-                    "400": {
-                        "description": "Bad Request",
+                    "401": {
+                        "description": "Missing session cookie / bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
-                    "401": {
-                        "description": "Unauthorized",
+                    "403": {
+                        "description": "Subscriber: token not in scope for this repo",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "405": {
-                        "description": "Method Not Allowed",
+                        "description": "Repo or destination not found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -1312,17 +1371,23 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "GET returns the destination; PATCH updates any of url/\ncredential_name/enabled (omitted fields are left\nunchanged); DELETE removes it. Session-cookie authenticated.",
-                "consumes": [
-                    "application/json"
+                "security": [
+                    {
+                        "SessionAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
                 ],
+                "description": "Removes the destination from the repo; the auto-mirror\nfan-out stops firing for it on subsequent commits.\nReturns 204 with no body. Subscriber callers need\nadmin/maintainer role + ` + "`" + `mirror` + "`" + ` ability; admin-session\ncallers bypass.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "admin",
+                    "repos"
                 ],
-                "summary": "Manage one destination by id (admin only)",
+                "summary": "Remove one mirror-sync destination",
                 "parameters": [
                     {
                         "type": "string",
@@ -1337,46 +1402,26 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "description": "Patch body (PATCH)",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/server.UpdateDestinationRequest"
-                        }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/server.DestinationView"
-                        }
-                    },
                     "204": {
-                        "description": "DELETE response"
+                        "description": "Destination removed"
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "401": {
+                        "description": "Missing session cookie / bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
-                    "401": {
-                        "description": "Unauthorized",
+                    "403": {
+                        "description": "Subscriber: missing mirror ability or role, or out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "405": {
-                        "description": "Method Not Allowed",
+                        "description": "Repo or destination not found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -1384,7 +1429,15 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "GET returns the destination; PATCH updates any of url/\ncredential_name/enabled (omitted fields are left\nunchanged); DELETE removes it. Session-cookie authenticated.",
+                "security": [
+                    {
+                        "SessionAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates any of ` + "`" + `url` + "`" + `, ` + "`" + `credential_name` + "`" + `, ` + "`" + `enabled` + "`" + `.\nOmitted fields are left unchanged (nil-pointer ==\n\"no change\"). Empty-string url or credential_name is\nrejected — delete the destination instead. Subscriber\ncallers need admin/maintainer role + ` + "`" + `mirror` + "`" + ` ability;\nadmin-session callers bypass.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1392,9 +1445,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "admin",
+                    "repos"
                 ],
-                "summary": "Manage one destination by id (admin only)",
+                "summary": "Patch one mirror-sync destination",
                 "parameters": [
                     {
                         "type": "string",
@@ -1411,9 +1465,10 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Patch body (PATCH)",
+                        "description": "Patch payload",
                         "name": "body",
                         "in": "body",
+                        "required": true,
                         "schema": {
                             "$ref": "#/definitions/server.UpdateDestinationRequest"
                         }
@@ -1426,9 +1481,6 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.DestinationView"
                         }
                     },
-                    "204": {
-                        "description": "DELETE response"
-                    },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
@@ -1436,19 +1488,19 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing session cookie / bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Subscriber: missing mirror ability or role, or out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "405": {
-                        "description": "Method Not Allowed",
+                        "description": "Repo, destination, or credential_name not found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -1460,6 +1512,9 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
+                        "SessionAuth": []
+                    },
+                    {
                         "BearerAuth": []
                     }
                 ],
@@ -1468,6 +1523,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
+                    "admin",
                     "repos"
                 ],
                 "summary": "Trigger a manual mirror-sync push on one destination",
@@ -1523,11 +1579,17 @@ const docTemplate = `{
         },
         "/admin/repos/{name}/formidable": {
             "post": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "Stamps .formidable/context.json on top of HEAD so the\nrepo picks up structured record-merge behaviour on subsequent\nwrites. Gated to server.formidable_first=true so generic-mode\noperators don't trip this accidentally. Idempotent: a repo\nthat already carries a valid marker returns stamped=false\nand writes no commit. On a successful stamp the server\nappends one ` + "`" + `repo_convert_formidable` + "`" + ` audit entry.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
+                    "formidable",
                     "admin"
                 ],
                 "summary": "Convert a plain repo to a Formidable context (admin only)",
@@ -1588,6 +1650,11 @@ const docTemplate = `{
         },
         "/admin/repos/{name}/tags": {
             "get": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET returns the direct tag list; PUT replaces it\nwholesale. Unknown tag names in the PUT body are\nauto-created in the catalogue. Each diff is recorded\non the repo's refs/audit/main as one\ntag.assigned.repo / tag.unassigned.repo event per\nchanged assignment. Session-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -1650,6 +1717,11 @@ const docTemplate = `{
                 }
             },
             "put": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET returns the direct tag list; PUT replaces it\nwholesale. Unknown tag names in the PUT body are\nauto-created in the catalogue. Each diff is recorded\non the repo's refs/audit/main as one\ntag.assigned.repo / tag.unassigned.repo event per\nchanged assignment. Session-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -1714,6 +1786,11 @@ const docTemplate = `{
         },
         "/admin/session": {
             "get": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "Returns the admin identity associated with the session cookie,\nor 401 if no valid session exists. The admin UI polls this on\nload to decide whether to show the login form.",
                 "produces": [
                     "application/json"
@@ -1740,6 +1817,11 @@ const docTemplate = `{
         },
         "/admin/subscriptions/revoke-by-tag": {
             "post": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "Revokes every subscription whose effective tag set\n(sub.tags ∪ repo.tags ∪ account.tags) carries at least\none of the tags in the request body. Multiple tag\nvalues union (OR — same inclusion semantics as the\nchip UI; selecting more chips widens the match).\nEmpty tag list is a 400 — bulk-revoke without a\nfilter would clear the catalogue, which has enough\nblast radius to deserve a different endpoint.\n\nThe Confirm field must match the deterministic phrase\n` + "`" + `revoke \u003ccomma-joined-lower-tags\u003e` + "`" + ` (tags sorted, e.g.\n` + "`" + `revoke contractor:acme,team:marketing` + "`" + `). This is\nanti-typo friction — same purpose as a ` + "`" + `--force` + "`" + ` flag\non a destructive command — not an anti-script gate\n(the phrase is deterministic from the request inputs,\nso any caller that can compute the tag list can compute\nthe phrase). Server-side validation runs alongside the\nUI check so a buggy callsite can't omit the field by\naccident. The auth boundary is the admin session,\nsame as every other ` + "`" + `/api/admin/*` + "`" + ` endpoint.\n\nEach revoked subscription emits a ` + "`" + `tag.revoked.bulk` + "`" + `\nevent on its repo's refs/audit/main with the matching\ntag set, so the audit chain answers \"why was sub-77\nrevoked?\" six months later. Session-cookie auth.",
                 "consumes": [
                     "application/json"
@@ -1792,6 +1874,11 @@ const docTemplate = `{
         },
         "/admin/tags": {
             "get": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET lists every tag with direct usage counts; POST\ncreates a new tag. Names are case-insensitive unique.\nSession-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -1853,6 +1940,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET lists every tag with direct usage counts; POST\ncreates a new tag. Names are case-insensitive unique.\nSession-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -1916,6 +2008,11 @@ const docTemplate = `{
         },
         "/admin/tags/sweep-unused": {
             "post": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "Deletes every catalogue row that has zero assignments\nacross repos, subscriptions, and accounts. Each\nremoved row emits a ` + "`" + `tag.deleted` + "`" + ` system audit event\nso the chain answers \"where did ` + "`" + `team:archived` + "`" + ` go?\"\nthe same way a one-by-one delete would. The response\ncarries the names that were removed so the UI can\nshow a \"swept N tags\" summary.",
                 "produces": [
                     "application/json"
@@ -1948,6 +2045,11 @@ const docTemplate = `{
         },
         "/admin/tags/{id}": {
             "delete": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "PATCH renames the tag (case-insensitive unique). DELETE\ncascades through every assignment join — repo, subscription,\nand account — and returns the per-set sweep counts.\nSession-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -2016,6 +2118,11 @@ const docTemplate = `{
                 }
             },
             "patch": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "PATCH renames the tag (case-insensitive unique). DELETE\ncascades through every assignment join — repo, subscription,\nand account — and returns the per-set sweep counts.\nSession-cookie authenticated.",
                 "consumes": [
                     "application/json"
@@ -2086,6 +2193,11 @@ const docTemplate = `{
         },
         "/admin/tokens": {
             "get": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues union (OR — chips are inclusion filters; selecting\nmore chips widens the match). Tag matching is case-insensitive.\n\nPATCH bodies that include a ` + "`" + `tags` + "`" + ` field receive an\nUpdateTokenResponse echoing the canonical post-update\n` + "`" + `tags` + "`" + ` (direct) and ` + "`" + `effective_tags` + "`" + ` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
                 "consumes": [
                     "application/json"
@@ -2173,6 +2285,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues union (OR — chips are inclusion filters; selecting\nmore chips widens the match). Tag matching is case-insensitive.\n\nPATCH bodies that include a ` + "`" + `tags` + "`" + ` field receive an\nUpdateTokenResponse echoing the canonical post-update\n` + "`" + `tags` + "`" + ` (direct) and ` + "`" + `effective_tags` + "`" + ` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
                 "consumes": [
                     "application/json"
@@ -2260,6 +2377,11 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues union (OR — chips are inclusion filters; selecting\nmore chips widens the match). Tag matching is case-insensitive.\n\nPATCH bodies that include a ` + "`" + `tags` + "`" + ` field receive an\nUpdateTokenResponse echoing the canonical post-update\n` + "`" + `tags` + "`" + ` (direct) and ` + "`" + `effective_tags` + "`" + ` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
                 "consumes": [
                     "application/json"
@@ -2347,6 +2469,11 @@ const docTemplate = `{
                 }
             },
             "patch": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "GET lists, POST issues, PATCH updates repos/abilities, DELETE revokes.\nRequires a valid admin session cookie (obtained via /admin/login).\n\nIssue and PATCH paths reject ability grants the issued\naccount's role is not entitled to hold (today: ` + "`" + `mirror` + "`" + `\nrequires admin or maintainer role; granting it to a\nregular returns 400). See accounts.md §6.1.\n\nGET supports a repeating ` + "`" + `?tag=` + "`" + ` query parameter that filters\nby effective tags (sub.tags ∪ repo.tags ∪ account.tags). Multiple\nvalues union (OR — chips are inclusion filters; selecting\nmore chips widens the match). Tag matching is case-insensitive.\n\nPATCH bodies that include a ` + "`" + `tags` + "`" + ` field receive an\nUpdateTokenResponse echoing the canonical post-update\n` + "`" + `tags` + "`" + ` (direct) and ` + "`" + `effective_tags` + "`" + ` (the §2 union),\nso the admin UI can patch its in-memory model without\na follow-up listing fetch. Repo / abilities-only\nPATCH bodies still receive the simpler MessageResponse.",
                 "consumes": [
                     "application/json"
@@ -2436,6 +2563,11 @@ const docTemplate = `{
         },
         "/admin/tokens/bind": {
             "post": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "Creates a local role=regular account for the token's\nusername if one does not yet exist. Idempotent:\nreturns 200 either way, and does nothing if the token\nalready resolves to an account. See accounts.md §6.",
                 "consumes": [
                     "application/json"
@@ -2547,6 +2679,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -2611,6 +2749,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -2698,6 +2842,11 @@ const docTemplate = `{
         },
         "/fragments/{name}": {
             "get": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
                 "description": "Returns the raw HTML of the named fragment from\ninternal/server/templates/fragments/. Used by the\nGG.lazy client helper to render detail panes on\ndemand. Admin-session gated — fragments don't carry\nuser data but they encode admin-UI shape (which\ninputs exist, what gets PATCHed where), and a\nleak gives an attacker recon for free.\n\nCache: strong ETag derived from the fragment body's\nSHA-256. Browsers send ` + "`" + `If-None-Match` + "`" + ` on every\nload and get a 304 after the first fetch — net cost\nper fragment per release is one tiny round trip.",
                 "produces": [
                     "text/html"
@@ -2783,6 +2932,12 @@ const docTemplate = `{
                     "200": {
                         "description": "OK"
                     },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -2825,6 +2980,12 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK"
+                    },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
                     },
                     "404": {
                         "description": "Not Found",
@@ -2875,6 +3036,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -3070,6 +3237,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "405": {
                         "description": "Method Not Allowed",
                         "schema": {
@@ -3136,6 +3309,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "405": {
                         "description": "Method Not Allowed",
                         "schema": {
@@ -3191,6 +3370,12 @@ const docTemplate = `{
                     "204": {
                         "description": "No Content"
                     },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -3237,6 +3422,12 @@ const docTemplate = `{
                     },
                     "204": {
                         "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
                     },
                     "404": {
                         "description": "Not Found",
@@ -3285,6 +3476,12 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/git.BranchInfo"
                             }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
@@ -3336,6 +3533,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -3412,6 +3615,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -3505,20 +3714,21 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
+                        "SessionAuth": []
+                    },
+                    {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nThree-layer gate (see accounts.md §6.1, remote-sync.md §2.6):\n\n1. TokenRepoPolicy — repo in the bearer token's allowlist.\n2. requireMaintainerOrAdmin — issuing account's role is\nadmin or maintainer; regular accounts are denied even\nif their key carries the ` + "`" + `mirror` + "`" + ` ability bit (the\nrole is a structural fence on top of per-token bits).\n3. TokenAbilityPolicy(\"mirror\") — the per-key opt-in.\n\nAny layer denying writes 403. The admin-session route at\n/api/admin/repos/{name}/destinations remains the override\nfor full server administration.",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Returns every destination attached to the named repo,\nwith last-sync status fields populated. Read-only;\nthe per-bearer mirror ability is NOT required — repo\nscope alone is sufficient (see remote-sync.md §2.6,\nthe read/write split). Admin-session callers reach\nthe same handler via the /api/admin/* path.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
+                    "admin",
                     "repos"
                 ],
-                "summary": "Manage mirror-sync destinations on a repo (subscriber)",
+                "summary": "List mirror-sync destinations on a repo",
                 "parameters": [
                     {
                         "type": "string",
@@ -3526,66 +3736,29 @@ const docTemplate = `{
                         "name": "name",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "description": "Create body (POST)",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/server.CreateDestinationRequest"
-                        }
-                    },
-                    {
-                        "description": "Patch body (PATCH)",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/server.UpdateDestinationRequest"
-                        }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "GET/PATCH response",
+                        "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/server.DestinationView"
-                        }
-                    },
-                    "201": {
-                        "description": "POST response",
-                        "schema": {
-                            "$ref": "#/definitions/server.DestinationView"
-                        }
-                    },
-                    "204": {
-                        "description": "DELETE response"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
+                            "$ref": "#/definitions/server.DestinationListResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing session cookie / bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "403": {
-                        "description": "Missing mirror ability, regular role, or repo out of scope",
+                        "description": "Subscriber: token not in scope for this repo",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "405": {
-                        "description": "Method Not Allowed",
+                        "description": "Repo not found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -3595,10 +3768,13 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
+                        "SessionAuth": []
+                    },
+                    {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nThree-layer gate (see accounts.md §6.1, remote-sync.md §2.6):\n\n1. TokenRepoPolicy — repo in the bearer token's allowlist.\n2. requireMaintainerOrAdmin — issuing account's role is\nadmin or maintainer; regular accounts are denied even\nif their key carries the ` + "`" + `mirror` + "`" + ` ability bit (the\nrole is a structural fence on top of per-token bits).\n3. TokenAbilityPolicy(\"mirror\") — the per-key opt-in.\n\nAny layer denying writes 403. The admin-session route at\n/api/admin/repos/{name}/destinations remains the override\nfor full server administration.",
+                "description": "Attaches a new destination pointing at a named credential\nin the vault (see credential-vault.md §5,\nremote-sync.md §3.1). Returns 201 with the stored\ndestination on success. Subscriber callers must hold\nadmin/maintainer role AND the ` + "`" + `mirror` + "`" + ` ability — see\naccounts.md §6.1; admin-session callers bypass.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3606,9 +3782,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
+                    "admin",
                     "repos"
                 ],
-                "summary": "Manage mirror-sync destinations on a repo (subscriber)",
+                "summary": "Add a mirror-sync destination to a repo",
                 "parameters": [
                     {
                         "type": "string",
@@ -3618,37 +3795,21 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Create body (POST)",
+                        "description": "Destination payload",
                         "name": "body",
                         "in": "body",
+                        "required": true,
                         "schema": {
                             "$ref": "#/definitions/server.CreateDestinationRequest"
-                        }
-                    },
-                    {
-                        "description": "Patch body (PATCH)",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/server.UpdateDestinationRequest"
                         }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "GET/PATCH response",
-                        "schema": {
-                            "$ref": "#/definitions/server.DestinationView"
-                        }
-                    },
                     "201": {
-                        "description": "POST response",
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/server.DestinationView"
                         }
-                    },
-                    "204": {
-                        "description": "DELETE response"
                     },
                     "400": {
                         "description": "Bad Request",
@@ -3657,25 +3818,19 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing session cookie / bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "403": {
-                        "description": "Missing mirror ability, regular role, or repo out of scope",
+                        "description": "Subscriber: missing mirror ability or role, or out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "405": {
-                        "description": "Method Not Allowed",
+                        "description": "Repo or credential_name not found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -3687,20 +3842,21 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
+                        "SessionAuth": []
+                    },
+                    {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nThree-layer gate (see accounts.md §6.1, remote-sync.md §2.6):\n\n1. TokenRepoPolicy — repo in the bearer token's allowlist.\n2. requireMaintainerOrAdmin — issuing account's role is\nadmin or maintainer; regular accounts are denied even\nif their key carries the ` + "`" + `mirror` + "`" + ` ability bit (the\nrole is a structural fence on top of per-token bits).\n3. TokenAbilityPolicy(\"mirror\") — the per-key opt-in.\n\nAny layer denying writes 403. The admin-session route at\n/api/admin/repos/{name}/destinations remains the override\nfor full server administration.",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Returns the destination's stored configuration plus its\nmost recent sync attempt (status / timestamp / error).\nRead-only; per-bearer mirror ability NOT required —\nthe read/write split lets any in-scope subscriber\ninspect the configuration without managing it.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
+                    "admin",
                     "repos"
                 ],
-                "summary": "Manage mirror-sync destinations on a repo (subscriber)",
+                "summary": "Read one mirror-sync destination by id",
                 "parameters": [
                     {
                         "type": "string",
@@ -3713,67 +3869,31 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Destination id",
                         "name": "id",
-                        "in": "path"
-                    },
-                    {
-                        "description": "Create body (POST)",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/server.CreateDestinationRequest"
-                        }
-                    },
-                    {
-                        "description": "Patch body (PATCH)",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/server.UpdateDestinationRequest"
-                        }
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "GET/PATCH response",
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.DestinationView"
-                        }
-                    },
-                    "201": {
-                        "description": "POST response",
-                        "schema": {
-                            "$ref": "#/definitions/server.DestinationView"
-                        }
-                    },
-                    "204": {
-                        "description": "DELETE response"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing session cookie / bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "403": {
-                        "description": "Missing mirror ability, regular role, or repo out of scope",
+                        "description": "Subscriber: token not in scope for this repo",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "405": {
-                        "description": "Method Not Allowed",
+                        "description": "Repo or destination not found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -3783,20 +3903,21 @@ const docTemplate = `{
             "delete": {
                 "security": [
                     {
+                        "SessionAuth": []
+                    },
+                    {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nThree-layer gate (see accounts.md §6.1, remote-sync.md §2.6):\n\n1. TokenRepoPolicy — repo in the bearer token's allowlist.\n2. requireMaintainerOrAdmin — issuing account's role is\nadmin or maintainer; regular accounts are denied even\nif their key carries the ` + "`" + `mirror` + "`" + ` ability bit (the\nrole is a structural fence on top of per-token bits).\n3. TokenAbilityPolicy(\"mirror\") — the per-key opt-in.\n\nAny layer denying writes 403. The admin-session route at\n/api/admin/repos/{name}/destinations remains the override\nfor full server administration.",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Removes the destination from the repo; the auto-mirror\nfan-out stops firing for it on subsequent commits.\nReturns 204 with no body. Subscriber callers need\nadmin/maintainer role + ` + "`" + `mirror` + "`" + ` ability; admin-session\ncallers bypass.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
+                    "admin",
                     "repos"
                 ],
-                "summary": "Manage mirror-sync destinations on a repo (subscriber)",
+                "summary": "Remove one mirror-sync destination",
                 "parameters": [
                     {
                         "type": "string",
@@ -3809,67 +3930,28 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Destination id",
                         "name": "id",
-                        "in": "path"
-                    },
-                    {
-                        "description": "Create body (POST)",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/server.CreateDestinationRequest"
-                        }
-                    },
-                    {
-                        "description": "Patch body (PATCH)",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/server.UpdateDestinationRequest"
-                        }
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "GET/PATCH response",
-                        "schema": {
-                            "$ref": "#/definitions/server.DestinationView"
-                        }
-                    },
-                    "201": {
-                        "description": "POST response",
-                        "schema": {
-                            "$ref": "#/definitions/server.DestinationView"
-                        }
-                    },
                     "204": {
-                        "description": "DELETE response"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
+                        "description": "Destination removed"
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing session cookie / bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "403": {
-                        "description": "Missing mirror ability, regular role, or repo out of scope",
+                        "description": "Subscriber: missing mirror ability or role, or out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "405": {
-                        "description": "Method Not Allowed",
+                        "description": "Repo or destination not found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -3879,10 +3961,13 @@ const docTemplate = `{
             "patch": {
                 "security": [
                     {
+                        "SessionAuth": []
+                    },
+                    {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.\nThree-layer gate (see accounts.md §6.1, remote-sync.md §2.6):\n\n1. TokenRepoPolicy — repo in the bearer token's allowlist.\n2. requireMaintainerOrAdmin — issuing account's role is\nadmin or maintainer; regular accounts are denied even\nif their key carries the ` + "`" + `mirror` + "`" + ` ability bit (the\nrole is a structural fence on top of per-token bits).\n3. TokenAbilityPolicy(\"mirror\") — the per-key opt-in.\n\nAny layer denying writes 403. The admin-session route at\n/api/admin/repos/{name}/destinations remains the override\nfor full server administration.",
+                "description": "Updates any of ` + "`" + `url` + "`" + `, ` + "`" + `credential_name` + "`" + `, ` + "`" + `enabled` + "`" + `.\nOmitted fields are left unchanged (nil-pointer ==\n\"no change\"). Empty-string url or credential_name is\nrejected — delete the destination instead. Subscriber\ncallers need admin/maintainer role + ` + "`" + `mirror` + "`" + ` ability;\nadmin-session callers bypass.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3890,9 +3975,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
+                    "admin",
                     "repos"
                 ],
-                "summary": "Manage mirror-sync destinations on a repo (subscriber)",
+                "summary": "Patch one mirror-sync destination",
                 "parameters": [
                     {
                         "type": "string",
@@ -3905,20 +3991,14 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Destination id",
                         "name": "id",
-                        "in": "path"
+                        "in": "path",
+                        "required": true
                     },
                     {
-                        "description": "Create body (POST)",
+                        "description": "Patch payload",
                         "name": "body",
                         "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/server.CreateDestinationRequest"
-                        }
-                    },
-                    {
-                        "description": "Patch body (PATCH)",
-                        "name": "body",
-                        "in": "body",
+                        "required": true,
                         "schema": {
                             "$ref": "#/definitions/server.UpdateDestinationRequest"
                         }
@@ -3926,19 +4006,10 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "GET/PATCH response",
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.DestinationView"
                         }
-                    },
-                    "201": {
-                        "description": "POST response",
-                        "schema": {
-                            "$ref": "#/definitions/server.DestinationView"
-                        }
-                    },
-                    "204": {
-                        "description": "DELETE response"
                     },
                     "400": {
                         "description": "Bad Request",
@@ -3947,25 +4018,19 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Missing session cookie / bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "403": {
-                        "description": "Missing mirror ability, regular role, or repo out of scope",
+                        "description": "Subscriber: missing mirror ability or role, or out of scope",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/server.ErrorResponse"
-                        }
-                    },
-                    "405": {
-                        "description": "Method Not Allowed",
+                        "description": "Repo, destination, or credential_name not found",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -3977,6 +4042,9 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
+                        "SessionAuth": []
+                    },
+                    {
                         "BearerAuth": []
                     }
                 ],
@@ -3985,6 +4053,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
+                    "admin",
                     "repos"
                 ],
                 "summary": "Trigger a manual mirror-sync push on one destination",
@@ -4082,6 +4151,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/git.FileInfo"
                         }
                     },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -4163,6 +4238,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -4202,7 +4283,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "repos"
+                    "formidable"
                 ],
                 "summary": "Formidable-shape bootstrap for a repo",
                 "parameters": [
@@ -4260,7 +4341,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "sync"
+                    "formidable"
                 ],
                 "summary": "Record query endpoint (Formidable-first)",
                 "parameters": [
@@ -4306,6 +4387,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
                         "schema": {
                             "$ref": "#/definitions/server.ErrorResponse"
                         }
@@ -4362,6 +4449,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/git.HeadInfo"
                         }
                     },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -4415,6 +4508,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.RepoLogResponse"
                         }
                     },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -4459,6 +4558,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/git.SnapshotInfo"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
@@ -4513,6 +4618,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.RepoStatusResponse"
                         }
                     },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
@@ -4557,6 +4668,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/git.TreeInfo"
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid bearer token",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
@@ -6221,6 +6338,12 @@ const docTemplate = `{
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"
+        },
+        "SessionAuth": {
+            "description": "Session cookie minted by POST /api/admin/login (or any successful OAuth callback). Required by every /api/admin/* endpoint and the /fragments/* template server. Browsers attach it automatically; programmatic callers must include the cookie header on every request.",
+            "type": "apiKey",
+            "name": "gigot_session",
+            "in": "cookie"
         }
     }
 }`

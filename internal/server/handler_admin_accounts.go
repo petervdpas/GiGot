@@ -92,6 +92,7 @@ func splitAccountsPath(p string) (provider, identifier string, ok bool) {
 // @Failure      401   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Failure      409   {object}  ErrorResponse          "Account already exists"
+// @Security    SessionAuth
 // @Router       /admin/accounts [get]
 // @Router       /admin/accounts [post]
 func (s *Server) handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
@@ -127,6 +128,7 @@ func (s *Server) handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Failure      409   {object}  ErrorResponse          "Would remove the last admin"
+// @Security    SessionAuth
 // @Router       /admin/accounts/{provider}/{identifier} [patch]
 // @Router       /admin/accounts/{provider}/{identifier} [delete]
 func (s *Server) handleAdminAccount(w http.ResponseWriter, r *http.Request) {

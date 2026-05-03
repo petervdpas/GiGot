@@ -31,6 +31,7 @@ import (
 // @Produce      octet-stream
 // @Success      200
 // @Failure      400  {object}  ErrorResponse
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      403  {object}  ErrorResponse
 // @Failure      404  {object}  ErrorResponse
 // @Security     BearerAuth
@@ -91,6 +92,7 @@ func (s *Server) handleGitInfoRefs(w http.ResponseWriter, r *http.Request) {
 // @Accept       octet-stream
 // @Produce      octet-stream
 // @Success      200
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404  {object}  ErrorResponse
 // @Security     BearerAuth
 // @Security     BasicAuth
@@ -107,6 +109,7 @@ func (s *Server) handleGitUploadPack(w http.ResponseWriter, r *http.Request) {
 // @Accept       octet-stream
 // @Produce      octet-stream
 // @Success      200
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404  {object}  ErrorResponse
 // @Security     BearerAuth
 // @Security     BasicAuth

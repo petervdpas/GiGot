@@ -37,6 +37,7 @@ type RepoLogResponse struct {
 // @Produce      json
 // @Param        name  path      string  true  "Repository name"
 // @Success      200   {object}  git.HeadInfo
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404   {object}  ErrorResponse
 // @Failure      409   {object}  ErrorResponse
 // @Security     BearerAuth
@@ -66,6 +67,7 @@ func (s *Server) handleRepoHead(w http.ResponseWriter, r *http.Request) {
 // @Param        name     path      string  true   "Repository name"
 // @Param        version  query     string  false  "Commit SHA (defaults to HEAD)"
 // @Success      200      {object}  git.TreeInfo
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404      {object}  ErrorResponse
 // @Failure      409      {object}  ErrorResponse
 // @Failure      422      {object}  ErrorResponse
@@ -96,6 +98,7 @@ func (s *Server) handleRepoTree(w http.ResponseWriter, r *http.Request) {
 // @Param        name     path      string  true   "Repository name"
 // @Param        version  query     string  false  "Commit SHA (defaults to HEAD)"
 // @Success      200      {object}  git.SnapshotInfo
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404      {object}  ErrorResponse
 // @Failure      409      {object}  ErrorResponse
 // @Failure      422      {object}  ErrorResponse
@@ -129,6 +132,7 @@ func (s *Server) handleRepoSnapshot(w http.ResponseWriter, r *http.Request) {
 // @Param        since  query     string  true   "Client's last-seen commit SHA"
 // @Success      200    {object}  git.ChangesInfo
 // @Failure      400    {object}  ErrorResponse
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404    {object}  ErrorResponse
 // @Failure      405    {object}  ErrorResponse
 // @Failure      409    {object}  ErrorResponse
@@ -169,6 +173,7 @@ func (s *Server) handleRepoChanges(w http.ResponseWriter, r *http.Request) {
 // @Param        path     path      string  true   "File path inside the repo"
 // @Param        version  query     string  false  "Commit SHA (defaults to HEAD)"
 // @Success      200      {object}  git.FileInfo
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404      {object}  ErrorResponse
 // @Failure      405      {object}  ErrorResponse
 // @Failure      409      {object}  ErrorResponse
@@ -247,6 +252,7 @@ type WriteFileConflictResponse struct {
 // @Param        body  body      WriteFileRequest    true  "Write request"
 // @Success      200   {object}  git.WriteResult
 // @Failure      400   {object}  ErrorResponse
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Failure      409   {object}  WriteFileConflictResponse
@@ -419,6 +425,7 @@ type CommitRecordConflictResponse struct {
 // @Param        body  body      CommitRequest  true  "Commit request"
 // @Success      200   {object}  git.CommitResult
 // @Failure      400   {object}  ErrorResponse
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Failure      409   {object}  CommitConflictResponse
@@ -617,6 +624,7 @@ func writeSyncError(w http.ResponseWriter, err error) {
 // @Produce      json
 // @Param        name  path      string  true  "Repository name"
 // @Success      200   {object}  RepoStatusResponse
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404   {object}  ErrorResponse
 // @Security     BearerAuth
 // @Router       /repos/{name}/status [get]
@@ -642,6 +650,7 @@ func (s *Server) handleRepoStatus(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        name  path      string  true  "Repository name"
 // @Success      200   {array}   gitmanager.BranchInfo
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404   {object}  ErrorResponse
 // @Security     BearerAuth
 // @Router       /repos/{name}/branches [get]
@@ -668,6 +677,7 @@ func (s *Server) handleRepoBranches(w http.ResponseWriter, r *http.Request) {
 // @Param        name   path      string  true   "Repository name"
 // @Param        limit  query     int     false  "Max number of commits"  default(20)
 // @Success      200    {object}  RepoLogResponse
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404    {object}  ErrorResponse
 // @Security     BearerAuth
 // @Router       /repos/{name}/log [get]

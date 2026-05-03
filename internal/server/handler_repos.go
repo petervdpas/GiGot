@@ -30,6 +30,7 @@ import (
 // @Success      200  {object}  RepoListResponse
 // @Success      201  {object}  MessageResponse
 // @Failure      400  {object}  ErrorResponse
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      405  {object}  ErrorResponse
 // @Failure      409  {object}  ErrorResponse
 // @Failure      500  {object}  ErrorResponse
@@ -238,6 +239,7 @@ func resolveShouldStamp(serverDefault bool, requested *bool) bool {
 // @Param        name  path      string  true  "Repository name"
 // @Success      200   {object}  RepoInfo
 // @Success      204   "No Content"
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Security     BearerAuth

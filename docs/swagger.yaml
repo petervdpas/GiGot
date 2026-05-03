@@ -1185,6 +1185,8 @@ paths:
           description: Account already exists
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage accounts (admin only)
       tags:
       - admin
@@ -1228,6 +1230,8 @@ paths:
           description: Account already exists
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage accounts (admin only)
       tags:
       - admin
@@ -1285,6 +1289,8 @@ paths:
           description: Would remove the last admin
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage one account by (provider, identifier) (admin only)
       tags:
       - admin
@@ -1341,6 +1347,8 @@ paths:
           description: Would remove the last admin
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage one account by (provider, identifier) (admin only)
       tags:
       - admin
@@ -1394,6 +1402,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage tags on one account (admin only)
       tags:
       - admin
@@ -1446,6 +1456,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage tags on one account (admin only)
       tags:
       - admin
@@ -1486,6 +1498,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Read or reload auth runtime state (admin only)
       tags:
       - admin
@@ -1525,6 +1539,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Read or reload auth runtime state (admin only)
       tags:
       - admin
@@ -1570,6 +1586,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Run a server-side micro-benchmark suite (admin only)
       tags:
       - admin
@@ -1614,6 +1632,8 @@ paths:
           description: Name already exists
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage the credential vault (admin only)
       tags:
       - admin
@@ -1657,6 +1677,8 @@ paths:
           description: Name already exists
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage the credential vault (admin only)
       tags:
       - admin
@@ -1704,6 +1726,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage one credential by name (admin only)
       tags:
       - admin
@@ -1750,6 +1774,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage one credential by name (admin only)
       tags:
       - admin
@@ -1796,6 +1822,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage one credential by name (admin only)
       tags:
       - admin
@@ -1839,6 +1867,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Read or update server-side admission limits (admin only)
       tags:
       - admin
@@ -1881,6 +1911,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Read or update server-side admission limits (admin only)
       tags:
       - admin
@@ -1948,82 +1980,72 @@ paths:
       - auth
   /admin/repos/{name}/destinations:
     get:
-      consumes:
-      - application/json
       description: |-
-        GET lists destinations; POST adds a new one. Each
-        destination points at a named credential in the vault —
-        see docs/design/credential-vault.md §5 and
-        docs/design/remote-sync.md §3.1. Session-cookie authenticated.
+        Returns every destination attached to the named repo,
+        with last-sync status fields populated. Read-only;
+        the per-bearer mirror ability is NOT required — repo
+        scope alone is sufficient (see remote-sync.md §2.6,
+        the read/write split). Admin-session callers reach
+        the same handler via the /api/admin/* path.
       parameters:
       - description: Repo name
         in: path
         name: name
         required: true
         type: string
-      - description: Create body (POST)
-        in: body
-        name: body
-        schema:
-          $ref: '#/definitions/server.CreateDestinationRequest'
       produces:
       - application/json
       responses:
         "200":
-          description: GET response
+          description: OK
           schema:
             $ref: '#/definitions/server.DestinationListResponse'
-        "201":
-          description: POST response
-          schema:
-            $ref: '#/definitions/server.DestinationView'
-        "400":
-          description: Bad Request
+        "401":
+          description: Missing session cookie / bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
-        "401":
-          description: Unauthorized
+        "403":
+          description: 'Subscriber: token not in scope for this repo'
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
-          description: Repo not found, or credential_name unknown
+          description: Repo not found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
-        "405":
-          description: Method Not Allowed
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-      summary: List or create mirror-sync destinations on a repo (admin only)
+      security:
+      - SessionAuth: []
+      - BearerAuth: []
+      summary: List mirror-sync destinations on a repo
       tags:
       - admin
+      - repos
     post:
       consumes:
       - application/json
       description: |-
-        GET lists destinations; POST adds a new one. Each
-        destination points at a named credential in the vault —
-        see docs/design/credential-vault.md §5 and
-        docs/design/remote-sync.md §3.1. Session-cookie authenticated.
+        Attaches a new destination pointing at a named credential
+        in the vault (see credential-vault.md §5,
+        remote-sync.md §3.1). Returns 201 with the stored
+        destination on success. Subscriber callers must hold
+        admin/maintainer role AND the `mirror` ability — see
+        accounts.md §6.1; admin-session callers bypass.
       parameters:
       - description: Repo name
         in: path
         name: name
         required: true
         type: string
-      - description: Create body (POST)
+      - description: Destination payload
         in: body
         name: body
+        required: true
         schema:
           $ref: '#/definitions/server.CreateDestinationRequest'
       produces:
       - application/json
       responses:
-        "200":
-          description: GET response
-          schema:
-            $ref: '#/definitions/server.DestinationListResponse'
         "201":
-          description: POST response
+          description: Created
           schema:
             $ref: '#/definitions/server.DestinationView'
         "400":
@@ -2031,28 +2053,32 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing session cookie / bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: 'Subscriber: missing mirror ability or role, or out of scope'
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
-          description: Repo not found, or credential_name unknown
+          description: Repo or credential_name not found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
-        "405":
-          description: Method Not Allowed
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-      summary: List or create mirror-sync destinations on a repo (admin only)
+      security:
+      - SessionAuth: []
+      - BearerAuth: []
+      summary: Add a mirror-sync destination to a repo
       tags:
       - admin
+      - repos
   /admin/repos/{name}/destinations/{id}:
     delete:
-      consumes:
-      - application/json
       description: |-
-        GET returns the destination; PATCH updates any of url/
-        credential_name/enabled (omitted fields are left
-        unchanged); DELETE removes it. Session-cookie authenticated.
+        Removes the destination from the repo; the auto-mirror
+        fan-out stops firing for it on subsequent commits.
+        Returns 204 with no body. Subscriber callers need
+        admin/maintainer role + `mirror` ability; admin-session
+        callers bypass.
       parameters:
       - description: Repo name
         in: path
@@ -2064,46 +2090,37 @@ paths:
         name: id
         required: true
         type: string
-      - description: Patch body (PATCH)
-        in: body
-        name: body
-        schema:
-          $ref: '#/definitions/server.UpdateDestinationRequest'
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/server.DestinationView'
         "204":
-          description: DELETE response
-        "400":
-          description: Bad Request
+          description: Destination removed
+        "401":
+          description: Missing session cookie / bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
-        "401":
-          description: Unauthorized
+        "403":
+          description: 'Subscriber: missing mirror ability or role, or out of scope'
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
-          description: Not Found
+          description: Repo or destination not found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
-        "405":
-          description: Method Not Allowed
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-      summary: Manage one destination by id (admin only)
+      security:
+      - SessionAuth: []
+      - BearerAuth: []
+      summary: Remove one mirror-sync destination
       tags:
       - admin
+      - repos
     get:
-      consumes:
-      - application/json
       description: |-
-        GET returns the destination; PATCH updates any of url/
-        credential_name/enabled (omitted fields are left
-        unchanged); DELETE removes it. Session-cookie authenticated.
+        Returns the destination's stored configuration plus its
+        most recent sync attempt (status / timestamp / error).
+        Read-only; per-bearer mirror ability NOT required —
+        the read/write split lets any in-scope subscriber
+        inspect the configuration without managing it.
       parameters:
       - description: Repo name
         in: path
@@ -2115,11 +2132,6 @@ paths:
         name: id
         required: true
         type: string
-      - description: Patch body (PATCH)
-        in: body
-        name: body
-        schema:
-          $ref: '#/definitions/server.UpdateDestinationRequest'
       produces:
       - application/json
       responses:
@@ -2127,34 +2139,35 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.DestinationView'
-        "204":
-          description: DELETE response
-        "400":
-          description: Bad Request
+        "401":
+          description: Missing session cookie / bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
-        "401":
-          description: Unauthorized
+        "403":
+          description: 'Subscriber: token not in scope for this repo'
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
-          description: Not Found
+          description: Repo or destination not found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
-        "405":
-          description: Method Not Allowed
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-      summary: Manage one destination by id (admin only)
+      security:
+      - SessionAuth: []
+      - BearerAuth: []
+      summary: Read one mirror-sync destination by id
       tags:
       - admin
+      - repos
     patch:
       consumes:
       - application/json
       description: |-
-        GET returns the destination; PATCH updates any of url/
-        credential_name/enabled (omitted fields are left
-        unchanged); DELETE removes it. Session-cookie authenticated.
+        Updates any of `url`, `credential_name`, `enabled`.
+        Omitted fields are left unchanged (nil-pointer ==
+        "no change"). Empty-string url or credential_name is
+        rejected — delete the destination instead. Subscriber
+        callers need admin/maintainer role + `mirror` ability;
+        admin-session callers bypass.
       parameters:
       - description: Repo name
         in: path
@@ -2166,9 +2179,10 @@ paths:
         name: id
         required: true
         type: string
-      - description: Patch body (PATCH)
+      - description: Patch payload
         in: body
         name: body
+        required: true
         schema:
           $ref: '#/definitions/server.UpdateDestinationRequest'
       produces:
@@ -2178,27 +2192,29 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.DestinationView'
-        "204":
-          description: DELETE response
         "400":
           description: Bad Request
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing session cookie / bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "403":
+          description: 'Subscriber: missing mirror ability or role, or out of scope'
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
-          description: Not Found
+          description: Repo, destination, or credential_name not found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
-        "405":
-          description: Method Not Allowed
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-      summary: Manage one destination by id (admin only)
+      security:
+      - SessionAuth: []
+      - BearerAuth: []
+      summary: Patch one mirror-sync destination
       tags:
       - admin
+      - repos
   /admin/repos/{name}/destinations/{id}/sync:
     post:
       description: |-
@@ -2254,9 +2270,11 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       security:
+      - SessionAuth: []
       - BearerAuth: []
       summary: Trigger a manual mirror-sync push on one destination
       tags:
+      - admin
       - repos
   /admin/repos/{name}/formidable:
     post:
@@ -2305,8 +2323,11 @@ paths:
           description: Empty repo — nothing to stamp on top of
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Convert a plain repo to a Formidable context (admin only)
       tags:
+      - formidable
       - admin
   /admin/repos/{name}/tags:
     get:
@@ -2353,6 +2374,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage tags on one repo (admin only)
       tags:
       - admin
@@ -2400,6 +2423,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage tags on one repo (admin only)
       tags:
       - admin
@@ -2420,6 +2445,8 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Current admin session
       tags:
       - admin
@@ -2479,6 +2506,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Bulk revoke subscriptions by effective tag (admin only)
       tags:
       - admin
@@ -2523,6 +2552,8 @@ paths:
           description: Name already exists
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage the tag catalogue (admin only)
       tags:
       - admin
@@ -2566,6 +2597,8 @@ paths:
           description: Name already exists
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage the tag catalogue (admin only)
       tags:
       - admin
@@ -2616,6 +2649,8 @@ paths:
           description: Rename collides with another tag
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage one tag by ID (admin only)
       tags:
       - admin
@@ -2665,6 +2700,8 @@ paths:
           description: Rename collides with another tag
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage one tag by ID (admin only)
       tags:
       - admin
@@ -2693,6 +2730,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Sweep unused tags (admin only)
       tags:
       - admin
@@ -2770,6 +2809,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage subscription keys (admin only)
       tags:
       - admin
@@ -2846,6 +2887,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage subscription keys (admin only)
       tags:
       - admin
@@ -2922,6 +2965,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage subscription keys (admin only)
       tags:
       - admin
@@ -2998,6 +3043,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Manage subscription keys (admin only)
       tags:
       - admin
@@ -3040,6 +3087,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Bind a legacy token to an account (admin only)
       tags:
       - admin
@@ -3077,6 +3126,10 @@ paths:
             $ref: '#/definitions/server.TokenResponse'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Missing or invalid bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
@@ -3125,6 +3178,10 @@ paths:
             $ref: '#/definitions/server.TokenResponse'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Missing or invalid bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
@@ -3231,6 +3288,8 @@ paths:
           description: Method Not Allowed
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+      security:
+      - SessionAuth: []
       summary: Serve a UI fragment template (admin only)
       tags:
       - admin
@@ -3250,6 +3309,10 @@ paths:
       responses:
         "200":
           description: OK
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -3277,6 +3340,10 @@ paths:
       responses:
         "200":
           description: OK
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -3308,6 +3375,10 @@ paths:
           description: OK
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Missing or invalid bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
@@ -3466,6 +3537,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "405":
           description: Method Not Allowed
           schema:
@@ -3514,6 +3589,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "405":
           description: Method Not Allowed
           schema:
@@ -3549,6 +3628,10 @@ paths:
             $ref: '#/definitions/server.RepoInfo'
         "204":
           description: No Content
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -3579,6 +3662,10 @@ paths:
             $ref: '#/definitions/server.RepoInfo'
         "204":
           description: No Content
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -3610,6 +3697,10 @@ paths:
             items:
               $ref: '#/definitions/git.BranchInfo'
             type: array
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -3648,6 +3739,10 @@ paths:
             $ref: '#/definitions/git.ChangesInfo'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Missing or invalid bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
@@ -3704,6 +3799,10 @@ paths:
             $ref: '#/definitions/git.CommitResult'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Missing or invalid bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
@@ -3772,165 +3871,105 @@ paths:
       - repos
   /repos/{name}/destinations:
     get:
-      consumes:
-      - application/json
       description: |-
-        Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
-        Three-layer gate (see accounts.md §6.1, remote-sync.md §2.6):
-
-        1. TokenRepoPolicy — repo in the bearer token's allowlist.
-        2. requireMaintainerOrAdmin — issuing account's role is
-        admin or maintainer; regular accounts are denied even
-        if their key carries the `mirror` ability bit (the
-        role is a structural fence on top of per-token bits).
-        3. TokenAbilityPolicy("mirror") — the per-key opt-in.
-
-        Any layer denying writes 403. The admin-session route at
-        /api/admin/repos/{name}/destinations remains the override
-        for full server administration.
+        Returns every destination attached to the named repo,
+        with last-sync status fields populated. Read-only;
+        the per-bearer mirror ability is NOT required — repo
+        scope alone is sufficient (see remote-sync.md §2.6,
+        the read/write split). Admin-session callers reach
+        the same handler via the /api/admin/* path.
       parameters:
       - description: Repo name
         in: path
         name: name
         required: true
         type: string
-      - description: Create body (POST)
-        in: body
-        name: body
-        schema:
-          $ref: '#/definitions/server.CreateDestinationRequest'
-      - description: Patch body (PATCH)
-        in: body
-        name: body
-        schema:
-          $ref: '#/definitions/server.UpdateDestinationRequest'
       produces:
       - application/json
       responses:
         "200":
-          description: GET/PATCH response
+          description: OK
           schema:
-            $ref: '#/definitions/server.DestinationView'
-        "201":
-          description: POST response
-          schema:
-            $ref: '#/definitions/server.DestinationView'
-        "204":
-          description: DELETE response
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
+            $ref: '#/definitions/server.DestinationListResponse'
         "401":
-          description: Unauthorized
+          description: Missing session cookie / bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
-          description: Missing mirror ability, regular role, or repo out of scope
+          description: 'Subscriber: token not in scope for this repo'
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-        "405":
-          description: Method Not Allowed
+          description: Repo not found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       security:
+      - SessionAuth: []
       - BearerAuth: []
-      summary: Manage mirror-sync destinations on a repo (subscriber)
+      summary: List mirror-sync destinations on a repo
       tags:
+      - admin
       - repos
     post:
       consumes:
       - application/json
       description: |-
-        Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
-        Three-layer gate (see accounts.md §6.1, remote-sync.md §2.6):
-
-        1. TokenRepoPolicy — repo in the bearer token's allowlist.
-        2. requireMaintainerOrAdmin — issuing account's role is
-        admin or maintainer; regular accounts are denied even
-        if their key carries the `mirror` ability bit (the
-        role is a structural fence on top of per-token bits).
-        3. TokenAbilityPolicy("mirror") — the per-key opt-in.
-
-        Any layer denying writes 403. The admin-session route at
-        /api/admin/repos/{name}/destinations remains the override
-        for full server administration.
+        Attaches a new destination pointing at a named credential
+        in the vault (see credential-vault.md §5,
+        remote-sync.md §3.1). Returns 201 with the stored
+        destination on success. Subscriber callers must hold
+        admin/maintainer role AND the `mirror` ability — see
+        accounts.md §6.1; admin-session callers bypass.
       parameters:
       - description: Repo name
         in: path
         name: name
         required: true
         type: string
-      - description: Create body (POST)
+      - description: Destination payload
         in: body
         name: body
+        required: true
         schema:
           $ref: '#/definitions/server.CreateDestinationRequest'
-      - description: Patch body (PATCH)
-        in: body
-        name: body
-        schema:
-          $ref: '#/definitions/server.UpdateDestinationRequest'
       produces:
       - application/json
       responses:
-        "200":
-          description: GET/PATCH response
-          schema:
-            $ref: '#/definitions/server.DestinationView'
         "201":
-          description: POST response
+          description: Created
           schema:
             $ref: '#/definitions/server.DestinationView'
-        "204":
-          description: DELETE response
         "400":
           description: Bad Request
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing session cookie / bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
-          description: Missing mirror ability, regular role, or repo out of scope
+          description: 'Subscriber: missing mirror ability or role, or out of scope'
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-        "405":
-          description: Method Not Allowed
+          description: Repo or credential_name not found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       security:
+      - SessionAuth: []
       - BearerAuth: []
-      summary: Manage mirror-sync destinations on a repo (subscriber)
+      summary: Add a mirror-sync destination to a repo
       tags:
+      - admin
       - repos
   /repos/{name}/destinations/{id}:
     delete:
-      consumes:
-      - application/json
       description: |-
-        Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
-        Three-layer gate (see accounts.md §6.1, remote-sync.md §2.6):
-
-        1. TokenRepoPolicy — repo in the bearer token's allowlist.
-        2. requireMaintainerOrAdmin — issuing account's role is
-        admin or maintainer; regular accounts are denied even
-        if their key carries the `mirror` ability bit (the
-        role is a structural fence on top of per-token bits).
-        3. TokenAbilityPolicy("mirror") — the per-key opt-in.
-
-        Any layer denying writes 403. The admin-session route at
-        /api/admin/repos/{name}/destinations remains the override
-        for full server administration.
+        Removes the destination from the repo; the auto-mirror
+        fan-out stops firing for it on subsequent commits.
+        Returns 204 with no body. Subscriber callers need
+        admin/maintainer role + `mirror` ability; admin-session
+        callers bypass.
       parameters:
       - description: Repo name
         in: path
@@ -3940,72 +3979,39 @@ paths:
       - description: Destination id
         in: path
         name: id
+        required: true
         type: string
-      - description: Create body (POST)
-        in: body
-        name: body
-        schema:
-          $ref: '#/definitions/server.CreateDestinationRequest'
-      - description: Patch body (PATCH)
-        in: body
-        name: body
-        schema:
-          $ref: '#/definitions/server.UpdateDestinationRequest'
       produces:
       - application/json
       responses:
-        "200":
-          description: GET/PATCH response
-          schema:
-            $ref: '#/definitions/server.DestinationView'
-        "201":
-          description: POST response
-          schema:
-            $ref: '#/definitions/server.DestinationView'
         "204":
-          description: DELETE response
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
+          description: Destination removed
         "401":
-          description: Unauthorized
+          description: Missing session cookie / bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
-          description: Missing mirror ability, regular role, or repo out of scope
+          description: 'Subscriber: missing mirror ability or role, or out of scope'
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-        "405":
-          description: Method Not Allowed
+          description: Repo or destination not found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       security:
+      - SessionAuth: []
       - BearerAuth: []
-      summary: Manage mirror-sync destinations on a repo (subscriber)
+      summary: Remove one mirror-sync destination
       tags:
+      - admin
       - repos
     get:
-      consumes:
-      - application/json
       description: |-
-        Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
-        Three-layer gate (see accounts.md §6.1, remote-sync.md §2.6):
-
-        1. TokenRepoPolicy — repo in the bearer token's allowlist.
-        2. requireMaintainerOrAdmin — issuing account's role is
-        admin or maintainer; regular accounts are denied even
-        if their key carries the `mirror` ability bit (the
-        role is a structural fence on top of per-token bits).
-        3. TokenAbilityPolicy("mirror") — the per-key opt-in.
-
-        Any layer denying writes 403. The admin-session route at
-        /api/admin/repos/{name}/destinations remains the override
-        for full server administration.
+        Returns the destination's stored configuration plus its
+        most recent sync attempt (status / timestamp / error).
+        Read-only; per-bearer mirror ability NOT required —
+        the read/write split lets any in-scope subscriber
+        inspect the configuration without managing it.
       parameters:
       - description: Repo name
         in: path
@@ -4015,72 +4021,44 @@ paths:
       - description: Destination id
         in: path
         name: id
+        required: true
         type: string
-      - description: Create body (POST)
-        in: body
-        name: body
-        schema:
-          $ref: '#/definitions/server.CreateDestinationRequest'
-      - description: Patch body (PATCH)
-        in: body
-        name: body
-        schema:
-          $ref: '#/definitions/server.UpdateDestinationRequest'
       produces:
       - application/json
       responses:
         "200":
-          description: GET/PATCH response
+          description: OK
           schema:
             $ref: '#/definitions/server.DestinationView'
-        "201":
-          description: POST response
-          schema:
-            $ref: '#/definitions/server.DestinationView'
-        "204":
-          description: DELETE response
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing session cookie / bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
-          description: Missing mirror ability, regular role, or repo out of scope
+          description: 'Subscriber: token not in scope for this repo'
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-        "405":
-          description: Method Not Allowed
+          description: Repo or destination not found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       security:
+      - SessionAuth: []
       - BearerAuth: []
-      summary: Manage mirror-sync destinations on a repo (subscriber)
+      summary: Read one mirror-sync destination by id
       tags:
+      - admin
       - repos
     patch:
       consumes:
       - application/json
       description: |-
-        Subscriber-facing counterpart to /api/admin/repos/{name}/destinations.
-        Three-layer gate (see accounts.md §6.1, remote-sync.md §2.6):
-
-        1. TokenRepoPolicy — repo in the bearer token's allowlist.
-        2. requireMaintainerOrAdmin — issuing account's role is
-        admin or maintainer; regular accounts are denied even
-        if their key carries the `mirror` ability bit (the
-        role is a structural fence on top of per-token bits).
-        3. TokenAbilityPolicy("mirror") — the per-key opt-in.
-
-        Any layer denying writes 403. The admin-session route at
-        /api/admin/repos/{name}/destinations remains the override
-        for full server administration.
+        Updates any of `url`, `credential_name`, `enabled`.
+        Omitted fields are left unchanged (nil-pointer ==
+        "no change"). Empty-string url or credential_name is
+        rejected — delete the destination instead. Subscriber
+        callers need admin/maintainer role + `mirror` ability;
+        admin-session callers bypass.
       parameters:
       - description: Repo name
         in: path
@@ -4090,54 +4068,43 @@ paths:
       - description: Destination id
         in: path
         name: id
+        required: true
         type: string
-      - description: Create body (POST)
+      - description: Patch payload
         in: body
         name: body
-        schema:
-          $ref: '#/definitions/server.CreateDestinationRequest'
-      - description: Patch body (PATCH)
-        in: body
-        name: body
+        required: true
         schema:
           $ref: '#/definitions/server.UpdateDestinationRequest'
       produces:
       - application/json
       responses:
         "200":
-          description: GET/PATCH response
+          description: OK
           schema:
             $ref: '#/definitions/server.DestinationView'
-        "201":
-          description: POST response
-          schema:
-            $ref: '#/definitions/server.DestinationView'
-        "204":
-          description: DELETE response
         "400":
           description: Bad Request
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "401":
-          description: Unauthorized
+          description: Missing session cookie / bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "403":
-          description: Missing mirror ability, regular role, or repo out of scope
+          description: 'Subscriber: missing mirror ability or role, or out of scope'
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/server.ErrorResponse'
-        "405":
-          description: Method Not Allowed
+          description: Repo, destination, or credential_name not found
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       security:
+      - SessionAuth: []
       - BearerAuth: []
-      summary: Manage mirror-sync destinations on a repo (subscriber)
+      summary: Patch one mirror-sync destination
       tags:
+      - admin
       - repos
   /repos/{name}/destinations/{id}/sync:
     post:
@@ -4194,9 +4161,11 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       security:
+      - SessionAuth: []
       - BearerAuth: []
       summary: Trigger a manual mirror-sync push on one destination
       tags:
+      - admin
       - repos
   /repos/{name}/files/{path}:
     get:
@@ -4226,6 +4195,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/git.FileInfo'
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -4285,6 +4258,10 @@ paths:
             $ref: '#/definitions/git.WriteResult'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Missing or invalid bearer token
           schema:
             $ref: '#/definitions/server.ErrorResponse'
         "404":
@@ -4350,7 +4327,7 @@ paths:
       - BearerAuth: []
       summary: Formidable-shape bootstrap for a repo
       tags:
-      - repos
+      - formidable
   /repos/{name}/formidable/records/{template}:
     get:
       description: |-
@@ -4394,6 +4371,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/server.ErrorResponse'
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -4410,7 +4391,7 @@ paths:
       - BearerAuth: []
       summary: Record query endpoint (Formidable-first)
       tags:
-      - sync
+      - formidable
   /repos/{name}/head:
     get:
       description: |-
@@ -4430,6 +4411,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/git.HeadInfo'
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -4464,6 +4449,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.RepoLogResponse'
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -4497,6 +4486,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/git.SnapshotInfo'
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -4530,6 +4523,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.RepoStatusResponse'
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -4563,6 +4560,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/git.TreeInfo'
+        "401":
+          description: Missing or invalid bearer token
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
         "404":
           description: Not Found
           schema:
@@ -4587,5 +4588,13 @@ securityDefinitions:
     description: 'Enter your bearer token as: Bearer <token>'
     in: header
     name: Authorization
+    type: apiKey
+  SessionAuth:
+    description: Session cookie minted by POST /api/admin/login (or any successful
+      OAuth callback). Required by every /api/admin/* endpoint and the /fragments/*
+      template server. Browsers attach it automatically; programmatic callers must
+      include the cookie header on every request.
+    in: cookie
+    name: gigot_session
     type: apiKey
 swagger: "2.0"

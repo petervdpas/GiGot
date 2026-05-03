@@ -28,7 +28,7 @@ type RecordQueryResponse struct {
 // @Description  scalar data.<key> values and numeric range comparisons.
 // @Description  Sort accepts a data key, optionally prefixed with "-"
 // @Description  for descending. Limit defaults to no limit.
-// @Tags         sync
+// @Tags         formidable
 // @Produce      json
 // @Param        name      path      string  true   "Repository name"
 // @Param        template  path      string  true   "Template directory name under storage/"
@@ -37,6 +37,7 @@ type RecordQueryResponse struct {
 // @Param        limit     query     int     false  "Maximum number of records"
 // @Success      200       {object}  RecordQueryResponse
 // @Failure      400       {object}  ErrorResponse
+// @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404       {object}  ErrorResponse
 // @Failure      405       {object}  ErrorResponse
 // @Failure      409       {object}  ErrorResponse

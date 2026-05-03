@@ -98,6 +98,7 @@ var fragmentCache = func() map[string]*fragmentEntry {
 // @Failure      401   {object}  ErrorResponse
 // @Failure      404   {object}  ErrorResponse  "Unknown fragment name"
 // @Failure      405   {object}  ErrorResponse
+// @Security    SessionAuth
 // @Router       /fragments/{name} [get]
 func (s *Server) handleFragments(w http.ResponseWriter, r *http.Request) {
 	if s.requireAdminSession(w, r) == nil {

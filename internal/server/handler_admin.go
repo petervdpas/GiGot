@@ -189,6 +189,7 @@ func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *au
 // @Failure      401   {object}  ErrorResponse
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
+// @Security    SessionAuth
 // @Router       /admin/tokens [get]
 // @Router       /admin/tokens [post]
 // @Router       /admin/tokens [patch]
@@ -433,6 +434,7 @@ func effectiveCoversAny(effective, wantLower []string) bool {
 // @Failure      401   {object}  ErrorResponse
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
+// @Security    SessionAuth
 // @Router       /admin/tokens/bind [post]
 func (s *Server) handleAdminBindToken(w http.ResponseWriter, r *http.Request) {
 	if s.requireAdminSession(w, r) == nil {
@@ -499,6 +501,7 @@ func (s *Server) handleAdminBindToken(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Success      200  {object}  AdminLoginResponse
 // @Failure      401  {object}  ErrorResponse
+// @Security    SessionAuth
 // @Router       /admin/session [get]
 func (s *Server) handleAdminSession(w http.ResponseWriter, r *http.Request) {
 	id := s.requireAdminSession(w, r)

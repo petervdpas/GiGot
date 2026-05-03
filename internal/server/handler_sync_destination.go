@@ -40,6 +40,7 @@ const (
 // @Description  bearer token + repo scope + admin/maintainer role +
 // @Description  `mirror` ability (see accounts.md §6.1, remote-sync.md
 // @Description  §2.6 and §5).
+// @Tags         admin
 // @Tags         repos
 // @Produce      json
 // @Param        name  path      string            true  "Repo name"
@@ -49,6 +50,7 @@ const (
 // @Failure      403   {object}  ErrorResponse    "Subscriber route: missing mirror ability, regular role, or repo out of scope"
 // @Failure      404   {object}  ErrorResponse    "Repo, destination, or credential (deleted) not found"
 // @Failure      409   {object}  ErrorResponse    "Credential referenced by destination no longer exists in the vault"
+// @Security     SessionAuth
 // @Security     BearerAuth
 // @Router       /admin/repos/{name}/destinations/{id}/sync [post]
 // @Router       /repos/{name}/destinations/{id}/sync [post]

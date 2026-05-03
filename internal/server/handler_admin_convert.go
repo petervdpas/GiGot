@@ -81,6 +81,7 @@ func (s *Server) handleAdminRepoSub(w http.ResponseWriter, r *http.Request) {
 // @Description  that already carries a valid marker returns stamped=false
 // @Description  and writes no commit. On a successful stamp the server
 // @Description  appends one `repo_convert_formidable` audit entry.
+// @Tags         formidable
 // @Tags         admin
 // @Produce      json
 // @Param        name  path  string  true  "Repo name"
@@ -91,6 +92,7 @@ func (s *Server) handleAdminRepoSub(w http.ResponseWriter, r *http.Request) {
 // @Failure      404   {object}  ErrorResponse  "Repo not found"
 // @Failure      405   {object}  ErrorResponse
 // @Failure      422   {object}  ErrorResponse  "Empty repo — nothing to stamp on top of"
+// @Security    SessionAuth
 // @Router       /admin/repos/{name}/formidable [post]
 func (s *Server) handleAdminConvertFormidable(w http.ResponseWriter, r *http.Request) {
 	if s.requireAdminSession(w, r) == nil {

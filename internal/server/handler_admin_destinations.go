@@ -57,25 +57,13 @@ func splitDestinationsPath(p string) (repo, id, action string, ok bool) {
 	return repo, id, action, true
 }
 
-// handleAdminRepoDestinations godoc
-// @Summary      List or create mirror-sync destinations on a repo (admin only)
-// @Description  GET lists destinations; POST adds a new one. Each
-// @Description  destination points at a named credential in the vault —
-// @Description  see docs/design/credential-vault.md §5 and
-// @Description  docs/design/remote-sync.md §3.1. Session-cookie authenticated.
-// @Tags         admin
-// @Accept       json
-// @Produce      json
-// @Param        name  path      string                     true  "Repo name"
-// @Param        body  body      CreateDestinationRequest   false "Create body (POST)"
-// @Success      200   {object}  DestinationListResponse    "GET response"
-// @Success      201   {object}  DestinationView            "POST response"
-// @Failure      400   {object}  ErrorResponse
-// @Failure      401   {object}  ErrorResponse
-// @Failure      404   {object}  ErrorResponse              "Repo not found, or credential_name unknown"
-// @Failure      405   {object}  ErrorResponse
-// @Router       /admin/repos/{name}/destinations [get]
-// @Router       /admin/repos/{name}/destinations [post]
+// handleAdminRepoDestinations dispatches /api/admin/repos/{name}/destinations
+// (collection) and /api/admin/repos/{name}/destinations/{id}[/sync]
+// (single + action) by method. Per-operation godoc lives on the helper
+// functions below (listDestinations, createDestination, getDestination,
+// updateDestination, deleteDestination) so the swagger spec describes
+// each verb in isolation rather than smearing one shared description
+// across five operations.
 func (s *Server) handleAdminRepoDestinations(w http.ResponseWriter, r *http.Request) {
 	if s.requireAdminSession(w, r) == nil {
 		return
@@ -120,6 +108,26 @@ func (s *Server) handleAdminRepoDestinations(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// listDestinations godoc
+// @Summary      List mirror-sync destinations on a repo
+// @Description  Returns every destination attached to the named repo,
+// @Description  with last-sync status fields populated. Read-only;
+// @Description  the per-bearer mirror ability is NOT required — repo
+// @Description  scope alone is sufficient (see remote-sync.md §2.6,
+// @Description  the read/write split). Admin-session callers reach
+// @Description  the same handler via the /api/admin/* path.
+// @Tags         admin
+// @Tags         repos
+// @Produce      json
+// @Param        name  path      string                   true  "Repo name"
+// @Success      200   {object}  DestinationListResponse
+// @Failure      401   {object}  ErrorResponse            "Missing session cookie / bearer token"
+// @Failure      403   {object}  ErrorResponse            "Subscriber: token not in scope for this repo"
+// @Failure      404   {object}  ErrorResponse            "Repo not found"
+// @Security     SessionAuth
+// @Security     BearerAuth
+// @Router       /admin/repos/{name}/destinations [get]
+// @Router       /repos/{name}/destinations [get]
 func (s *Server) listDestinations(w http.ResponseWriter, _ *http.Request, repo string) {
 	items := s.destinations.All(repo)
 	views := make([]DestinationView, 0, len(items))
@@ -132,6 +140,29 @@ func (s *Server) listDestinations(w http.ResponseWriter, _ *http.Request, repo s
 	})
 }
 
+// createDestination godoc
+// @Summary      Add a mirror-sync destination to a repo
+// @Description  Attaches a new destination pointing at a named credential
+// @Description  in the vault (see credential-vault.md §5,
+// @Description  remote-sync.md §3.1). Returns 201 with the stored
+// @Description  destination on success. Subscriber callers must hold
+// @Description  admin/maintainer role AND the `mirror` ability — see
+// @Description  accounts.md §6.1; admin-session callers bypass.
+// @Tags         admin
+// @Tags         repos
+// @Accept       json
+// @Produce      json
+// @Param        name  path      string                     true   "Repo name"
+// @Param        body  body      CreateDestinationRequest   true   "Destination payload"
+// @Success      201   {object}  DestinationView
+// @Failure      400   {object}  ErrorResponse
+// @Failure      401   {object}  ErrorResponse              "Missing session cookie / bearer token"
+// @Failure      403   {object}  ErrorResponse              "Subscriber: missing mirror ability or role, or out of scope"
+// @Failure      404   {object}  ErrorResponse              "Repo or credential_name not found"
+// @Security     SessionAuth
+// @Security     BearerAuth
+// @Router       /admin/repos/{name}/destinations [post]
+// @Router       /repos/{name}/destinations [post]
 func (s *Server) createDestination(w http.ResponseWriter, r *http.Request, repo string) {
 	var req CreateDestinationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -170,26 +201,26 @@ func (s *Server) createDestination(w http.ResponseWriter, r *http.Request, repo 
 	writeJSON(w, http.StatusCreated, destinationView(*stored))
 }
 
-// handleAdminRepoDestination godoc
-// @Summary      Manage one destination by id (admin only)
-// @Description  GET returns the destination; PATCH updates any of url/
-// @Description  credential_name/enabled (omitted fields are left
-// @Description  unchanged); DELETE removes it. Session-cookie authenticated.
+// getDestination godoc
+// @Summary      Read one mirror-sync destination by id
+// @Description  Returns the destination's stored configuration plus its
+// @Description  most recent sync attempt (status / timestamp / error).
+// @Description  Read-only; per-bearer mirror ability NOT required —
+// @Description  the read/write split lets any in-scope subscriber
+// @Description  inspect the configuration without managing it.
 // @Tags         admin
-// @Accept       json
+// @Tags         repos
 // @Produce      json
-// @Param        name  path      string                      true  "Repo name"
-// @Param        id    path      string                      true  "Destination id"
-// @Param        body  body      UpdateDestinationRequest    false "Patch body (PATCH)"
+// @Param        name  path      string             true  "Repo name"
+// @Param        id    path      string             true  "Destination id"
 // @Success      200   {object}  DestinationView
-// @Success      204   "DELETE response"
-// @Failure      400   {object}  ErrorResponse
-// @Failure      401   {object}  ErrorResponse
-// @Failure      404   {object}  ErrorResponse
-// @Failure      405   {object}  ErrorResponse
+// @Failure      401   {object}  ErrorResponse      "Missing session cookie / bearer token"
+// @Failure      403   {object}  ErrorResponse      "Subscriber: token not in scope for this repo"
+// @Failure      404   {object}  ErrorResponse      "Repo or destination not found"
+// @Security     SessionAuth
+// @Security     BearerAuth
 // @Router       /admin/repos/{name}/destinations/{id} [get]
-// @Router       /admin/repos/{name}/destinations/{id} [patch]
-// @Router       /admin/repos/{name}/destinations/{id} [delete]
+// @Router       /repos/{name}/destinations/{id} [get]
 func (s *Server) getDestination(w http.ResponseWriter, _ *http.Request, repo, id string) {
 	d, err := s.destinations.Get(repo, id)
 	if err != nil {
@@ -203,6 +234,30 @@ func (s *Server) getDestination(w http.ResponseWriter, _ *http.Request, repo, id
 	writeJSON(w, http.StatusOK, destinationView(*d))
 }
 
+// updateDestination godoc
+// @Summary      Patch one mirror-sync destination
+// @Description  Updates any of `url`, `credential_name`, `enabled`.
+// @Description  Omitted fields are left unchanged (nil-pointer ==
+// @Description  "no change"). Empty-string url or credential_name is
+// @Description  rejected — delete the destination instead. Subscriber
+// @Description  callers need admin/maintainer role + `mirror` ability;
+// @Description  admin-session callers bypass.
+// @Tags         admin
+// @Tags         repos
+// @Accept       json
+// @Produce      json
+// @Param        name  path      string                     true   "Repo name"
+// @Param        id    path      string                     true   "Destination id"
+// @Param        body  body      UpdateDestinationRequest   true   "Patch payload"
+// @Success      200   {object}  DestinationView
+// @Failure      400   {object}  ErrorResponse
+// @Failure      401   {object}  ErrorResponse              "Missing session cookie / bearer token"
+// @Failure      403   {object}  ErrorResponse              "Subscriber: missing mirror ability or role, or out of scope"
+// @Failure      404   {object}  ErrorResponse              "Repo, destination, or credential_name not found"
+// @Security     SessionAuth
+// @Security     BearerAuth
+// @Router       /admin/repos/{name}/destinations/{id} [patch]
+// @Router       /repos/{name}/destinations/{id} [patch]
 func (s *Server) updateDestination(w http.ResponseWriter, r *http.Request, repo, id string) {
 	var req UpdateDestinationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -249,6 +304,26 @@ func (s *Server) updateDestination(w http.ResponseWriter, r *http.Request, repo,
 	writeJSON(w, http.StatusOK, destinationView(*stored))
 }
 
+// deleteDestination godoc
+// @Summary      Remove one mirror-sync destination
+// @Description  Removes the destination from the repo; the auto-mirror
+// @Description  fan-out stops firing for it on subsequent commits.
+// @Description  Returns 204 with no body. Subscriber callers need
+// @Description  admin/maintainer role + `mirror` ability; admin-session
+// @Description  callers bypass.
+// @Tags         admin
+// @Tags         repos
+// @Produce      json
+// @Param        name  path  string  true  "Repo name"
+// @Param        id    path  string  true  "Destination id"
+// @Success      204   "Destination removed"
+// @Failure      401   {object}  ErrorResponse  "Missing session cookie / bearer token"
+// @Failure      403   {object}  ErrorResponse  "Subscriber: missing mirror ability or role, or out of scope"
+// @Failure      404   {object}  ErrorResponse  "Repo or destination not found"
+// @Security     SessionAuth
+// @Security     BearerAuth
+// @Router       /admin/repos/{name}/destinations/{id} [delete]
+// @Router       /repos/{name}/destinations/{id} [delete]
 func (s *Server) deleteDestination(w http.ResponseWriter, _ *http.Request, repo, id string) {
 	if err := s.destinations.Remove(repo, id); err != nil {
 		if errors.Is(err, destinations.ErrNotFound) {

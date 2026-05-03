@@ -58,6 +58,7 @@ func auditActorFromIdentity(id *auth.Identity) audit.Actor {
 // @Failure      401   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Failure      409   {object}  ErrorResponse           "Name already exists"
+// @Security    SessionAuth
 // @Router       /admin/tags [get]
 // @Router       /admin/tags [post]
 func (s *Server) handleAdminTags(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +90,7 @@ func (s *Server) handleAdminTags(w http.ResponseWriter, r *http.Request) {
 // @Success      200   {object}  TagSweepUnusedResponse
 // @Failure      401   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
+// @Security    SessionAuth
 // @Router       /admin/tags/sweep-unused [post]
 func (s *Server) handleAdminTagsSweepUnused(w http.ResponseWriter, r *http.Request) {
 	id := s.requireAdminSession(w, r)
@@ -145,6 +147,7 @@ func (s *Server) handleAdminTagsSweepUnused(w http.ResponseWriter, r *http.Reque
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Failure      409   {object}  ErrorResponse      "Rename collides with another tag"
+// @Security    SessionAuth
 // @Router       /admin/tags/{id} [patch]
 // @Router       /admin/tags/{id} [delete]
 func (s *Server) handleAdminTag(w http.ResponseWriter, r *http.Request) {
