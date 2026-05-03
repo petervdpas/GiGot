@@ -702,9 +702,19 @@ definitions:
     type: object
   server.MirrorSettingsResponse:
     properties:
+      enabled:
+        example: true
+        type: boolean
       enabled_destinations:
         example: 3
         type: integer
+      last_tick_at:
+        type: string
+      last_tick_duration_ms:
+        example: 42
+        type: integer
+      last_tick_error:
+        type: string
       status_poll_sec:
         example: 600
         type: integer

@@ -1603,6 +1603,22 @@ a.sub-badge:hover { filter: brightness(1.15); text-decoration: underline; }
 .limits-field input { width: 8rem; }
 .limits-bound { font-size: 0.75rem; }
 .limits-state { margin-bottom: 0.6rem; font-size: 0.85rem; }
+/* /admin/settings — mirror polling toggle row. Lines up with the
+ * existing limits-row + limits-field shapes so the card holds its
+ * shape with or without the toggle present. */
+.mirror-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+}
+.mirror-toggle-row .field-label { margin: 0; }
+/* Heartbeat line. Reuses .limits-state for layout, error variant
+ * for a stale or panicking poller — same shade family the
+ * dest-sync error badge uses so the cue is consistent across
+ * pages. */
+.mirror-heartbeat.error { color: #f85149; }
+
 .limits-actions {
   display: flex;
   align-items: center;

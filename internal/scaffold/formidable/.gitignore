@@ -1,5 +1,13 @@
-# Local Formidable client state — never shared across clones.
+# Local Formidable client state, never shared across clones.
 # Each Formidable user keeps their own ledger of "what did I last sync"
 # at this path; committing it would cause one user's local state to
 # silently overwrite another's on the next pull.
 .formidable/sync.json
+
+# Log files. Formidable and the tooling around it write runtime logs
+# alongside content; checking them in pollutes the team repo with
+# per-user noise that's only ever interesting on the machine that
+# produced it. Both patterns so old git versions that don't recurse
+# `*.log` into subdirectories still ignore nested `<dir>/foo.log`.
+*.log
+**/*.log

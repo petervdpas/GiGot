@@ -44,19 +44,24 @@
   <p class="muted limits-hint">
     How often the server runs <code>git ls-remote</code> against each
     enabled mirror destination to refresh the in-sync / diverged
-    badge. Set to <code>0</code> to disable the background poller;
-    the per-destination Refresh button on Repositories still works.
+    badge. Toggle off to stop the background poller entirely; the
+    per-destination Refresh button on Repositories still works.
     Successful pushes also mark the destination in-sync without an
     extra round-trip.
   </p>
+  <div class="mirror-toggle-row">
+    <span class="field-label">Background polling</span>
+    <span id="mirror-enabled-host"></span>
+  </div>
   <div class="limits-row">
     <label class="limits-field">
       <span class="field-label">Poll interval (seconds)</span>
-      <input type="number" id="mirror-status-poll-sec" min="0" max="86400" value="600">
-      <span class="muted limits-bound">0 - 86400 (0 disables)</span>
+      <input type="number" id="mirror-status-poll-sec" min="1" max="86400" value="600">
+      <span class="muted limits-bound">1 - 86400</span>
     </label>
   </div>
   <div class="limits-state muted" id="mirror-state"></div>
+  <div class="limits-state mirror-heartbeat" id="mirror-heartbeat"></div>
   <div class="limits-actions">
     <button type="button" id="mirror-save-btn" class="primary" disabled>Save</button>
     <span id="mirror-msg" class="muted limits-msg"></span>

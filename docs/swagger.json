@@ -5926,9 +5926,23 @@
         "server.MirrorSettingsResponse": {
             "type": "object",
             "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
                 "enabled_destinations": {
                     "type": "integer",
                     "example": 3
+                },
+                "last_tick_at": {
+                    "type": "string"
+                },
+                "last_tick_duration_ms": {
+                    "type": "integer",
+                    "example": 42
+                },
+                "last_tick_error": {
+                    "type": "string"
                 },
                 "status_poll_sec": {
                     "type": "integer",

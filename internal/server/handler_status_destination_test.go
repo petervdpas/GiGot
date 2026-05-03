@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/petervdpas/GiGot/internal/destinations"
 )
 
 // sessionCookie is the type returned by adminTestServer for the
@@ -189,6 +192,110 @@ func TestSyncDestination_MarksRemoteInSyncOnSuccess(t *testing.T) {
 	}
 	if got.RemoteCheckedAt == nil {
 		t.Error("RemoteCheckedAt should be set after a successful push")
+	}
+}
+
+// TestRefreshStatus_SubscriberWithMirrorAllowed — the bearer-token
+// route reuses the same handler as the admin session, but goes
+// through a different auth stack: TokenRepoPolicy (repo in scope) +
+// requireMaintainerOrAdmin (role fence) + requireAbility("mirror")
+// (per-key bit). With all three layers satisfied, /status/refresh
+// must 200 and write to the destination same as the admin path.
+func TestRefreshStatus_SubscriberWithMirrorAllowed(t *testing.T) {
+	srv := subscriberTestServer(t)
+	// Seed a destination via the store directly so we don't have to
+	// drive the create path through the bearer flow first.
+	stored, err := srv.destinations.Add("addresses", destinations.Destination{
+		URL: "https://github.com/alice/addresses.git", CredentialName: "github-personal", Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.lsRemote = stubLsRemote(new([]lsRemoteCall),
+		map[string]string{}, []byte(""), nil)
+
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", []string{"mirror"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := bearer(t, http.MethodPost,
+		"/api/repos/addresses/destinations/"+stored.ID+"/status/refresh", nil, token)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("subscriber refresh want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var got DestinationView
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.RemoteStatus != "in_sync" {
+		t.Errorf("RemoteStatus: want in_sync, got %q", got.RemoteStatus)
+	}
+}
+
+// TestRefreshStatus_SubscriberWithoutMirrorDenied — the per-key
+// `mirror` ability gate is the third fence; without it the
+// otherwise-in-scope token gets 403.
+func TestRefreshStatus_SubscriberWithoutMirrorDenied(t *testing.T) {
+	srv := subscriberTestServer(t)
+	stored, err := srv.destinations.Add("addresses", destinations.Destination{
+		URL: "https://github.com/alice/addresses.git", CredentialName: "github-personal", Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	token, err := srv.tokenStrategy.Issue("alice", "addresses", nil) // no abilities
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := bearer(t, http.MethodPost,
+		"/api/repos/addresses/destinations/"+stored.ID+"/status/refresh", nil, token)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("subscriber refresh without mirror want 403, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestRefreshStatus_CredentialVanishedRecordsError — the credential-
+// not-in-vault path inside refreshRemoteStatus. Storage write must
+// land status="error" + a meaningful message on the destination so
+// the admin UI badge surfaces the broken link, even though the
+// handler also returns 502.
+func TestRefreshStatus_CredentialVanishedRecordsError(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	if err := srv.git.InitBare("addresses"); err != nil {
+		t.Fatal(err)
+	}
+	created := createDestForTest(t, srv, sess, "addresses", "https://github.com/alice/addresses.git", "github-personal")
+
+	// Bypass the Refs() guard at the store layer to simulate a stale
+	// destination whose credential link is broken — same shape as
+	// TestSyncDestination_CredentialGoneReturns409.
+	if err := srv.credentials.Remove("github-personal"); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := do(t, srv, http.MethodPost,
+		"/api/admin/repos/addresses/destinations/"+created.ID+"/status/refresh", nil, sess)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("vanished credential refresh want 502, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	d, err := srv.destinations.Get("addresses", created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.RemoteStatus != "error" {
+		t.Fatalf("persisted RemoteStatus: want error, got %q", d.RemoteStatus)
+	}
+	if d.RemoteCheckedAt == nil {
+		t.Error("RemoteCheckedAt should be set on the recorded error")
+	}
+	if d.RemoteCheckError == "" {
+		t.Error("RemoteCheckError should reference the missing credential")
 	}
 }
 

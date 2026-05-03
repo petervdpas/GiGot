@@ -7,8 +7,11 @@ import (
 )
 
 // TestAdminMirror_Get pins the GET response shape: default cadence
-// from config (600s) and the live enabled-destinations counter.
-// adminTestServer starts with no destinations so the count is 0.
+// from config (600s), enabled flag derived from cadence > 0, the
+// live enabled-destinations counter, and the heartbeat fields. The
+// heartbeat is null/zero on a fresh server (no tick has run yet) —
+// nil-LastTickAt is the documented "no ticks yet" signal that the
+// admin UI renders as "No poll has run yet."
 func TestAdminMirror_Get(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	rec := do(t, srv, http.MethodGet, "/api/admin/mirror", nil, sess)
@@ -22,8 +25,38 @@ func TestAdminMirror_Get(t *testing.T) {
 	if resp.StatusPollSec != 600 {
 		t.Errorf("default StatusPollSec: want 600, got %d", resp.StatusPollSec)
 	}
+	if !resp.Enabled {
+		t.Error("Enabled should be true when StatusPollSec > 0")
+	}
 	if resp.EnabledDestinations != 0 {
 		t.Errorf("idle test server: want 0 destinations, got %d", resp.EnabledDestinations)
+	}
+	if resp.LastTickAt != nil {
+		t.Errorf("fresh server should have no tick yet, got LastTickAt=%v", resp.LastTickAt)
+	}
+	if resp.LastTickError != "" {
+		t.Errorf("fresh server should have empty LastTickError, got %q", resp.LastTickError)
+	}
+}
+
+// TestAdminMirror_Get_DisabledClearsEnabled — when the cadence is
+// 0, Enabled in the response must be false. The toggle in the
+// admin UI reads this field directly.
+func TestAdminMirror_Get_DisabledClearsEnabled(t *testing.T) {
+	srv, sess := adminTestServer(t)
+	srv.cfg.Mirror.StatusPollSec = 0
+	srv.swapStatusPoller(0)
+
+	rec := do(t, srv, http.MethodGet, "/api/admin/mirror", nil, sess)
+	var resp MirrorSettingsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Enabled {
+		t.Error("Enabled should be false when StatusPollSec=0")
+	}
+	if resp.StatusPollSec != 0 {
+		t.Errorf("StatusPollSec: want 0, got %d", resp.StatusPollSec)
 	}
 }
 

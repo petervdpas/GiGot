@@ -11,13 +11,28 @@ import (
 
 // MirrorSettingsResponse is the body returned by GET /api/admin/mirror
 // and echoed by PATCH on success. status_poll_sec is the persisted
-// cadence; enabled_destinations is the live count of destinations
-// the poller would currently visit on a tick (across every repo,
-// enabled flag honoured) so the admin UI can render a "currently
-// checking N destinations" line without a second round-trip.
+// cadence; enabled is the derived "is the poller actually running"
+// flag (true iff status_poll_sec > 0). enabled_destinations is the
+// live count of destinations the poller would currently visit on a
+// tick (across every repo, enabled flag honoured) so the admin UI
+// can render a "currently checking N destinations" line without a
+// second round-trip.
+//
+// last_tick_at + last_tick_duration_ms + last_tick_error are the
+// poller heartbeat — together they answer "is the goroutine
+// actually ticking right now." last_tick_at is null until the first
+// tick completes; admin UI should treat null as "no ticks yet,"
+// not "broken." last_tick_error is empty on a clean tick and carries
+// the panic message when tickSafe's recover fired — a populated
+// error plus an advancing last_tick_at means a check is breaking
+// but the loop itself survived.
 type MirrorSettingsResponse struct {
-	StatusPollSec        int `json:"status_poll_sec" example:"600"`
-	EnabledDestinations  int `json:"enabled_destinations" example:"3"`
+	StatusPollSec        int        `json:"status_poll_sec" example:"600"`
+	Enabled              bool       `json:"enabled" example:"true"`
+	EnabledDestinations  int        `json:"enabled_destinations" example:"3"`
+	LastTickAt           *time.Time `json:"last_tick_at,omitempty"`
+	LastTickDurationMs   int64      `json:"last_tick_duration_ms,omitempty" example:"42"`
+	LastTickError        string     `json:"last_tick_error,omitempty"`
 }
 
 // MirrorSettingsRequest is the body of PATCH /api/admin/mirror.
@@ -72,10 +87,23 @@ func (s *Server) handleAdminMirror(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) adminGetMirror(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, MirrorSettingsResponse{
+	resp := MirrorSettingsResponse{
 		StatusPollSec:       s.cfg.Mirror.StatusPollSec,
+		Enabled:             s.cfg.Mirror.StatusPollSec > 0,
 		EnabledDestinations: len(s.enabledDestinations()),
-	})
+	}
+	// Heartbeat. Snapshot is nil-safe so a disabled poller (nil)
+	// returns the zero-value triple, which JSON omits via omitempty.
+	snap := s.statusPoller.Snapshot()
+	if !snap.LastTickAt.IsZero() {
+		t := snap.LastTickAt.UTC()
+		resp.LastTickAt = &t
+		resp.LastTickDurationMs = snap.LastTickDuration.Milliseconds()
+	}
+	if snap.LastTickError != "" {
+		resp.LastTickError = snap.LastTickError
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // adminPatchMirror applies the new cadence: stops the existing

@@ -178,11 +178,12 @@ func TestRepoDestinations_GETSingleAllowedWithoutMirror(t *testing.T) {
 }
 
 // TestRepoDestinations_AllWritesDeniedWithoutMirror exercises every
-// write verb (PATCH, DELETE, POST .../sync) with a no-mirror token to
-// guarantee the role+ability gate fires for each one independently.
-// The list-POST case is covered by TokenWithoutMirrorDenied; this
-// test fans out across the remaining verbs so a one-off relaxation of
-// any single handler entry doesn't slip past CI.
+// write verb (PATCH, DELETE, POST .../sync, POST .../status/refresh)
+// with a no-mirror token to guarantee the role+ability gate fires
+// for each one independently. The list-POST case is covered by
+// TokenWithoutMirrorDenied; this test fans out across the remaining
+// verbs so a one-off relaxation of any single handler entry doesn't
+// slip past CI.
 func TestRepoDestinations_AllWritesDeniedWithoutMirror(t *testing.T) {
 	srv := subscriberTestServer(t)
 	dest, err := srv.destinations.Add("addresses", destinations.Destination{
@@ -208,6 +209,7 @@ func TestRepoDestinations_AllWritesDeniedWithoutMirror(t *testing.T) {
 			map[string]any{"enabled": false}},
 		{"DELETE", http.MethodDelete, "/api/repos/addresses/destinations/" + dest.ID, nil},
 		{"POST sync", http.MethodPost, "/api/repos/addresses/destinations/" + dest.ID + "/sync", nil},
+		{"POST status/refresh", http.MethodPost, "/api/repos/addresses/destinations/" + dest.ID + "/status/refresh", nil},
 	}
 	for _, tc := range cases {
 		req := bearer(t, tc.method, tc.path, tc.body, token)
@@ -287,6 +289,7 @@ func TestRepoDestinations_AllWritesDeniedAsRegular(t *testing.T) {
 			map[string]any{"enabled": false}},
 		{"DELETE", http.MethodDelete, "/api/repos/addresses/destinations/" + dest.ID, nil},
 		{"POST sync", http.MethodPost, "/api/repos/addresses/destinations/" + dest.ID + "/sync", nil},
+		{"POST status/refresh", http.MethodPost, "/api/repos/addresses/destinations/" + dest.ID + "/status/refresh", nil},
 	}
 	for _, tc := range cases {
 		req := bearer(t, tc.method, tc.path, tc.body, token)
