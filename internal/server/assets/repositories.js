@@ -299,7 +299,7 @@
         cred_label:    d.credential_name ? d.credential_name : '(no credential)',
         cred_missing:  d.credential_name ? '' : 'missing',
         enabled_class: d.enabled ? 'formidable' : 'empty',
-        enabled_label: d.enabled ? 'enabled' : 'disabled',
+        enabled_label: 'auto-mirror',
         enabled_title: d.enabled
           ? 'Click to disable automatic mirror-sync'
           : 'Click to enable automatic mirror-sync',
@@ -477,17 +477,28 @@
       });
     }
 
-    const toggleBtn = host.querySelector('.enabled-toggle');
-    if (toggleBtn) toggleBtn.addEventListener('click', async () => {
-      toggleBtn.disabled = true;
-      try {
-        await api.updateDestination(repoName, dest.id, { enabled: !dest.enabled });
-        await refreshRepos();
-      } catch (e) {
-        toggleBtn.disabled = false;
-        await GG.dialog.alert('Update failed', e.message);
-      }
-    });
+    // Real toggle-switch (uses GG.toggle_switch). Replaces the prior
+    // chip-styled button — same backend call, but the affordance now
+    // looks like the switch it always was.
+    const switchHost = host.querySelector('.enabled-switch-host');
+    if (switchHost) {
+      switchHost.innerHTML = GG.toggle_switch.html({
+        checked: dest.enabled,
+        ariaLabel: 'Enable automatic mirror-sync',
+      });
+      const switchEl = switchHost.querySelector('input[type="checkbox"]');
+      GG.toggle_switch.onChange(switchEl, async (checked) => {
+        switchEl.disabled = true;
+        try {
+          await api.updateDestination(repoName, dest.id, { enabled: checked });
+          await refreshRepos();
+        } catch (e) {
+          switchEl.checked = !checked;
+          switchEl.disabled = false;
+          await GG.dialog.alert('Update failed', e.message);
+        }
+      });
+    }
   }
 
   function wireDestEdit(host, container, repoName) {

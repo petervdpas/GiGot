@@ -1,9 +1,12 @@
 <div class="dest-row">
+  <div class="dest-toggle-corner" title="{{enabled_title}}">
+    <span class="enabled-label">{{enabled_label}}</span>
+    <span class="enabled-switch-host"></span>
+  </div>
   <div class="dest-url"><span class="stat-label">URL</span> <code>{{url}}</code></div>
   <div class="dest-meta">
     <span class="stat-label">Credential</span>
     <span class="cred-pill {{cred_missing}}">{{cred_label}}</span>
-    <button type="button" class="badge {{enabled_class}} enabled-toggle" title="{{enabled_title}}">{{enabled_label}}</button>
   </div>
   <div class="dest-sync dest-sync-never {{never_hidden}}">
     <span class="stat-label">Last sync</span>
