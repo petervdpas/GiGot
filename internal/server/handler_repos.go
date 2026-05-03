@@ -23,7 +23,7 @@ import (
 // @Description  storage/.gitkeep, and the .formidable/context.json marker)
 // @Description  in an initial commit. POST appends one `repo_create` entry
 // @Description  to refs/audit/main — see docs/design/audit-trail.md.
-// @Tags         repos
+// @Tags        repos
 // @Accept       json
 // @Produce      json
 // @Param        body  body      CreateRepoRequest  false  "Create-repo body (POST)"
@@ -234,7 +234,7 @@ func resolveShouldStamp(serverDefault bool, requested *bool) bool {
 // handleRepo godoc
 // @Summary      Get or delete a repository
 // @Description  GET returns repository details, DELETE removes it
-// @Tags         repos
+// @Tags        repos
 // @Produce      json
 // @Param        name  path      string  true  "Repository name"
 // @Success      200   {object}  RepoInfo

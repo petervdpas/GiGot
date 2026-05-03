@@ -12,7 +12,7 @@ import (
 // @Summary      Enroll a client's public key
 // @Description  Registers a Formidable client so the server can seal responses
 // @Description  to it. Returns the server's public key for outgoing requests.
-// @Tags         clients
+// @Tags        crypto
 // @Accept       json
 // @Produce      json
 // @Param        body  body      EnrollRequest  true  "Enrollment request"

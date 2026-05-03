@@ -35,7 +35,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "accounts"
                 ],
                 "summary": "Manage accounts (admin only)",
                 "parameters": [
@@ -101,7 +101,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "accounts"
                 ],
                 "summary": "Manage accounts (admin only)",
                 "parameters": [
@@ -169,7 +169,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "accounts"
                 ],
                 "summary": "Manage one account by (provider, identifier) (admin only)",
                 "parameters": [
@@ -252,7 +252,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "accounts"
                 ],
                 "summary": "Manage one account by (provider, identifier) (admin only)",
                 "parameters": [
@@ -337,7 +337,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "accounts"
                 ],
                 "summary": "Manage tags on one account (admin only)",
                 "parameters": [
@@ -411,7 +411,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "accounts"
                 ],
                 "summary": "Manage tags on one account (admin only)",
                 "parameters": [
@@ -487,7 +487,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "system"
                 ],
                 "summary": "Read or reload auth runtime state (admin only)",
                 "parameters": [
@@ -541,7 +541,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "system"
                 ],
                 "summary": "Read or reload auth runtime state (admin only)",
                 "parameters": [
@@ -597,7 +597,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "system"
                 ],
                 "summary": "Run a server-side micro-benchmark suite (admin only)",
                 "parameters": [
@@ -654,7 +654,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "credentials"
                 ],
                 "summary": "Manage the credential vault (admin only)",
                 "parameters": [
@@ -720,7 +720,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "credentials"
                 ],
                 "summary": "Manage the credential vault (admin only)",
                 "parameters": [
@@ -788,7 +788,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "credentials"
                 ],
                 "summary": "Manage one credential by name (admin only)",
                 "parameters": [
@@ -858,7 +858,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "credentials"
                 ],
                 "summary": "Manage one credential by name (admin only)",
                 "parameters": [
@@ -928,7 +928,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "credentials"
                 ],
                 "summary": "Manage one credential by name (admin only)",
                 "parameters": [
@@ -1000,7 +1000,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "system"
                 ],
                 "summary": "Read or update server-side admission limits (admin only)",
                 "parameters": [
@@ -1054,7 +1054,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "system"
                 ],
                 "summary": "Read or update server-side admission limits (admin only)",
                 "parameters": [
@@ -1105,7 +1105,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "auth"
                 ],
                 "summary": "Admin login",
                 "parameters": [
@@ -1150,7 +1150,7 @@ const docTemplate = `{
         "/admin/logout": {
             "post": {
                 "tags": [
-                    "admin"
+                    "auth"
                 ],
                 "summary": "Admin logout",
                 "responses": {
@@ -1195,8 +1195,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin",
-                    "repos"
+                    "destinations"
                 ],
                 "summary": "List mirror-sync destinations on a repo",
                 "parameters": [
@@ -1252,8 +1251,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin",
-                    "repos"
+                    "destinations"
                 ],
                 "summary": "Add a mirror-sync destination to a repo",
                 "parameters": [
@@ -1323,8 +1321,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin",
-                    "repos"
+                    "destinations"
                 ],
                 "summary": "Read one mirror-sync destination by id",
                 "parameters": [
@@ -1384,8 +1381,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin",
-                    "repos"
+                    "destinations"
                 ],
                 "summary": "Remove one mirror-sync destination",
                 "parameters": [
@@ -1445,8 +1441,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin",
-                    "repos"
+                    "destinations"
                 ],
                 "summary": "Patch one mirror-sync destination",
                 "parameters": [
@@ -1523,8 +1518,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin",
-                    "repos"
+                    "destinations"
                 ],
                 "summary": "Trigger a manual mirror-sync push on one destination",
                 "parameters": [
@@ -1589,8 +1583,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "formidable",
-                    "admin"
+                    "formidable"
                 ],
                 "summary": "Convert a plain repo to a Formidable context (admin only)",
                 "parameters": [
@@ -1663,7 +1656,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "tags"
                 ],
                 "summary": "Manage tags on one repo (admin only)",
                 "parameters": [
@@ -1730,7 +1723,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "tags"
                 ],
                 "summary": "Manage tags on one repo (admin only)",
                 "parameters": [
@@ -1796,7 +1789,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "accounts"
                 ],
                 "summary": "Current admin session",
                 "responses": {
@@ -1830,7 +1823,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "subscriptions"
                 ],
                 "summary": "Bulk revoke subscriptions by effective tag (admin only)",
                 "parameters": [
@@ -1887,7 +1880,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "tags"
                 ],
                 "summary": "Manage the tag catalogue (admin only)",
                 "parameters": [
@@ -1953,7 +1946,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "tags"
                 ],
                 "summary": "Manage the tag catalogue (admin only)",
                 "parameters": [
@@ -2018,7 +2011,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "tags"
                 ],
                 "summary": "Sweep unused tags (admin only)",
                 "responses": {
@@ -2058,7 +2051,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "tags"
                 ],
                 "summary": "Manage one tag by ID (admin only)",
                 "parameters": [
@@ -2131,7 +2124,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "tags"
                 ],
                 "summary": "Manage one tag by ID (admin only)",
                 "parameters": [
@@ -2206,7 +2199,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "subscriptions"
                 ],
                 "summary": "Manage subscription keys (admin only)",
                 "parameters": [
@@ -2298,7 +2291,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "subscriptions"
                 ],
                 "summary": "Manage subscription keys (admin only)",
                 "parameters": [
@@ -2390,7 +2383,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "subscriptions"
                 ],
                 "summary": "Manage subscription keys (admin only)",
                 "parameters": [
@@ -2482,7 +2475,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "subscriptions"
                 ],
                 "summary": "Manage subscription keys (admin only)",
                 "parameters": [
@@ -2576,7 +2569,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin"
+                    "subscriptions"
                 ],
                 "summary": "Bind a legacy token to an account (admin only)",
                 "parameters": [
@@ -2784,7 +2777,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "clients"
+                    "crypto"
                 ],
                 "summary": "Enroll a client's public key",
                 "parameters": [
@@ -2852,7 +2845,7 @@ const docTemplate = `{
                     "text/html"
                 ],
                 "tags": [
-                    "admin"
+                    "system"
                 ],
                 "summary": "Serve a UI fragment template (admin only)",
                 "parameters": [
@@ -3113,7 +3106,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "me"
+                    "accounts"
                 ],
                 "summary": "Current user profile and subscription keys",
                 "responses": {
@@ -3725,8 +3718,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin",
-                    "repos"
+                    "destinations"
                 ],
                 "summary": "List mirror-sync destinations on a repo",
                 "parameters": [
@@ -3782,8 +3774,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin",
-                    "repos"
+                    "destinations"
                 ],
                 "summary": "Add a mirror-sync destination to a repo",
                 "parameters": [
@@ -3853,8 +3844,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin",
-                    "repos"
+                    "destinations"
                 ],
                 "summary": "Read one mirror-sync destination by id",
                 "parameters": [
@@ -3914,8 +3904,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin",
-                    "repos"
+                    "destinations"
                 ],
                 "summary": "Remove one mirror-sync destination",
                 "parameters": [
@@ -3975,8 +3964,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin",
-                    "repos"
+                    "destinations"
                 ],
                 "summary": "Patch one mirror-sync destination",
                 "parameters": [
@@ -4053,8 +4041,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "admin",
-                    "repos"
+                    "destinations"
                 ],
                 "summary": "Trigger a manual mirror-sync push on one destination",
                 "parameters": [

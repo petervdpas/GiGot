@@ -22,7 +22,7 @@ import (
 // @Description  buttons for. Public — the login card needs this
 // @Description  before any session exists. One entry per enabled
 // @Description  provider, in a stable order.
-// @Tags         auth
+// @Tags        auth
 // @Produce      json
 // @Success      200  {object}  OAuthProvidersResponse
 // @Router       /admin/providers [get]

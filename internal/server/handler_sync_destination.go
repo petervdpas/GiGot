@@ -40,8 +40,7 @@ const (
 // @Description  bearer token + repo scope + admin/maintainer role +
 // @Description  `mirror` ability (see accounts.md §6.1, remote-sync.md
 // @Description  §2.6 and §5).
-// @Tags         admin
-// @Tags         repos
+// @Tags        destinations
 // @Produce      json
 // @Param        name  path      string            true  "Repo name"
 // @Param        id    path      string            true  "Destination id"

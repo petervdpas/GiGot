@@ -48,7 +48,7 @@ func auditActorFromIdentity(id *auth.Identity) audit.Actor {
 // @Description  GET lists every tag with direct usage counts; POST
 // @Description  creates a new tag. Names are case-insensitive unique.
 // @Description  Session-cookie authenticated.
-// @Tags         admin
+// @Tags        tags
 // @Accept       json
 // @Produce      json
 // @Param        body  body      CreateTagRequest        false  "Create body (POST)"
@@ -85,7 +85,7 @@ func (s *Server) handleAdminTags(w http.ResponseWriter, r *http.Request) {
 // @Description  the same way a one-by-one delete would. The response
 // @Description  carries the names that were removed so the UI can
 // @Description  show a "swept N tags" summary.
-// @Tags         admin
+// @Tags        tags
 // @Produce      json
 // @Success      200   {object}  TagSweepUnusedResponse
 // @Failure      401   {object}  ErrorResponse
@@ -135,7 +135,7 @@ func (s *Server) handleAdminTagsSweepUnused(w http.ResponseWriter, r *http.Reque
 // @Description  cascades through every assignment join — repo, subscription,
 // @Description  and account — and returns the per-set sweep counts.
 // @Description  Session-cookie authenticated.
-// @Tags         admin
+// @Tags        tags
 // @Accept       json
 // @Produce      json
 // @Param        id    path      string             true   "Tag ID"

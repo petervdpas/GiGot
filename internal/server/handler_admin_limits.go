@@ -38,7 +38,7 @@ type LimitsRequest struct {
 // @Description  finish on the old capacity, new pushes are gated
 // @Description  by the new one. Bounds: push_slots 1-1000,
 // @Description  push_retry_after_sec 1-3600.
-// @Tags         admin
+// @Tags        system
 // @Accept       json
 // @Produce      json
 // @Param        body  body      LimitsRequest   false  "Patch body (PATCH only)"

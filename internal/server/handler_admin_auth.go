@@ -53,7 +53,7 @@ type AuthReloadRequest struct {
 // @Description  change is persisted to the config file. Rejects with
 // @Description  400 when a secret ref fails to resolve or a provider
 // @Description  discovery URL is unreachable — old state stays live.
-// @Tags         admin
+// @Tags        system
 // @Accept       json
 // @Produce      json
 // @Param        body  body      AuthReloadRequest   false  "New auth config (PATCH)"

@@ -1189,7 +1189,7 @@ paths:
       - SessionAuth: []
       summary: Manage accounts (admin only)
       tags:
-      - admin
+      - accounts
     post:
       consumes:
       - application/json
@@ -1234,7 +1234,7 @@ paths:
       - SessionAuth: []
       summary: Manage accounts (admin only)
       tags:
-      - admin
+      - accounts
   /admin/accounts/{provider}/{identifier}:
     delete:
       consumes:
@@ -1293,7 +1293,7 @@ paths:
       - SessionAuth: []
       summary: Manage one account by (provider, identifier) (admin only)
       tags:
-      - admin
+      - accounts
     patch:
       consumes:
       - application/json
@@ -1351,7 +1351,7 @@ paths:
       - SessionAuth: []
       summary: Manage one account by (provider, identifier) (admin only)
       tags:
-      - admin
+      - accounts
   /admin/accounts/{provider}/{identifier}/tags:
     get:
       consumes:
@@ -1406,7 +1406,7 @@ paths:
       - SessionAuth: []
       summary: Manage tags on one account (admin only)
       tags:
-      - admin
+      - accounts
     put:
       consumes:
       - application/json
@@ -1460,7 +1460,7 @@ paths:
       - SessionAuth: []
       summary: Manage tags on one account (admin only)
       tags:
-      - admin
+      - accounts
   /admin/auth:
     get:
       consumes:
@@ -1502,7 +1502,7 @@ paths:
       - SessionAuth: []
       summary: Read or reload auth runtime state (admin only)
       tags:
-      - admin
+      - system
     patch:
       consumes:
       - application/json
@@ -1543,7 +1543,7 @@ paths:
       - SessionAuth: []
       summary: Read or reload auth runtime state (admin only)
       tags:
-      - admin
+      - system
   /admin/benchmark:
     post:
       consumes:
@@ -1590,7 +1590,7 @@ paths:
       - SessionAuth: []
       summary: Run a server-side micro-benchmark suite (admin only)
       tags:
-      - admin
+      - system
   /admin/credentials:
     get:
       consumes:
@@ -1636,7 +1636,7 @@ paths:
       - SessionAuth: []
       summary: Manage the credential vault (admin only)
       tags:
-      - admin
+      - credentials
     post:
       consumes:
       - application/json
@@ -1681,7 +1681,7 @@ paths:
       - SessionAuth: []
       summary: Manage the credential vault (admin only)
       tags:
-      - admin
+      - credentials
   /admin/credentials/{name}:
     delete:
       consumes:
@@ -1730,7 +1730,7 @@ paths:
       - SessionAuth: []
       summary: Manage one credential by name (admin only)
       tags:
-      - admin
+      - credentials
     get:
       consumes:
       - application/json
@@ -1778,7 +1778,7 @@ paths:
       - SessionAuth: []
       summary: Manage one credential by name (admin only)
       tags:
-      - admin
+      - credentials
     patch:
       consumes:
       - application/json
@@ -1826,7 +1826,7 @@ paths:
       - SessionAuth: []
       summary: Manage one credential by name (admin only)
       tags:
-      - admin
+      - credentials
   /admin/limits:
     get:
       consumes:
@@ -1871,7 +1871,7 @@ paths:
       - SessionAuth: []
       summary: Read or update server-side admission limits (admin only)
       tags:
-      - admin
+      - system
     patch:
       consumes:
       - application/json
@@ -1915,7 +1915,7 @@ paths:
       - SessionAuth: []
       summary: Read or update server-side admission limits (admin only)
       tags:
-      - admin
+      - system
   /admin/login:
     post:
       consumes:
@@ -1952,7 +1952,7 @@ paths:
             $ref: '#/definitions/server.ErrorResponse'
       summary: Admin login
       tags:
-      - admin
+      - auth
   /admin/logout:
     post:
       responses:
@@ -1960,7 +1960,7 @@ paths:
           description: No Content
       summary: Admin logout
       tags:
-      - admin
+      - auth
   /admin/providers:
     get:
       description: |-
@@ -2017,8 +2017,7 @@ paths:
       - BearerAuth: []
       summary: List mirror-sync destinations on a repo
       tags:
-      - admin
-      - repos
+      - destinations
     post:
       consumes:
       - application/json
@@ -2069,8 +2068,7 @@ paths:
       - BearerAuth: []
       summary: Add a mirror-sync destination to a repo
       tags:
-      - admin
-      - repos
+      - destinations
   /admin/repos/{name}/destinations/{id}:
     delete:
       description: |-
@@ -2112,8 +2110,7 @@ paths:
       - BearerAuth: []
       summary: Remove one mirror-sync destination
       tags:
-      - admin
-      - repos
+      - destinations
     get:
       description: |-
         Returns the destination's stored configuration plus its
@@ -2156,8 +2153,7 @@ paths:
       - BearerAuth: []
       summary: Read one mirror-sync destination by id
       tags:
-      - admin
-      - repos
+      - destinations
     patch:
       consumes:
       - application/json
@@ -2213,8 +2209,7 @@ paths:
       - BearerAuth: []
       summary: Patch one mirror-sync destination
       tags:
-      - admin
-      - repos
+      - destinations
   /admin/repos/{name}/destinations/{id}/sync:
     post:
       description: |-
@@ -2274,8 +2269,7 @@ paths:
       - BearerAuth: []
       summary: Trigger a manual mirror-sync push on one destination
       tags:
-      - admin
-      - repos
+      - destinations
   /admin/repos/{name}/formidable:
     post:
       description: |-
@@ -2328,7 +2322,6 @@ paths:
       summary: Convert a plain repo to a Formidable context (admin only)
       tags:
       - formidable
-      - admin
   /admin/repos/{name}/tags:
     get:
       consumes:
@@ -2378,7 +2371,7 @@ paths:
       - SessionAuth: []
       summary: Manage tags on one repo (admin only)
       tags:
-      - admin
+      - tags
     put:
       consumes:
       - application/json
@@ -2427,7 +2420,7 @@ paths:
       - SessionAuth: []
       summary: Manage tags on one repo (admin only)
       tags:
-      - admin
+      - tags
   /admin/session:
     get:
       description: |-
@@ -2449,7 +2442,7 @@ paths:
       - SessionAuth: []
       summary: Current admin session
       tags:
-      - admin
+      - accounts
   /admin/subscriptions/revoke-by-tag:
     post:
       consumes:
@@ -2510,7 +2503,7 @@ paths:
       - SessionAuth: []
       summary: Bulk revoke subscriptions by effective tag (admin only)
       tags:
-      - admin
+      - subscriptions
   /admin/tags:
     get:
       consumes:
@@ -2556,7 +2549,7 @@ paths:
       - SessionAuth: []
       summary: Manage the tag catalogue (admin only)
       tags:
-      - admin
+      - tags
     post:
       consumes:
       - application/json
@@ -2601,7 +2594,7 @@ paths:
       - SessionAuth: []
       summary: Manage the tag catalogue (admin only)
       tags:
-      - admin
+      - tags
   /admin/tags/{id}:
     delete:
       consumes:
@@ -2653,7 +2646,7 @@ paths:
       - SessionAuth: []
       summary: Manage one tag by ID (admin only)
       tags:
-      - admin
+      - tags
     patch:
       consumes:
       - application/json
@@ -2704,7 +2697,7 @@ paths:
       - SessionAuth: []
       summary: Manage one tag by ID (admin only)
       tags:
-      - admin
+      - tags
   /admin/tags/sweep-unused:
     post:
       description: |-
@@ -2734,7 +2727,7 @@ paths:
       - SessionAuth: []
       summary: Sweep unused tags (admin only)
       tags:
-      - admin
+      - tags
   /admin/tokens:
     delete:
       consumes:
@@ -2813,7 +2806,7 @@ paths:
       - SessionAuth: []
       summary: Manage subscription keys (admin only)
       tags:
-      - admin
+      - subscriptions
     get:
       consumes:
       - application/json
@@ -2891,7 +2884,7 @@ paths:
       - SessionAuth: []
       summary: Manage subscription keys (admin only)
       tags:
-      - admin
+      - subscriptions
     patch:
       consumes:
       - application/json
@@ -2969,7 +2962,7 @@ paths:
       - SessionAuth: []
       summary: Manage subscription keys (admin only)
       tags:
-      - admin
+      - subscriptions
     post:
       consumes:
       - application/json
@@ -3047,7 +3040,7 @@ paths:
       - SessionAuth: []
       summary: Manage subscription keys (admin only)
       tags:
-      - admin
+      - subscriptions
   /admin/tokens/bind:
     post:
       consumes:
@@ -3091,7 +3084,7 @@ paths:
       - SessionAuth: []
       summary: Bind a legacy token to an account (admin only)
       tags:
-      - admin
+      - subscriptions
   /auth/token:
     delete:
       consumes:
@@ -3228,7 +3221,7 @@ paths:
             $ref: '#/definitions/server.ErrorResponse'
       summary: Enroll a client's public key
       tags:
-      - clients
+      - crypto
   /crypto/pubkey:
     get:
       description: |-
@@ -3292,7 +3285,7 @@ paths:
       - SessionAuth: []
       summary: Serve a UI fragment template (admin only)
       tags:
-      - admin
+      - system
   /git/{name}.git/git-receive-pack:
     post:
       consumes:
@@ -3461,7 +3454,7 @@ paths:
       - BearerAuth: []
       summary: Current user profile and subscription keys
       tags:
-      - me
+      - accounts
   /register:
     post:
       consumes:
@@ -3908,8 +3901,7 @@ paths:
       - BearerAuth: []
       summary: List mirror-sync destinations on a repo
       tags:
-      - admin
-      - repos
+      - destinations
     post:
       consumes:
       - application/json
@@ -3960,8 +3952,7 @@ paths:
       - BearerAuth: []
       summary: Add a mirror-sync destination to a repo
       tags:
-      - admin
-      - repos
+      - destinations
   /repos/{name}/destinations/{id}:
     delete:
       description: |-
@@ -4003,8 +3994,7 @@ paths:
       - BearerAuth: []
       summary: Remove one mirror-sync destination
       tags:
-      - admin
-      - repos
+      - destinations
     get:
       description: |-
         Returns the destination's stored configuration plus its
@@ -4047,8 +4037,7 @@ paths:
       - BearerAuth: []
       summary: Read one mirror-sync destination by id
       tags:
-      - admin
-      - repos
+      - destinations
     patch:
       consumes:
       - application/json
@@ -4104,8 +4093,7 @@ paths:
       - BearerAuth: []
       summary: Patch one mirror-sync destination
       tags:
-      - admin
-      - repos
+      - destinations
   /repos/{name}/destinations/{id}/sync:
     post:
       description: |-
@@ -4165,8 +4153,7 @@ paths:
       - BearerAuth: []
       summary: Trigger a manual mirror-sync push on one destination
       tags:
-      - admin
-      - repos
+      - destinations
   /repos/{name}/files/{path}:
     get:
       description: |-

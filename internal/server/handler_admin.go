@@ -18,7 +18,7 @@ import (
 // @Description  Exchanges username/password for a session cookie. Only the
 // @Description  local provider is accepted on this endpoint; returns 404
 // @Description  when cfg.Auth.AllowLocal is false.
-// @Tags         admin
+// @Tags        auth
 // @Accept       json
 // @Produce      json
 // @Param        body  body      AdminLoginRequest true "Credentials"
@@ -85,7 +85,7 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 
 // handleAdminLogout godoc
 // @Summary      Admin logout
-// @Tags         admin
+// @Tags        auth
 // @Success      204
 // @Router       /admin/logout [post]
 func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
@@ -174,7 +174,7 @@ func (s *Server) requireAdminSession(w http.ResponseWriter, r *http.Request) *au
 // @Description  so the admin UI can patch its in-memory model without
 // @Description  a follow-up listing fetch. Repo / abilities-only
 // @Description  PATCH bodies still receive the simpler MessageResponse.
-// @Tags         admin
+// @Tags        subscriptions
 // @Accept       json
 // @Produce      json
 // @Param        tag   query     []string            false  "Filter by effective tag (repeatable; OR across values)" collectionFormat(multi)
@@ -425,7 +425,7 @@ func effectiveCoversAny(effective, wantLower []string) bool {
 // @Description  username if one does not yet exist. Idempotent:
 // @Description  returns 200 either way, and does nothing if the token
 // @Description  already resolves to an account. See accounts.md §6.
-// @Tags         admin
+// @Tags        subscriptions
 // @Accept       json
 // @Produce      json
 // @Param        body  body      BindTokenRequest  true  "Bind body"
@@ -497,7 +497,7 @@ func (s *Server) handleAdminBindToken(w http.ResponseWriter, r *http.Request) {
 // @Description  Returns the admin identity associated with the session cookie,
 // @Description  or 401 if no valid session exists. The admin UI polls this on
 // @Description  load to decide whether to show the login form.
-// @Tags         admin
+// @Tags        accounts
 // @Produce      json
 // @Success      200  {object}  AdminLoginResponse
 // @Failure      401  {object}  ErrorResponse

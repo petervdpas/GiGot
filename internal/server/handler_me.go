@@ -38,7 +38,7 @@ type MeResponse struct {
 // @Description  keys. Accepts either a session cookie (returns every
 // @Description  subscription bound to the account) or a bearer token
 // @Description  (returns the single subscription that token represents).
-// @Tags         me
+// @Tags        accounts
 // @Produce      json
 // @Success      200  {object}  MeResponse
 // @Failure      401  {object}  ErrorResponse

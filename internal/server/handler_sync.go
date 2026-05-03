@@ -33,7 +33,7 @@ type RepoLogResponse struct {
 // @Description  Returns the current commit SHA and default branch name. Clients
 // @Description  use this as a cheap probe before pulling tree or snapshot. Returns
 // @Description  409 if the repo exists but has no commits yet.
-// @Tags         sync
+// @Tags        sync
 // @Produce      json
 // @Param        name  path      string  true  "Repository name"
 // @Success      200   {object}  git.HeadInfo
@@ -62,7 +62,7 @@ func (s *Server) handleRepoHead(w http.ResponseWriter, r *http.Request) {
 // @Description  HEAD when omitted). Clients diff this against their local
 // @Description  snapshot before pulling content. Returns 409 if the repo has
 // @Description  no commits yet, 422 if version does not resolve.
-// @Tags         sync
+// @Tags        sync
 // @Produce      json
 // @Param        name     path      string  true   "Repository name"
 // @Param        version  query     string  false  "Commit SHA (defaults to HEAD)"
@@ -93,7 +93,7 @@ func (s *Server) handleRepoTree(w http.ResponseWriter, r *http.Request) {
 // @Description  base64-encoded. Intended for initial client populate and
 // @Description  disaster recovery; prefer /tree + /files/{path} for
 // @Description  incremental syncing.
-// @Tags         sync
+// @Tags        sync
 // @Produce      json
 // @Param        name     path      string  true   "Repository name"
 // @Param        version  query     string  false  "Commit SHA (defaults to HEAD)"
@@ -126,7 +126,7 @@ func (s *Server) handleRepoSnapshot(w http.ResponseWriter, r *http.Request) {
 // @Description  returns 409 so the client can re-snapshot instead of
 // @Description  consuming a misleading diff. since == HEAD returns an empty
 // @Description  changes list.
-// @Tags         sync
+// @Tags        sync
 // @Produce      json
 // @Param        name   path      string  true   "Repository name"
 // @Param        since  query     string  true   "Client's last-seen commit SHA"
@@ -167,7 +167,7 @@ func (s *Server) handleRepoChanges(w http.ResponseWriter, r *http.Request) {
 // @Description  Returns one file's content at the given version (default HEAD),
 // @Description  base64-encoded. 404 covers both missing repo and path not in
 // @Description  version; 422 covers an unresolvable version.
-// @Tags         sync
+// @Tags        sync
 // @Produce      json
 // @Param        name     path      string  true   "Repository name"
 // @Param        path     path      string  true   "File path inside the repo"
@@ -244,7 +244,7 @@ type WriteFileConflictResponse struct {
 // @Description  is not an ancestor of HEAD. On success, appends one
 // @Description  `file_put` entry to refs/audit/main — see
 // @Description  docs/design/audit-trail.md.
-// @Tags         sync
+// @Tags        sync
 // @Accept       json
 // @Produce      json
 // @Param        name  path      string              true  "Repository name"
@@ -418,7 +418,7 @@ type CommitRecordConflictResponse struct {
 // @Description  whole commit is rejected, no partial apply. On success,
 // @Description  appends one `commit` entry to refs/audit/main — see
 // @Description  docs/design/audit-trail.md.
-// @Tags         sync
+// @Tags        sync
 // @Accept       json
 // @Produce      json
 // @Param        name  path      string         true  "Repository name"
@@ -620,7 +620,7 @@ func writeSyncError(w http.ResponseWriter, err error) {
 // handleRepoStatus godoc
 // @Summary      Repository status
 // @Description  Returns branches and status of a repository
-// @Tags         sync
+// @Tags        sync
 // @Produce      json
 // @Param        name  path      string  true  "Repository name"
 // @Success      200   {object}  RepoStatusResponse
@@ -646,7 +646,7 @@ func (s *Server) handleRepoStatus(w http.ResponseWriter, r *http.Request) {
 // handleRepoBranches godoc
 // @Summary      List branches
 // @Description  Returns all branches in a repository
-// @Tags         sync
+// @Tags        sync
 // @Produce      json
 // @Param        name  path      string  true  "Repository name"
 // @Success      200   {array}   gitmanager.BranchInfo
@@ -672,7 +672,7 @@ func (s *Server) handleRepoBranches(w http.ResponseWriter, r *http.Request) {
 // handleRepoLog godoc
 // @Summary      Commit log
 // @Description  Returns recent commits from a repository
-// @Tags         sync
+// @Tags        sync
 // @Produce      json
 // @Param        name   path      string  true   "Repository name"
 // @Param        limit  query     int     false  "Max number of commits"  default(20)

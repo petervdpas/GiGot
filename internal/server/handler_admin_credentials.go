@@ -28,7 +28,7 @@ func credentialView(c credentials.Credential) CredentialView {
 // @Description  GET lists credential metadata; POST creates a new credential.
 // @Description  The secret is write-only — it is never returned on any
 // @Description  response. Session-cookie authenticated.
-// @Tags         admin
+// @Tags        credentials
 // @Accept       json
 // @Produce      json
 // @Param        body  body      CreateCredentialRequest  false  "Create body (POST)"
@@ -60,7 +60,7 @@ func (s *Server) handleAdminCredentials(w http.ResponseWriter, r *http.Request) 
 // @Description  GET returns metadata; PATCH updates any of kind/secret/
 // @Description  expires/notes (omitted fields are left unchanged); DELETE
 // @Description  removes the credential. Session-cookie authenticated.
-// @Tags         admin
+// @Tags        credentials
 // @Accept       json
 // @Produce      json
 // @Param        name  path      string                    true  "Credential name"

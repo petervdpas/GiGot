@@ -6,7 +6,7 @@ import "net/http"
 // @Summary      Fetch the server's NaCl public key
 // @Description  Returns the base64-encoded curve25519 public key that clients
 // @Description  use to seal request bodies.
-// @Tags         crypto
+// @Tags        crypto
 // @Produce      json
 // @Success      200  {object}  ServerPubKeyResponse
 // @Router       /crypto/pubkey [get]

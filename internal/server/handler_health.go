@@ -5,7 +5,7 @@ import "net/http"
 // handleHealth godoc
 // @Summary      Health check
 // @Description  Returns server health status
-// @Tags         system
+// @Tags        system
 // @Produce      json
 // @Success      200  {object}  HealthResponse
 // @Router       /health [get]

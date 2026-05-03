@@ -82,7 +82,7 @@ func splitAccountsPath(p string) (provider, identifier string, ok bool) {
 // @Description  GET lists every known account (admins and regulars);
 // @Description  POST creates one. Session-cookie authenticated. See
 // @Description  docs/design/accounts.md for the data model.
-// @Tags         admin
+// @Tags        accounts
 // @Accept       json
 // @Produce      json
 // @Param        body  body      CreateAccountRequest   false  "Create body (POST)"
@@ -115,7 +115,7 @@ func (s *Server) handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
 // @Description  (local only). DELETE removes the account; the server
 // @Description  refuses to remove the last admin so the console can't
 // @Description  lock itself out. Session-cookie authenticated.
-// @Tags         admin
+// @Tags        accounts
 // @Accept       json
 // @Produce      json
 // @Param        provider    path      string                true  "Account provider"

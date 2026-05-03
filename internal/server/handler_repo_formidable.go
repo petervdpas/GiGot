@@ -67,7 +67,7 @@ type FormidableStorage struct {
 // @Description  Non-Formidable repos return 200 with marker_present
 // @Description  false and empty arrays so clients can distinguish
 // @Description  "not Formidable" from "doesn't exist" or "no access."
-// @Tags         formidable
+// @Tags        formidable
 // @Produce      json
 // @Param        name  path      string  true  "Repository name"
 // @Success      200   {object}  RepoFormidableResponse

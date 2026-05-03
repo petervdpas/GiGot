@@ -22,7 +22,7 @@ import "net/http"
 // @Description  session) can scrape it. Reveals operational state
 // @Description  but no user-or-content data — the same posture as
 // @Description  GET /api/health.
-// @Tags         system
+// @Tags        system
 // @Produce      json
 // @Success      200  {object}  LoadSnapshot
 // @Router       /health/load [get]

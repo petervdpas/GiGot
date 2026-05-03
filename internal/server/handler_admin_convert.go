@@ -81,8 +81,7 @@ func (s *Server) handleAdminRepoSub(w http.ResponseWriter, r *http.Request) {
 // @Description  that already carries a valid marker returns stamped=false
 // @Description  and writes no commit. On a successful stamp the server
 // @Description  appends one `repo_convert_formidable` audit entry.
-// @Tags         formidable
-// @Tags         admin
+// @Tags        formidable
 // @Produce      json
 // @Param        name  path  string  true  "Repo name"
 // @Success      200   {object}  ConvertFormidableResponse

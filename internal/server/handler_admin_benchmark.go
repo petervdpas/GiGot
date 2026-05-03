@@ -170,7 +170,7 @@ var benchmarkTopics = map[string]benchmarkTopicFn{
 // @Description  Mode "sequential" runs each topic in turn; "concurrent"
 // @Description  runs all selected topics in parallel goroutines so the
 // @Description  timings include cross-topic contention.
-// @Tags         admin
+// @Tags        system
 // @Accept       json
 // @Produce      json
 // @Param        body  body      BenchmarkRequest   true  "Benchmark request"

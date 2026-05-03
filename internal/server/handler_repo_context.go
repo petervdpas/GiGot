@@ -80,7 +80,7 @@ type RepoContextDestinations struct {
 // @Description  UI without probing per-feature endpoints. Read-only;
 // @Description  requires only repo-scope read access — the caller's
 // @Description  abilities are reported, not gated.
-// @Tags         repos
+// @Tags        repos
 // @Produce      json
 // @Param        name  path      string  true  "Repository name"
 // @Success      200   {object}  RepoContextResponse

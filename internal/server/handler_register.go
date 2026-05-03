@@ -17,7 +17,7 @@ import (
 // @Description  auth.allow_local is false (local path disabled), 409
 // @Description  when the username is already taken. Public: no session
 // @Description  required. See docs/design/accounts.md §7.
-// @Tags         auth
+// @Tags        auth
 // @Accept       json
 // @Produce      json
 // @Param        body  body      RegisterRequest   true  "Registration body"

@@ -38,7 +38,7 @@ type EntityTagsResponse struct {
 // @Description  on the repo's refs/audit/main as one
 // @Description  tag.assigned.repo / tag.unassigned.repo event per
 // @Description  changed assignment. Session-cookie authenticated.
-// @Tags         admin
+// @Tags        tags
 // @Accept       json
 // @Produce      json
 // @Param        name  path      string                 true  "Repo name"
@@ -83,7 +83,7 @@ func (s *Server) handleAdminRepoTags(w http.ResponseWriter, r *http.Request) {
 // @Description  responses unions account + repo + sub tags).
 // @Description  Catalogue + assignment diffs land in the system
 // @Description  audit log. Session-cookie authenticated.
-// @Tags         admin
+// @Tags        accounts
 // @Accept       json
 // @Produce      json
 // @Param        provider    path      string                 true  "Account provider"

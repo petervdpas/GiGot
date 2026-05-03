@@ -90,7 +90,7 @@ var fragmentCache = func() map[string]*fragmentEntry {
 // @Description  SHA-256. Browsers send `If-None-Match` on every
 // @Description  load and get a 304 after the first fetch — net cost
 // @Description  per fragment per release is one tiny round trip.
-// @Tags         admin
+// @Tags        system
 // @Produce      html
 // @Param        name  path      string  true  "Fragment name (no path, no extension)"
 // @Success      200   {string}  string  "Fragment HTML body"

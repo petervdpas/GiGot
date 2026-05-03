@@ -28,7 +28,7 @@ type RecordQueryResponse struct {
 // @Description  scalar data.<key> values and numeric range comparisons.
 // @Description  Sort accepts a data key, optionally prefixed with "-"
 // @Description  for descending. Limit defaults to no limit.
-// @Tags         formidable
+// @Tags        formidable
 // @Produce      json
 // @Param        name      path      string  true   "Repository name"
 // @Param        template  path      string  true   "Template directory name under storage/"

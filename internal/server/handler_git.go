@@ -25,7 +25,7 @@ import (
 // handleGitInfoRefs godoc
 // @Summary      Git refs discovery
 // @Description  Git smart HTTP protocol — advertise refs for clone/fetch/push
-// @Tags         git
+// @Tags        git
 // @Param        name     path   string  true  "Repository name"
 // @Param        service  query  string  true  "git-upload-pack or git-receive-pack"
 // @Produce      octet-stream
@@ -87,7 +87,7 @@ func (s *Server) handleGitInfoRefs(w http.ResponseWriter, r *http.Request) {
 // handleGitUploadPack godoc
 // @Summary      Git clone/fetch
 // @Description  Git smart HTTP protocol — serves packfile data for clone and fetch operations
-// @Tags         git
+// @Tags        git
 // @Param        name  path  string  true  "Repository name"
 // @Accept       octet-stream
 // @Produce      octet-stream
@@ -104,7 +104,7 @@ func (s *Server) handleGitUploadPack(w http.ResponseWriter, r *http.Request) {
 // handleGitReceivePack godoc
 // @Summary      Git push
 // @Description  Git smart HTTP protocol — receives packfile data for push operations
-// @Tags         git
+// @Tags        git
 // @Param        name  path  string  true  "Repository name"
 // @Accept       octet-stream
 // @Produce      octet-stream

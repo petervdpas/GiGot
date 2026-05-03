@@ -38,7 +38,7 @@ import (
 // @Description  event on its repo's refs/audit/main with the matching
 // @Description  tag set, so the audit chain answers "why was sub-77
 // @Description  revoked?" six months later. Session-cookie auth.
-// @Tags         admin
+// @Tags        subscriptions
 // @Accept       json
 // @Produce      json
 // @Param        body  body      RevokeByTagRequest   true  "Tag set + typed confirmation"

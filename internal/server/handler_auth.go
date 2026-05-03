@@ -19,7 +19,7 @@ import (
 // @Description  not entitled to hold (today: `mirror` requires admin
 // @Description  or maintainer role; granting it to a regular returns
 // @Description  400). See accounts.md §6.1.
-// @Tags         auth
+// @Tags        auth
 // @Accept       json
 // @Produce      json
 // @Param        body  body      TokenRequest       false  "Token request (for POST)"

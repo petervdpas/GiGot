@@ -116,8 +116,7 @@ func (s *Server) handleAdminRepoDestinations(w http.ResponseWriter, r *http.Requ
 // @Description  scope alone is sufficient (see remote-sync.md §2.6,
 // @Description  the read/write split). Admin-session callers reach
 // @Description  the same handler via the /api/admin/* path.
-// @Tags         admin
-// @Tags         repos
+// @Tags        destinations
 // @Produce      json
 // @Param        name  path      string                   true  "Repo name"
 // @Success      200   {object}  DestinationListResponse
@@ -148,8 +147,7 @@ func (s *Server) listDestinations(w http.ResponseWriter, _ *http.Request, repo s
 // @Description  destination on success. Subscriber callers must hold
 // @Description  admin/maintainer role AND the `mirror` ability — see
 // @Description  accounts.md §6.1; admin-session callers bypass.
-// @Tags         admin
-// @Tags         repos
+// @Tags        destinations
 // @Accept       json
 // @Produce      json
 // @Param        name  path      string                     true   "Repo name"
@@ -208,8 +206,7 @@ func (s *Server) createDestination(w http.ResponseWriter, r *http.Request, repo 
 // @Description  Read-only; per-bearer mirror ability NOT required —
 // @Description  the read/write split lets any in-scope subscriber
 // @Description  inspect the configuration without managing it.
-// @Tags         admin
-// @Tags         repos
+// @Tags        destinations
 // @Produce      json
 // @Param        name  path      string             true  "Repo name"
 // @Param        id    path      string             true  "Destination id"
@@ -242,8 +239,7 @@ func (s *Server) getDestination(w http.ResponseWriter, _ *http.Request, repo, id
 // @Description  rejected — delete the destination instead. Subscriber
 // @Description  callers need admin/maintainer role + `mirror` ability;
 // @Description  admin-session callers bypass.
-// @Tags         admin
-// @Tags         repos
+// @Tags        destinations
 // @Accept       json
 // @Produce      json
 // @Param        name  path      string                     true   "Repo name"
@@ -311,8 +307,7 @@ func (s *Server) updateDestination(w http.ResponseWriter, r *http.Request, repo,
 // @Description  Returns 204 with no body. Subscriber callers need
 // @Description  admin/maintainer role + `mirror` ability; admin-session
 // @Description  callers bypass.
-// @Tags         admin
-// @Tags         repos
+// @Tags        destinations
 // @Produce      json
 // @Param        name  path  string  true  "Repo name"
 // @Param        id    path  string  true  "Destination id"
