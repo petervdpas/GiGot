@@ -668,10 +668,6 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/admin/benchmark/", s.handleBenchmarkPage)
 	s.mux.HandleFunc("/admin/settings", s.handleSettingsPage)
 	s.mux.HandleFunc("/admin/settings/", s.handleSettingsPage)
-	// Legacy /admin/limits URL → 302 to /admin/settings#push-concurrency.
-	// Kept indefinitely so old bookmarks and external links don't 404.
-	s.mux.HandleFunc("/admin/limits", s.handleLimitsRedirect)
-	s.mux.HandleFunc("/admin/limits/", s.handleLimitsRedirect)
 	s.mux.HandleFunc("/user", s.handleUserPage)
 	s.mux.HandleFunc("/user/", s.handleUserPage)
 	// /help and /help/<slug> render embedded markdown via goldmark.

@@ -93,14 +93,6 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	s.adminPageHandler(settingsPageTmpl, "/admin/settings", "/admin/settings/")(w, r)
 }
 
-// handleLimitsRedirect 302s the legacy /admin/limits URL to the new
-// /admin/settings page (anchored on the push-concurrency section so
-// an old bookmark lands roughly where the user expected). Kept so
-// existing bookmarks and dashboards don't 404 after the move.
-func (s *Server) handleLimitsRedirect(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/admin/settings#push-concurrency", http.StatusFound)
-}
-
 // handleUserPage serves the /user self-serve account page. Public
 // path (no server-side session gate) — user.js calls /api/me and
 // bounces to /admin on a 401. Same pattern as the admin pages.

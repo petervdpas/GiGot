@@ -123,18 +123,3 @@ func TestAdminMirror_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-// TestLimitsRedirect_PreservesOldUrl — /admin/limits must keep
-// answering 302 → /admin/settings#push-concurrency so existing
-// bookmarks survive the page move. Public path (no auth) since
-// the destination page itself does the session gate via JS.
-func TestLimitsRedirect_PreservesOldUrl(t *testing.T) {
-	srv, _ := adminTestServer(t)
-	rec := do(t, srv, http.MethodGet, "/admin/limits", nil, nil)
-	if rec.Code != http.StatusFound {
-		t.Fatalf("/admin/limits want 302, got %d body=%s", rec.Code, rec.Body.String())
-	}
-	loc := rec.Header().Get("Location")
-	if loc != "/admin/settings#push-concurrency" {
-		t.Errorf("Location: want /admin/settings#push-concurrency, got %q", loc)
-	}
-}

@@ -28,6 +28,19 @@ button {
 button.secondary { background: var(--chip); border: 1px solid var(--line); color: var(--text); }
 button.danger { background: #da3633; }
 button.small { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+/* Disabled affordance for every button shape. Browser defaults only
+ * shift opacity by a token amount; on top of saturated greens / reds
+ * that's not perceptible, so users misread "disabled" as "clickable".
+ * Halve the opacity, drop the cursor to default, and lock out hover
+ * brightening so a hover doesn't relight a non-interactive control. */
+button:disabled,
+button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
+}
+button:disabled:hover,
+button[disabled]:hover { filter: none; }
 
 input {
   background: var(--field-bg);

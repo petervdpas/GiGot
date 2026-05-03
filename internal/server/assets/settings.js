@@ -132,7 +132,7 @@
     const n = payload.enabled_destinations != null ? payload.enabled_destinations : 0;
     const sec = payload.status_poll_sec != null ? payload.status_poll_sec : 0;
     if (sec <= 0) {
-      el.textContent = 'Polling disabled. ' + n + ' enabled destination(s) — manual refresh only.';
+      el.textContent = 'Polling disabled. ' + n + ' enabled destination(s); manual refresh only.';
     } else {
       el.textContent = 'Checking ' + n + ' enabled destination(s) every ' + sec + ' s.';
     }
