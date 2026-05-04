@@ -11,3 +11,10 @@
 # `*.log` into subdirectories still ignore nested `<dir>/foo.log`.
 *.log
 **/*.log
+
+# Local change-tracking scratch files. Formidable writes per-user
+# `.changes.<id>` files alongside content while edits are pending;
+# they're machine-local state, never team-shared, and committing
+# them leaks one user's in-flight edits to everyone else.
+.changes.*
+**/.changes.*

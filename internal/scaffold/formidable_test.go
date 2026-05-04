@@ -39,6 +39,8 @@ func TestFormidableFiles_GitignorePatterns(t *testing.T) {
 		".formidable/sync.json",
 		"*.log",
 		"**/*.log",
+		".changes.*",
+		"**/.changes.*",
 	}
 	for _, want := range wantLines {
 		if !hasGitignoreLine(gitignore, want) {
