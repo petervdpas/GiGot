@@ -258,8 +258,10 @@ func (s *Server) enabledDestinations() []repoDestination {
 //
 // Used by three call sites:
 //   - manual Refresh button on /admin/repositories (handler)
-//   - successful syncOnce (push-time piggyback — inferred without an
-//     extra round-trip; see syncOnce for the rationale)
+//   - successful pushOnce (push-time piggyback — inferred without an
+//     extra round-trip; see pushOnce for the rationale)
+//   - successful pullOnce (pull-time piggyback, same shape — admin-only,
+//     see remote-sync.md §3.2)
 //   - background statusPoller (every cfg.Mirror.StatusPollSec seconds)
 func (s *Server) refreshRemoteStatus(ctx context.Context, repo, id string) error {
 	dest, err := s.destinations.Get(repo, id)
@@ -318,14 +320,15 @@ func (s *Server) refreshRemoteStatus(ctx context.Context, repo, id string) error
 	return updErr
 }
 
-// markRemoteInSyncFromPush is the push-time piggyback: after a
-// successful mirror push we know the mirrored namespaces on the
-// remote now equal the local refs we just pushed (force-mirror
-// refspecs guarantee it). Recording that inferred state here is free
-// — no extra round-trip — and keeps the badge in step with the
-// sync-now button. A subsequent ls-remote check (manual or via the
-// poller) will overwrite this with an authoritative read.
-func (s *Server) markRemoteInSyncFromPush(repo, id string) {
+// markRemoteInSync is the post-op piggyback used by both directions:
+// after a successful mirror push (force-mirror refspecs guarantee
+// remote == local) OR a successful admin pull (force-fetch guarantees
+// local == remote), the mirrored namespaces on the two sides are
+// equal. Recording that inferred state is free — no extra round-trip
+// — and keeps the DIVERGED badge in step with the operator's action.
+// A subsequent ls-remote check (manual or via the poller) will
+// overwrite this with an authoritative read.
+func (s *Server) markRemoteInSync(repo, id string) {
 	local, err := s.localMirroredRefs(repo)
 	if err != nil {
 		return

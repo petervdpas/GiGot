@@ -52,7 +52,7 @@ func (s *Server) appendAudit(name string, event gitmanager.AuditEvent) {
 // decide whether to also enqueue the mirror worker — handlers that
 // aren't themselves triggering a push (POST /commits, PUT /files)
 // want that enqueue, while handlers that are already pushing
-// (Sync-now) don't, because syncOnce will carry the new commit to
+// (Push) don't, because pushOnce will carry the new commit to
 // the mirror anyway. All errors are logged, never surfaced — the
 // user's original write has already succeeded by the time this runs.
 func (s *Server) autofixFormidableGitignore(r *http.Request, name string) bool {

@@ -513,21 +513,51 @@
       }
     });
 
-    const syncBtn = host.querySelector('.sync-dest-btn');
+    const pushBtn = host.querySelector('.push-dest-btn');
     const syncMsg = host.querySelector('.dest-sync-msg');
-    if (syncBtn && syncMsg) {
-      syncBtn.addEventListener('click', async () => {
-        syncBtn.disabled = true;
+    if (pushBtn && syncMsg) {
+      pushBtn.addEventListener('click', async () => {
+        pushBtn.disabled = true;
         syncMsg.textContent = 'pushing…';
         syncMsg.className = 'dest-sync-msg muted';
         try {
-          const updated = await api.syncDestination(repoName, dest.id);
+          const updated = await api.pushDestination(repoName, dest.id);
           destinationsByRepo[repoName] = updated;
           // Re-render the same host with updated data; no full
           // refreshRepos so other cards stay untouched.
           GG.lazy.refresh(host);
         } catch (e) {
-          syncBtn.disabled = false;
+          pushBtn.disabled = false;
+          syncMsg.textContent = e.message;
+          syncMsg.className = 'dest-sync-msg error';
+        }
+      });
+    }
+
+    // Pull from remote — admin-only escape hatch (see remote-sync.md
+    // §3.2). Force-fetches the destination into local refs; same
+    // in-place refresh pattern as Push and Refresh status.
+    const pullBtn = host.querySelector('.pull-dest-btn');
+    if (pullBtn && syncMsg) {
+      pullBtn.addEventListener('click', async () => {
+        const ok = await GG.dialog.confirm({
+          title: 'Pull from remote',
+          message: 'Force-update local refs to match the remote.\n\n'
+                 + 'Any commits GiGot has that the remote doesn\'t will be lost.\n'
+                 + 'Use this when the remote has commits you want to keep.',
+          okText: 'Pull',
+          dangerOk: true,
+        });
+        if (!ok) return;
+        pullBtn.disabled = true;
+        syncMsg.textContent = 'pulling…';
+        syncMsg.className = 'dest-sync-msg muted';
+        try {
+          const updated = await api.pullDestination(repoName, dest.id);
+          destinationsByRepo[repoName] = updated;
+          GG.lazy.refresh(host);
+        } catch (e) {
+          pullBtn.disabled = false;
           syncMsg.textContent = e.message;
           syncMsg.className = 'dest-sync-msg error';
         }
@@ -535,8 +565,8 @@
     }
 
     // Refresh status — runs ls-remote against the destination, no
-    // push. Same in-place refresh pattern as Sync now: re-render the
-    // host with the updated dest, leave other cards alone.
+    // push. Same in-place refresh pattern as Push to remote: re-render
+    // the host with the updated dest, leave other cards alone.
     const refreshBtn = host.querySelector('.refresh-status-btn');
     if (refreshBtn && syncMsg) {
       refreshBtn.addEventListener('click', async () => {

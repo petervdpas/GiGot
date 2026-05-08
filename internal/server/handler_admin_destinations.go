@@ -119,7 +119,15 @@ func (s *Server) handleAdminRepoDestinations(w http.ResponseWriter, r *http.Requ
 		if r.Method == http.MethodPost {
 			switch action {
 			case "sync":
-				s.syncDestination(w, r, repo, id)
+				s.pushDestination(w, r, repo, id)
+				return
+			case "pull":
+				// Admin-only by router placement: this dispatcher
+				// has already required an admin session at the top.
+				// The subscriber-facing dispatcher
+				// (handleRepoDestinations) deliberately does not
+				// route "pull" — see remote-sync.md §3.2.
+				s.pullDestination(w, r, repo, id)
 				return
 			case "status/refresh":
 				s.refreshDestinationStatus(w, r, repo, id)

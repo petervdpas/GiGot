@@ -113,7 +113,7 @@ func (s *Server) handleRepoDestinations(w http.ResponseWriter, r *http.Request) 
 		if r.Method == http.MethodPost {
 			switch action {
 			case "sync":
-				s.syncDestination(w, r, repo, id)
+				s.pushDestination(w, r, repo, id)
 				return
 			case "status/refresh":
 				s.refreshDestinationStatus(w, r, repo, id)

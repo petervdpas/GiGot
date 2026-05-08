@@ -17,14 +17,17 @@ const (
 	syncStatusError = "error"
 )
 
-// syncDestination runs one outbound mirror push for (repo, id) and
+// pushDestination runs one outbound mirror push for (repo, id) and
 // records the outcome on the destination. Shared by the admin-session
 // and subscriber-bearer routes — the only gating difference is the
 // caller's middleware, not the push itself. enabled=false destinations
-// still accept a manual sync: the flag gates the automatic post-receive
-// fan-out (slice 2b), not explicit operator action.
+// still accept a manual push: the flag gates the automatic post-receive
+// fan-out (slice 2b), not explicit operator action. The URL action is
+// historically named `sync` (kept for API compatibility); the Go
+// identifier reads as the direction it actually performs (see
+// remote-sync.md §3.2 + §3.6 — the admin button is "Push to remote").
 //
-// @Summary      Trigger a manual mirror-sync push on one destination
+// @Summary      Trigger a manual mirror push on one destination
 // @Description  Invokes `git push +refs/heads/*:refs/heads/* +refs/audit/*:refs/audit/*`
 // @Description  against the destination's URL, using the vault credential
 // @Description  referenced by `credential_name`. Runs synchronously — the
@@ -53,7 +56,7 @@ const (
 // @Security     BearerAuth
 // @Router       /admin/repos/{name}/destinations/{id}/sync [post]
 // @Router       /repos/{name}/destinations/{id}/sync [post]
-func (s *Server) syncDestination(w http.ResponseWriter, r *http.Request, repo, id string) {
+func (s *Server) pushDestination(w http.ResponseWriter, r *http.Request, repo, id string) {
 	dest, err := s.destinations.Get(repo, id)
 	if err != nil {
 		if errors.Is(err, destinations.ErrNotFound) {
@@ -85,7 +88,7 @@ func (s *Server) syncDestination(w http.ResponseWriter, r *http.Request, repo, i
 	// button becomes a single "bring this repo into shape and push" gesture.
 	s.autofixFormidableGitignore(r, repo)
 
-	updated, err := s.syncOnce(r.Context(), repo, dest, cred)
+	updated, err := s.pushOnce(r.Context(), repo, dest, cred)
 	if err != nil {
 		// Push may have succeeded at the remote, but we couldn't record
 		// the fact. Surface the storage error — the admin can retry and
@@ -96,15 +99,18 @@ func (s *Server) syncDestination(w http.ResponseWriter, r *http.Request, repo, i
 	writeJSON(w, http.StatusOK, destinationView(*updated))
 }
 
-// syncOnce fires one outbound push and records the outcome on the
+// pushOnce fires one outbound push and records the outcome on the
 // destination. Returns the updated destination on success, or an error
 // only when the record itself could not be written. A failed push is
-// NOT a syncOnce error — the destination's last_sync_status=error
-// captures that, and the caller (manual Sync-now handler, automatic
+// NOT a pushOnce error — the destination's last_sync_status=error
+// captures that, and the caller (manual Push handler, automatic
 // post-receive worker) decides whether to treat it as a user-visible
 // failure or a silent-and-log event. On a successful push the
-// credential's LastUsed timestamp is touched best-effort.
-func (s *Server) syncOnce(ctx context.Context, repo string, dest *destinations.Destination, cred *credentials.Credential) (*destinations.Destination, error) {
+// credential's LastUsed timestamp is touched best-effort. The
+// LastSync* fields keep their historical names — the wire schema
+// is stable; only the Go identifier reads in the new direction-aware
+// vocabulary.
+func (s *Server) pushOnce(ctx context.Context, repo string, dest *destinations.Destination, cred *credentials.Credential) (*destinations.Destination, error) {
 	repoPath := s.git.RepoPath(repo)
 	out, pushErr := s.pushDest(ctx, repoPath, dest.URL, cred.Secret)
 
@@ -141,7 +147,7 @@ func (s *Server) syncOnce(ctx context.Context, repo string, dest *destinations.D
 		// in step with last_sync_status — no extra ls-remote round
 		// trip needed. The next manual refresh or background poll
 		// will replace this with an authoritative read.
-		s.markRemoteInSyncFromPush(repo, dest.ID)
+		s.markRemoteInSync(repo, dest.ID)
 		// Re-fetch so the wire view carries the just-written remote
 		// fields. Best-effort: a transient read failure here just
 		// means the response shows the pre-mark snapshot.

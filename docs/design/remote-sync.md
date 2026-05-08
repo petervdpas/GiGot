@@ -1,18 +1,24 @@
 # Remote sync — does GiGot need it, and if so, what shape?
 
-Status: **shipped.** Every slice called out below is live:
-slice 1 (destinations data-model + admin API), slice 2.5 (token
-abilities + `mirror` ability + subscriber-facing destinations API
-per §2.6), the refspec compatibility spike (§5), slice 2a (manual
-Sync-now endpoint + shared `syncOnce` helper), slice 2b (post-receive
-fan-out worker), and slice 3 (admin UI with the §3.7 privacy gate
-and click-to-toggle enabled badge). The §2.2 privacy tension is
-resolved in §2.4: sealed-body is scoped to GiGot↔client; mirroring
-is a deliberate per-destination operator opt-in. Outstanding
-follow-ups that didn't make a ship slice: retries + backoff on a
-failed auto-push, and a persistent queue that survives restart —
-both deliberately descoped (§3.4 "silent-and-log" is enough until
-a real user hits the limit).
+Status: **partly shipped.** Slices live today: slice 1 (destinations
+data-model + admin API), slice 2.5 (token abilities + `mirror`
+ability + subscriber-facing destinations API per §2.6), the refspec
+compatibility spike (§5), slice 2a (manual Sync-now endpoint +
+shared `syncOnce` helper), slice 2b (post-receive fan-out worker),
+and slice 3 (admin UI with the §3.7 privacy gate and click-to-toggle
+enabled badge). The §2.2 privacy tension is resolved in §2.4:
+sealed-body is scoped to GiGot↔client; mirroring is a deliberate
+per-destination operator opt-in. Outstanding follow-ups that didn't
+make a ship slice: retries + backoff on a failed auto-push, and a
+persistent queue that survives restart — both deliberately descoped
+(§3.4 "silent-and-log" is enough until a real user hits the limit).
+
+**Slice 4 — admin pull-from-remote — planned.** Adds an admin-only
+**Pull from remote** button beside the existing push action so the
+operator can recover after a direct-to-remote commit (GitHub web
+edit, VS Code commit while GiGot was offline, contributor merge)
+without losing it on the next sync. Pull is admin-UI / admin-endpoint
+only; it is never exposed on the subscriber surface. See §3.2.
 
 ---
 
@@ -228,16 +234,61 @@ timestamp, last-sync status, last-sync error. No shared credentials
 across destinations — that removes any "which PAT does this repo use?"
 ambiguity.
 
-### 3.2 Push-only, not bidirectional
+### 3.2 Push by default, admin-only pull as an escape hatch
 
-Bidirectional sync would require GiGot to reconcile commits that land
-at the remote without going through GiGot first — a merge problem
-GiGot has no reason to own. Mirror sync is **push-only**: GiGot is the
-source of truth; the remotes are follower copies. If someone pushes
-directly to the GitHub mirror, GiGot will reject that mirror's state
-on the next sync (fast-forward required). That's the right failure
-mode: if a user wanted GitHub-first flow, they wouldn't be running
-GiGot.
+GiGot is still the source of truth; the remotes are still follower
+copies. The everyday flow is push: `Push to remote` (the green
+button on the admin destination card) and the existing programmatic
+sync endpoint (post-receive worker, auto-mirror, subscriber tokens
+with the `mirror` ability) all run the same `git push +refs/heads/*
++refs/audit/*` against the destination. That part has not changed.
+
+What slice 4 adds is a single admin-only escape hatch: **Pull from
+remote** (the orange button, admin UI only). It fetches the
+destination and force-updates the local bare repo's `refs/heads/*`
+to match. It is the answer to "someone committed directly on the
+remote and we want to keep that commit."
+
+Three deliberate constraints on the pull side:
+
+1. **Admin only.** No subscriber endpoint, no `mirror`-ability
+   variant, no public API surface. The button lives on the admin
+   Repositories page and calls an admin-session-gated endpoint.
+   Subscribers never see it. Rationale: pulling is destructive to
+   GiGot's local refs, and the operator (the person who configured
+   the destination) is the only one who should decide when to
+   accept the remote's state as truth.
+2. **No merge.** GiGot does not produce merge commits, does not run
+   three-way merges, does not surface a conflict editor. The pull
+   is a force-update of local refs to match remote. If you wanted
+   to preserve commits on both sides you needed a working clone
+   before clicking the button; GiGot's job is to be a sync hub, not
+   a merge tool.
+3. **No recovery refs in v1.** The admin clicked the button. We
+   don't snapshot the loser side to `refs/recovery/...` for them.
+   If a real user trips on this once, we add it; until then it is
+   an unwarranted complication.
+
+Subscribers and the post-receive worker are unchanged. The
+`mirror` ability still grants only push-direction power. There is
+no subscriber-facing way to pull, by design.
+
+**Tests** (slice 4):
+
+- godog `sync.feature`: positive — admin pull advances local when
+  remote has commits GiGot lacks. Positive — admin pull on a
+  diverged remote force-updates local (loser commits gone, by
+  design). Negative — subscriber token with `mirror` ability gets
+  `404` on the admin pull path. Negative — admin pull on a
+  destination with bad credentials returns the same error envelope
+  as the existing push path.
+- Unit (`internal/server/mirror_pull_test.go`, new): the fetch
+  helper resolves the credential from the vault, runs `git fetch`
+  with the expected refspec, force-updates `refs/heads/*`, returns
+  the new local SHA per branch.
+- Unit on the admin handler: admin session required (401 without,
+  200 with), unknown repo / unknown destination return the same
+  shape as the push handler.
 
 ### 3.3 When to push
 
@@ -315,6 +366,21 @@ the credential-helper protocol to git) without making it the store.
 One table per repo: destination list with status, plus add/edit/delete
 per row. No "bulk" operations until a real case calls for them.
 
+Per-destination action row (slice 4): two coloured buttons replace
+the original single "Sync now" button.
+
+- **Push to remote** (green) — calls the existing admin sync
+  endpoint. Same code path as auto-mirror and the post-receive
+  worker; the relabel is purely UI.
+- **Pull from remote** (orange) — calls the new admin-only pull
+  endpoint described in §3.2. Force-updates local refs to match
+  the destination.
+
+"Sync now" is removed from the admin card. The `sync` endpoint
+still exists in the API for programmatic use (worker, auto-mirror,
+subscribers with the `mirror` ability); only the admin button is
+renamed.
+
 ### 3.7 Privacy reminder
 
 Anyone enabling mirror sync to a third party is turning off GiGot's
@@ -331,10 +397,11 @@ of this repo will be readable at the destination."
   destination that stores the repo encrypted-at-rest under a key only
   the user's devices hold? (Much bigger scope. Probably a separate
   feature, not part of this one.)
-- Should destinations support fetch-from as well (seed GiGot from a
-  pre-existing GitHub repo)? Today that happens at repo creation via
-  `source_url`. A "re-seed from destination" operation would be a
-  separate admin action, not part of the mirror feature.
+- ~~Should destinations support fetch-from as well?~~ Answered by
+  slice 4 (§3.2): yes, as an admin-only **Pull from remote**
+  button. Seeding-from-scratch still happens at repo creation via
+  `source_url` — pull is for the post-creation "remote got a
+  commit GiGot doesn't have" case, not for first-time onboarding.
 - Does mirror-sync need to know about the Formidable-first marker at
   all? No — it ships git objects byte-for-byte. Formidable structure
   is orthogonal.

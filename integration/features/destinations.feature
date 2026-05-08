@@ -233,6 +233,41 @@ Feature: Mirror-sync destinations (admin)
     And I POST "/api/admin/repos/addresses/destinations/does-not-exist/sync" with body '{}'
     Then the response status should be 404
 
+  Scenario: Subscriber surface denies /pull
+    # Slice 4: Pull from remote is admin-only (see remote-sync.md
+    # §3.2). The subscriber dispatcher's role+ability gate trips
+    # before the action switch is reached, so even a regular token
+    # with the repo in scope gets 403 here, exactly like /sync. The
+    # stronger contract — that the route itself is not registered on
+    # this surface — is unit-tested at handler scope where we can
+    # bypass the role gate to prove routing is what 404s.
+    Given the server is running with auth enabled
+    And a repository "addresses" exists
+    And a token is issued for user "alice" with repos "addresses"
+    When I POST "/api/repos/addresses/destinations/any-id/pull" with that token
+    Then the response status should be 403
+
+  Scenario: Unknown destination id on /pull returns 404 for an admin
+    # Symmetric to the /sync 404 above. Proves admin-session gate
+    # passes and the destination-lookup miss is what 404s.
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a repository "addresses" exists
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/repos/addresses/destinations/does-not-exist/pull" with body '{}'
+    Then the response status should be 404
+
+  Scenario: Pull without an admin session is 401
+    # The admin endpoint is the only surface that exposes pull.
+    # Without an admin session the gate at the top of
+    # handleAdminRepoDestinations rejects with 401 before any
+    # routing or destination lookup happens.
+    Given the server is running
+    And an admin "alice" exists with password "hunter2"
+    And a repository "addresses" exists
+    When I POST "/api/admin/repos/addresses/destinations/any-id/pull" with body '{}'
+    Then the response status should be 401
+
   Scenario: Destinations survive a server restart
     Given the server is running
     And an admin "alice" exists with password "hunter2"

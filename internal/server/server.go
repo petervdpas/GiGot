@@ -86,6 +86,11 @@ type Server struct {
 	// stub the shell-out without running real git against a real remote.
 	pushDest pushDestinationFn
 
+	// pullDest fires one inbound mirror fetch (admin-only escape
+	// hatch, see remote-sync.md §3.2). Injected for the same reason
+	// as pushDest — tests stub the shell-out.
+	pullDest pullDestinationFn
+
 	// lsRemote runs `git ls-remote` against a destination. Injected
 	// for the same reason as pushDest — the remote-status check is
 	// network-bound, so tests stub it to assert behaviour without
@@ -281,16 +286,17 @@ func New(cfg *config.Config) *Server {
 		policy:          policy.TokenRepoPolicy{},
 		mux:             http.NewServeMux(),
 		pushDest:        executeMirrorPush,
+		pullDest:        executeMirrorPull,
 		lsRemote:        executeLsRemote,
 		oauthProviders:  oauthRegistry,
 		oauthState:      oauth.NewStateStore(10 * time.Minute),
 		gatewayStrategy: gwStrategy,
 	}
 	// Wire the mirror worker. listDests / getCred close over the stores;
-	// fireOne closes over the server so it can reuse the same syncOnce
-	// code the manual Sync-now handler calls. That way the two paths
-	// write last_sync_* identically and we have one push recording
-	// surface, not two.
+	// fireOne closes over the server so it can reuse the same pushOnce
+	// code the manual Push handler calls. That way the two paths write
+	// last_sync_* identically and we have one push recording surface,
+	// not two.
 	s.mirrorWorker = newMirrorWorker(
 		func(repo string) []*destinations.Destination {
 			return s.destinations.All(repo)
@@ -299,7 +305,7 @@ func New(cfg *config.Config) *Server {
 			return s.credentials.Get(name)
 		},
 		func(ctx context.Context, repo string, dest *destinations.Destination, cred *credentials.Credential) (*destinations.Destination, error) {
-			return s.syncOnce(ctx, repo, dest, cred)
+			return s.pushOnce(ctx, repo, dest, cred)
 		},
 	)
 	// Retro-install the refs/audit/* pre-receive guard on any repos

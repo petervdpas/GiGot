@@ -161,11 +161,24 @@
       });
       if (!r.ok) throw new Error('delete destination failed');
     },
-    async syncDestination(repo, id) {
+    async pushDestination(repo, id) {
+      // URL action stays `sync` for API compatibility; the JS
+      // identifier reads in the direction-aware vocabulary the admin
+      // UI uses (Push to remote button — see remote-sync.md §3.6).
       const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/destinations/' + encodeURIComponent(id) + '/sync', {
         method: 'POST', credentials: 'same-origin',
       });
-      if (!r.ok) throw new Error((await r.json()).error || 'sync failed');
+      if (!r.ok) throw new Error((await r.json()).error || 'push failed');
+      return r.json();
+    },
+    async pullDestination(repo, id) {
+      // Admin-only endpoint, no subscriber-facing variant. Force-
+      // fetches the destination into local refs; see remote-sync.md
+      // §3.2.
+      const r = await fetch('/api/admin/repos/' + encodeURIComponent(repo) + '/destinations/' + encodeURIComponent(id) + '/pull', {
+        method: 'POST', credentials: 'same-origin',
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'pull failed');
       return r.json();
     },
     async refreshDestinationStatus(repo, id) {

@@ -27,10 +27,10 @@ func stubPush(calls *[]pushCall, out []byte, err error) pushDestinationFn {
 	}
 }
 
-// TestSyncDestination_AdminSuccess covers the admin-session path: a
+// TestPushDestination_AdminSuccess covers the admin-session path: a
 // POST to /sync runs the push, updates last_sync_* to ok, and touches
 // the credential. Stubbed push so the test doesn't shell out to git.
-func TestSyncDestination_AdminSuccess(t *testing.T) {
+func TestPushDestination_AdminSuccess(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	if err := srv.git.InitBare("addresses"); err != nil {
 		t.Fatal(err)
@@ -95,10 +95,10 @@ func TestSyncDestination_AdminSuccess(t *testing.T) {
 	}
 }
 
-// TestSyncDestination_AdminFailurePopulatesError proves that a failing
+// TestPushDestination_AdminFailurePopulatesError proves that a failing
 // push writes status=error plus the captured output into
 // last_sync_error, and does NOT touch the credential's LastUsed.
-func TestSyncDestination_AdminFailurePopulatesError(t *testing.T) {
+func TestPushDestination_AdminFailurePopulatesError(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	if err := srv.git.InitBare("addresses"); err != nil {
 		t.Fatal(err)
@@ -141,10 +141,10 @@ func TestSyncDestination_AdminFailurePopulatesError(t *testing.T) {
 	}
 }
 
-// TestSyncDestination_SubscriberSuccess covers the token path with the
+// TestPushDestination_SubscriberSuccess covers the token path with the
 // mirror ability — the identical handler runs, gated by
 // TokenAbilityPolicy instead of the admin session.
-func TestSyncDestination_SubscriberSuccess(t *testing.T) {
+func TestPushDestination_SubscriberSuccess(t *testing.T) {
 	srv := subscriberTestServer(t)
 	token, err := srv.tokenStrategy.Issue("alice", "addresses", []string{"mirror"})
 	if err != nil {
@@ -177,9 +177,9 @@ func TestSyncDestination_SubscriberSuccess(t *testing.T) {
 	}
 }
 
-// TestSyncDestination_SubscriberWithoutMirrorDenied — same ability gate
+// TestPushDestination_SubscriberWithoutMirrorDenied — same ability gate
 // as the rest of the subscriber surface. Without `mirror`, sync is 403.
-func TestSyncDestination_SubscriberWithoutMirrorDenied(t *testing.T) {
+func TestPushDestination_SubscriberWithoutMirrorDenied(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	if err := srv.git.InitBare("addresses"); err != nil {
 		t.Fatal(err)
@@ -210,11 +210,11 @@ func TestSyncDestination_SubscriberWithoutMirrorDenied(t *testing.T) {
 	}
 }
 
-// TestSyncDestination_DisabledStillSyncs — enabled=false gates the
+// TestPushDestination_DisabledStillSyncs — enabled=false gates the
 // post-receive fan-out (slice 2b), not an explicit operator action.
 // A manual sync runs regardless so an operator can test a destination
 // before flipping it live.
-func TestSyncDestination_DisabledStillSyncs(t *testing.T) {
+func TestPushDestination_DisabledStillSyncs(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	if err := srv.git.InitBare("addresses"); err != nil {
 		t.Fatal(err)
@@ -247,12 +247,12 @@ func TestSyncDestination_DisabledStillSyncs(t *testing.T) {
 	}
 }
 
-// TestSyncDestination_CredentialGoneReturns409 — if the credential
+// TestPushDestination_CredentialGoneReturns409 — if the credential
 // referenced by a destination has been deleted out from under it, the
 // sync endpoint should return 409 rather than 500. Usually this can't
 // happen because credential deletion is blocked by Refs(), but it can
 // arise via direct store surgery or a race.
-func TestSyncDestination_CredentialGoneReturns409(t *testing.T) {
+func TestPushDestination_CredentialGoneReturns409(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	if err := srv.git.InitBare("addresses"); err != nil {
 		t.Fatal(err)
@@ -279,9 +279,9 @@ func TestSyncDestination_CredentialGoneReturns409(t *testing.T) {
 	}
 }
 
-// TestSyncDestination_MissingDestinationReturns404 — typo-resistance on
+// TestPushDestination_MissingDestinationReturns404 — typo-resistance on
 // the {id} segment.
-func TestSyncDestination_MissingDestinationReturns404(t *testing.T) {
+func TestPushDestination_MissingDestinationReturns404(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	if err := srv.git.InitBare("addresses"); err != nil {
 		t.Fatal(err)
@@ -293,13 +293,13 @@ func TestSyncDestination_MissingDestinationReturns404(t *testing.T) {
 	}
 }
 
-// TestSyncDestination_AutofixesGitignoreOnFormidableRepo — clicking
+// TestPushDestination_AutofixesGitignoreOnFormidableRepo — clicking
 // Sync-now on a Formidable-first repo that's missing .gitignore must
 // self-heal before the mirror push so the fix travels with whatever
 // else is on master. Same rationale as the REST-commit autofix — the
 // admin Sync-now button becomes a single "bring this repo into shape
 // and push" gesture.
-func TestSyncDestination_AutofixesGitignoreOnFormidableRepo(t *testing.T) {
+func TestPushDestination_AutofixesGitignoreOnFormidableRepo(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	if err := srv.git.InitBare("autofix-admin-sync"); err != nil {
 		t.Fatal(err)
@@ -349,11 +349,11 @@ func TestSyncDestination_AutofixesGitignoreOnFormidableRepo(t *testing.T) {
 	}
 }
 
-// TestSyncDestination_WrongMethodIsNotFound — the /sync suffix only
+// TestPushDestination_WrongMethodIsNotFound — the /sync suffix only
 // accepts POST. GET etc. are surfaced as "unknown destination action"
 // (404) rather than 405, because the router can't distinguish "valid
 // action, wrong method" from "unknown action".
-func TestSyncDestination_WrongMethodIsNotFound(t *testing.T) {
+func TestPushDestination_WrongMethodIsNotFound(t *testing.T) {
 	srv, sess := adminTestServer(t)
 	if err := srv.git.InitBare("addresses"); err != nil {
 		t.Fatal(err)

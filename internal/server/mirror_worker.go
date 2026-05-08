@@ -77,7 +77,7 @@ func (w *mirrorWorker) enqueue(repo string) {
 
 // run is the worker goroutine. Exits when the queue is closed. Each
 // processRepo call is wrapped in a recover so a panic anywhere down
-// the stack (push helper bug, nil pointer in syncOnce, etc.) only
+// the stack (push helper bug, nil pointer in pushOnce, etc.) only
 // kills the current repo's fan-out rather than the worker itself —
 // without this a single latent bug would silently stop every future
 // auto-push with no visible signal until mirrors got noticeably
