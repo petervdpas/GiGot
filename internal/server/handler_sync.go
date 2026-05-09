@@ -256,7 +256,6 @@ type WriteFileConflictResponse struct {
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Failure      409   {object}  WriteFileConflictResponse
-// @Failure      409   {object}  formidable.RecordConflict  "Structured record merge conflict (immutable meta field)"
 // @Failure      422   {object}  ErrorResponse
 // @Security     BearerAuth
 // @Router       /repos/{name}/files/{path} [put]
@@ -429,7 +428,6 @@ type CommitRecordConflictResponse struct {
 // @Failure      404   {object}  ErrorResponse
 // @Failure      405   {object}  ErrorResponse
 // @Failure      409   {object}  CommitConflictResponse
-// @Failure      409   {object}  CommitRecordConflictResponse  "One or more Formidable records violated immutable meta fields"
 // @Failure      422   {object}  ErrorResponse
 // @Security     BearerAuth
 // @Router       /repos/{name}/commits [post]
@@ -493,35 +491,36 @@ func (s *Server) handleRepoCommits(w http.ResponseWriter, r *http.Request) {
 		subUsername = id.Username
 	}
 
-	// Pre-scan record-path puts for immutable-meta violations. F1
-	// scope: reject the whole commit on any record-level conflict; do
-	// not attempt auto-merge-on-commit (deferred). Non-record changes
-	// and non-record repos fall through unaffected.
-	var recordConflicts []formidable.RecordConflict
-	var recordHeadVersion string
-	for _, c := range changes {
+	// Pre-scan record-path puts: when the structured merger applies,
+	// substitute the merged (or take-theirs) content into the change
+	// list and rewire ParentVersion to HEAD so the commit fast-forwards
+	// at the git level. Mirrors the single-file PUT flow's "silent
+	// take-theirs" policy: clients never see 409 for record-level
+	// reconciliations; the server's view always wins for immutable
+	// meta and merges per-field everywhere else.
+	//
+	// Non-record changes and non-record repos pass through unaffected.
+	recordHeadVersion := ""
+	for i := range changes {
+		c := &changes[i]
 		if c.Op != gitmanager.OpPut {
 			continue
 		}
 		if !isFormidableRecordPath(c.Path) {
 			continue
 		}
-		_, rc, headV, applicable, mergeErr := s.maybeFormidableMerge(name, c.Path, req.ParentVersion, c.Content)
+		merged, _, headV, applicable, mergeErr := s.maybeFormidableMerge(name, c.Path, req.ParentVersion, c.Content)
 		if mergeErr != nil {
 			writeError(w, http.StatusInternalServerError, mergeErr.Error())
 			return
 		}
-		if applicable && rc != nil {
-			recordConflicts = append(recordConflicts, *rc)
+		if applicable && merged != nil {
+			c.Content = merged
 			recordHeadVersion = headV
 		}
 	}
-	if len(recordConflicts) > 0 {
-		writeJSON(w, http.StatusConflict, CommitRecordConflictResponse{
-			CurrentVersion:  recordHeadVersion,
-			RecordConflicts: recordConflicts,
-		})
-		return
+	if recordHeadVersion != "" {
+		req.ParentVersion = recordHeadVersion
 	}
 
 	res, err := s.git.Commit(name, gitmanager.CommitOptions{

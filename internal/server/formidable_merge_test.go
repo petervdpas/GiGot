@@ -136,18 +136,26 @@ func TestFormidableMerge_LWWOnSameField(t *testing.T) {
 	}
 }
 
-func TestFormidableMerge_ImmutableMetaReturns409(t *testing.T) {
+// TestFormidableMerge_ImmutableMetaSilentlyTakesTheirs — when the
+// client tries to mutate an immutable meta key (created/id/template),
+// the server silently reconciles to HEAD's content instead of
+// returning 409. The client's write becomes a no-op at the content
+// level — the server-authored merge commit's tree equals HEAD's tree.
+// (Formerly TestFormidableMerge_ImmutableMetaReturns409 — the 409
+// path was removed when the take-theirs policy landed.)
+func TestFormidableMerge_ImmutableMetaSilentlyTakesTheirs(t *testing.T) {
 	srv := testServer(t)
 	repo := "fm-imm"
 	base := recordJSON(t, "2025-01-01T00:00:00Z", map[string]any{"name": "Oak"})
 	parent := seedFormidableRepo(t, srv, repo, recordPath, base)
 
-	// Server change.
-	seedFile(t, srv, repo, recordPath,
-		recordJSON(t, "2025-02-01T00:00:00Z", map[string]any{"name": "Oak"}),
-		"server noop-ish")
+	// Server change with the canonical created — establishes HEAD's
+	// version of the record.
+	serverContent := recordJSON(t, "2025-02-01T00:00:00Z", map[string]any{"name": "Oak"})
+	seedFile(t, srv, repo, recordPath, serverContent, "server noop-ish")
 
-	// Client tries to rewrite meta.created — illegal.
+	// Client tries to rewrite meta.created — illegal under the
+	// immutable-meta rule.
 	badMeta := map[string]any{
 		"meta": map[string]any{
 			"id":       "fixed-id",
@@ -159,21 +167,21 @@ func TestFormidableMerge_ImmutableMetaReturns409(t *testing.T) {
 	}
 	raw, _ := json.Marshal(badMeta)
 	rec := putFile(t, srv, repo, recordPath, parent, string(raw))
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (silent take-theirs), got %d: %s", rec.Code, rec.Body.String())
 	}
-	var body formidable.RecordConflict
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode conflict: %v", err)
+
+	// Body should NOT be a RecordConflict — that path is dead now.
+	var conflictProbe formidable.RecordConflict
+	if err := json.Unmarshal(rec.Body.Bytes(), &conflictProbe); err == nil && len(conflictProbe.FieldConflicts) > 0 {
+		t.Errorf("response unexpectedly carries RecordConflict body: %+v", conflictProbe)
 	}
-	if body.Path != recordPath {
-		t.Errorf("path = %q", body.Path)
-	}
-	if len(body.FieldConflicts) != 1 || body.FieldConflicts[0].Key != "created" {
-		t.Errorf("expected one created conflict, got %+v", body.FieldConflicts)
-	}
-	if body.FieldConflicts[0].Reason != "immutable" {
-		t.Errorf("reason = %q", body.FieldConflicts[0].Reason)
+
+	// Read back: the on-disk record at HEAD must match the SERVER's
+	// content, not the client's bad meta.
+	got := decodeFile(t, srv, repo, recordPath)
+	if string(got) != serverContent {
+		t.Errorf("expected HEAD blob == server content (silent take-theirs), got %s", string(got))
 	}
 }
 
@@ -225,15 +233,23 @@ func TestFormidableMerge_RejectsInvalidRecordPath(t *testing.T) {
 	}
 }
 
-func TestFormidableMerge_CommitAggregatesImmutableConflicts(t *testing.T) {
+// TestFormidableMerge_CommitSilentlyTakesTheirsOnImmutableMeta — when
+// a multi-commit POST contains a record-path change that violates an
+// immutable meta key, the handler silently substitutes HEAD's content
+// for that path before committing. The commit succeeds; the on-disk
+// blob equals HEAD's pre-commit content. No 409.
+// (Formerly TestFormidableMerge_CommitAggregatesImmutableConflicts —
+// the conflict-aggregation path was removed when the take-theirs
+// policy landed.)
+func TestFormidableMerge_CommitSilentlyTakesTheirsOnImmutableMeta(t *testing.T) {
 	srv := testServer(t)
 	repo := "fm-commit"
 	base := recordJSON(t, "2025-01-01T00:00:00Z", map[string]any{"name": "Oak"})
 	parent := seedFormidableRepo(t, srv, repo, recordPath, base)
 
-	// Server edits record.
-	seedFile(t, srv, repo, recordPath,
-		recordJSON(t, "2025-02-01T00:00:00Z", map[string]any{"name": "Oak"}), "s")
+	// Server edits record — establishes HEAD's view of this record.
+	serverContent := recordJSON(t, "2025-02-01T00:00:00Z", map[string]any{"name": "Oak"})
+	seedFile(t, srv, repo, recordPath, serverContent, "s")
 
 	// Commit that tries to change meta.created on the same record.
 	badRec := map[string]any{
@@ -262,21 +278,21 @@ func TestFormidableMerge_CommitAggregatesImmutableConflicts(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (silent take-theirs), got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp CommitRecordConflictResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
+
+	// Body must NOT carry a CommitRecordConflictResponse — that path
+	// is dead now.
+	var conflictProbe CommitRecordConflictResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &conflictProbe); err == nil && len(conflictProbe.RecordConflicts) > 0 {
+		t.Errorf("response unexpectedly carries RecordConflicts: %+v", conflictProbe.RecordConflicts)
 	}
-	if len(resp.RecordConflicts) != 1 {
-		t.Fatalf("expected 1 record conflict, got %+v", resp.RecordConflicts)
-	}
-	rc := resp.RecordConflicts[0]
-	if rc.Path != recordPath {
-		t.Errorf("path = %q", rc.Path)
-	}
-	if len(rc.FieldConflicts) != 1 || rc.FieldConflicts[0].Key != "created" {
-		t.Errorf("expected created conflict, got %+v", rc.FieldConflicts)
+
+	// Read back: the on-disk record at HEAD must match the SERVER's
+	// content, not the client's bad meta.
+	got := decodeFile(t, srv, repo, recordPath)
+	if string(got) != serverContent {
+		t.Errorf("expected HEAD blob == server content (silent take-theirs), got %s", string(got))
 	}
 }

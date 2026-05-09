@@ -9,12 +9,7 @@ const docTemplate = `{
     "info": {
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
-        "contact": {
-            "name": "Peter van de Pas"
-        },
-        "license": {
-            "name": "MIT"
-        },
+        "contact": {},
         "version": "{{.Version}}"
     },
     "host": "{{.Host}}",
@@ -1613,6 +1608,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/repos/{name}/destinations/{id}/pull": {
+            "post": {
+                "security": [
+                    {
+                        "SessionAuth": []
+                    }
+                ],
+                "description": "Force-fetches ` + "`" + `refs/heads/*` + "`" + ` and ` + "`" + `refs/audit/*` + "`" + ` from the\ndestination URL into the local bare repo, using the\nvault credential referenced by ` + "`" + `credential_name` + "`" + `. Local\nrefs are overwritten to match the remote — the operator\nis explicitly accepting the remote's state as truth.\nRuns synchronously; the response is the updated\ndestination view with ` + "`" + `remote_status=in_sync` + "`" + ` (since\nlocal now equals remote by construction).\n\nThis endpoint exists ONLY on the admin route. There is\nno subscriber-facing variant: pulling is destructive to\nGiGot's local refs and is reserved for the operator\nwho configured the destination. See remote-sync.md §3.2.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "destinations"
+                ],
+                "summary": "Admin-only: pull from a mirror destination into local",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Repo name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Destination id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.DestinationView"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Repo, destination, or credential not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Credential referenced by destination no longer exists in the vault",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Fetch from destination failed",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/repos/{name}/destinations/{id}/status/refresh": {
             "post": {
                 "security": [
@@ -1704,7 +1764,7 @@ const docTemplate = `{
                 "tags": [
                     "destinations"
                 ],
-                "summary": "Trigger a manual mirror-sync push on one destination",
+                "summary": "Trigger a manual mirror push on one destination",
                 "parameters": [
                     {
                         "type": "string",
@@ -3815,9 +3875,9 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "One or more Formidable records violated immutable meta fields",
+                        "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/server.CommitRecordConflictResponse"
+                            "$ref": "#/definitions/server.CommitConflictResponse"
                         }
                     },
                     "422": {
@@ -4301,7 +4361,7 @@ const docTemplate = `{
                 "tags": [
                     "destinations"
                 ],
-                "summary": "Trigger a manual mirror-sync push on one destination",
+                "summary": "Trigger a manual mirror push on one destination",
                 "parameters": [
                     {
                         "type": "string",
@@ -4502,9 +4562,9 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Structured record merge conflict (immutable meta field)",
+                        "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/formidable.RecordConflict"
+                            "$ref": "#/definitions/server.WriteFileConflictResponse"
                         }
                     },
                     "422": {
@@ -5018,37 +5078,6 @@ const docTemplate = `{
                 }
             }
         },
-        "formidable.FieldConflict": {
-            "type": "object",
-            "properties": {
-                "key": {
-                    "type": "string"
-                },
-                "reason": {
-                    "type": "string"
-                },
-                "scope": {
-                    "type": "string"
-                }
-            }
-        },
-        "formidable.RecordConflict": {
-            "type": "object",
-            "properties": {
-                "current_version": {
-                    "type": "string"
-                },
-                "field_conflicts": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/formidable.FieldConflict"
-                    }
-                },
-                "path": {
-                    "type": "string"
-                }
-            }
-        },
         "git.BranchInfo": {
             "type": "object",
             "properties": {
@@ -5459,21 +5488,6 @@ const docTemplate = `{
                 "current_version": {
                     "type": "string",
                     "example": "def456..."
-                }
-            }
-        },
-        "server.CommitRecordConflictResponse": {
-            "type": "object",
-            "properties": {
-                "current_version": {
-                    "type": "string",
-                    "example": "def456..."
-                },
-                "record_conflicts": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/formidable.RecordConflict"
-                    }
                 }
             }
         },
@@ -6640,34 +6654,17 @@ const docTemplate = `{
                 }
             }
         }
-    },
-    "securityDefinitions": {
-        "BasicAuth": {
-            "type": "basic"
-        },
-        "BearerAuth": {
-            "description": "Enter your bearer token as: Bearer \u003ctoken\u003e",
-            "type": "apiKey",
-            "name": "Authorization",
-            "in": "header"
-        },
-        "SessionAuth": {
-            "description": "Session cookie minted by POST /api/admin/login (or any successful OAuth callback). Required by every /api/admin/* endpoint and the /fragments/* template server. Browsers attach it automatically; programmatic callers must include the cookie header on every request.",
-            "type": "apiKey",
-            "name": "gigot_session",
-            "in": "cookie"
-        }
     }
 }`
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "0.1.0",
-	Host:             "localhost:3417",
-	BasePath:         "/api",
+	Version:          "",
+	Host:             "",
+	BasePath:         "",
 	Schemes:          []string{},
-	Title:            "GiGot API",
-	Description:      "HTTP Basic with the subscription token as the password. The username is ignored — tokens are self-identifying. This is the form `git clone http://user:<token>@host/git/repo` produces, so git-over-HTTP works out of the box.",
+	Title:            "",
+	Description:      "",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

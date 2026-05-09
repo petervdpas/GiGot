@@ -53,16 +53,24 @@ func (s *Server) isFormidableRepoAtHEAD(name string) bool {
 // generic write path runs. Returns:
 //
 //   - (merged, nil, headVersion, true, nil) on a successful per-field
-//     merge. Caller should rewrite opts.Content = merged and
-//     opts.ParentVersion = headVersion so WriteFile fast-forwards, then
-//     surface MergedFrom/MergedWith in the response using the values
-//     the caller already has (client's original parent + headVersion).
-//   - (nil, conflict, "", true, nil) when an immutable meta key was
-//     violated. Caller emits 409 with the conflict body.
+//     merge OR on what would have been an immutable-meta conflict —
+//     in the latter case `merged` carries `theirs` (HEAD's content) so
+//     the caller silently reconciles to HEAD instead of emitting 409.
+//     This implements the "atomic merge or take-theirs silently"
+//     policy shared with Formidable2's PullWithStash: pull always wins
+//     when the merger can't reconcile; the client's write is silently
+//     dropped. The empty merge commit that results gives audit-log
+//     surface for "the client tried to write X, server reconciled to
+//     HEAD."
 //   - (nil, nil, "", false, nil) when this write is not a Formidable
 //     record candidate (no marker, non-record path, fast-forward
 //     already, malformed existing blobs). Caller continues on the
 //     generic path.
+//
+// The conflict return value is preserved for ABI shape (unused now —
+// always nil) so the call-sites in handler_sync.go don't need a
+// signature update; the conflict-handling branches are simply dead
+// code after this change.
 //
 // Error return is reserved for transport-level problems: a malformed
 // incoming record surfaces as applicable=false so the generic path can
@@ -127,8 +135,12 @@ func (s *Server) maybeFormidableMerge(
 		return nil, nil, "", false, err
 	}
 	if result.Conflict != nil {
-		result.Conflict.CurrentVersion = head.Version
-		return nil, result.Conflict, head.Version, true, nil
+		// Silent take-theirs: client's write is reconciled to HEAD.
+		// We hand the caller `theirsBytes` so the WriteFile path
+		// produces a merge commit whose tree equals HEAD's tree —
+		// effectively a no-op write at the content level but auditable
+		// in the log. The caller emits 200 on the normal success path.
+		return theirsBytes, nil, head.Version, true, nil
 	}
 	return result.Merged, nil, head.Version, true, nil
 }
