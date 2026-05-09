@@ -670,11 +670,17 @@ func (s *Server) handleRepoBranches(w http.ResponseWriter, r *http.Request) {
 
 // handleRepoLog godoc
 // @Summary      Commit log
-// @Description  Returns recent commits from a repository
+// @Description  Returns recent commits from a repository, including each
+// @Description  commit's parents and ref decoration so callers can render
+// @Description  a graph. Set with_changes=1 to also disclose the per-path
+// @Description  file changes for every commit (heavier payload — one extra
+// @Description  diff-tree per commit). Defaults to the lean shape so graph
+// @Description  views stay cheap.
 // @Tags        sync
 // @Produce      json
-// @Param        name   path      string  true   "Repository name"
-// @Param        limit  query     int     false  "Max number of commits"  default(20)
+// @Param        name          path   string  true   "Repository name"
+// @Param        limit         query  int     false  "Max number of commits"  default(20)
+// @Param        with_changes  query  bool    false  "Include per-commit file changes"
 // @Success      200    {object}  RepoLogResponse
 // @Failure     401   {object}  ErrorResponse  "Missing or invalid bearer token"
 // @Failure      404    {object}  ErrorResponse
@@ -692,8 +698,9 @@ func (s *Server) handleRepoLog(w http.ResponseWriter, r *http.Request) {
 			limit = parsed
 		}
 	}
+	withChanges := parseBoolQuery(r.URL.Query().Get("with_changes"))
 
-	entries, err := s.git.Log(name, limit)
+	entries, err := s.git.Log(name, limit, withChanges)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -704,6 +711,18 @@ func (s *Server) handleRepoLog(w http.ResponseWriter, r *http.Request) {
 		Entries: entries,
 		Count:   len(entries),
 	})
+}
+
+// parseBoolQuery accepts the usual truthy spellings ("1", "true",
+// "yes", "on", case-insensitive). Anything else — including absent —
+// is treated as false. Kept tolerant so curl-with-?with_changes=true
+// works alongside the canonical ?with_changes=1.
+func parseBoolQuery(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
 }
 
 // extractRepoSubPath extracts the repo name from paths like /api/repos/{name}/{suffix}.

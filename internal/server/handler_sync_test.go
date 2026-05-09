@@ -971,7 +971,145 @@ func TestRepoLogWithCommits(t *testing.T) {
 	if body.Count != 1 {
 		t.Errorf("expected 1 entry, got %d", body.Count)
 	}
-	if body.Count > 0 && body.Entries[0].Message != "test commit" {
-		t.Errorf("expected message 'test commit', got %s", body.Entries[0].Message)
+	if body.Count > 0 {
+		e := body.Entries[0]
+		if e.Message != "test commit" {
+			t.Errorf("expected message 'test commit', got %s", e.Message)
+		}
+		// Root commit: parents must be empty, refs must include
+		// HEAD + master so a graph view can place the dot.
+		if len(e.Parents) != 0 {
+			t.Errorf("root commit should have no parents, got %v", e.Parents)
+		}
+		if !contains(e.Refs, "HEAD") || !contains(e.Refs, "master") {
+			t.Errorf("refs should contain HEAD and master, got %v", e.Refs)
+		}
+		if e.Email == "" {
+			t.Errorf("author email should be populated")
+		}
 	}
+}
+
+// TestRepoLogGraphShape pins the disclosure shape: parents follow the
+// merge structure, ref decoration carries branch + tag pills, and
+// ?with_changes=1 attaches the per-path file list. Two commits on
+// master, a feature branch, a tag, and a merge commit — small but
+// covers every code path in parseRefs / commitChanges / merge parents.
+func TestRepoLogGraphShape(t *testing.T) {
+	srv := testServer(t)
+	repo := "log-graph"
+	srv.git.InitBare(repo)
+	repoPath := srv.git.RepoPath(repo)
+
+	work := t.TempDir() + "/work"
+	run(t, "git", "clone", repoPath, work)
+	run(t, "git", "-C", work, "config", "user.email", "test@example.com")
+	run(t, "git", "-C", work, "config", "user.name", "Test User")
+
+	writeWorkFile(t, work, "a.txt", "one\n")
+	run(t, "git", "-C", work, "add", "a.txt")
+	run(t, "git", "-C", work, "commit", "-m", "first")
+	run(t, "git", "-C", work, "tag", "v1")
+
+	writeWorkFile(t, work, "b.txt", "two\n")
+	run(t, "git", "-C", work, "add", "b.txt")
+	run(t, "git", "-C", work, "commit", "-m", "second")
+
+	run(t, "git", "-C", work, "checkout", "-b", "feature", "HEAD~1")
+	writeWorkFile(t, work, "c.txt", "three\n")
+	run(t, "git", "-C", work, "add", "c.txt")
+	run(t, "git", "-C", work, "commit", "-m", "feature work")
+
+	run(t, "git", "-C", work, "checkout", "master")
+	run(t, "git", "-C", work, "merge", "--no-ff", "-m", "merge feature", "feature")
+
+	run(t, "git", "-C", work, "push", "--tags", "origin", "master")
+	run(t, "git", "-C", work, "push", "origin", "feature")
+
+	// Lean fetch: no changes, just the graph metadata.
+	req := httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/log?limit=10", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("lean log: expected 200, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	var body RepoLogResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode lean: %v", err)
+	}
+	if body.Count != 4 {
+		t.Fatalf("expected 4 commits in graph, got %d", body.Count)
+	}
+
+	merge := body.Entries[0]
+	if len(merge.Parents) != 2 {
+		t.Errorf("merge commit should have 2 parents, got %v", merge.Parents)
+	}
+	if !contains(merge.Refs, "HEAD") || !contains(merge.Refs, "master") {
+		t.Errorf("merge commit refs should include HEAD + master, got %v", merge.Refs)
+	}
+	for _, c := range merge.Changes {
+		t.Errorf("lean log must not include changes, got %+v", c)
+	}
+
+	// Verify the feature tip carries its branch ref and the tagged
+	// root carries the tag — both ordinary parseRefs paths.
+	var sawFeature, sawTag bool
+	for _, e := range body.Entries {
+		if contains(e.Refs, "feature") {
+			sawFeature = true
+		}
+		if contains(e.Refs, "v1") {
+			sawTag = true
+		}
+	}
+	if !sawFeature {
+		t.Errorf("expected one commit to carry 'feature' ref; got refs %v", refsOf(body.Entries))
+	}
+	if !sawTag {
+		t.Errorf("expected one commit to carry 'v1' tag; got refs %v", refsOf(body.Entries))
+	}
+
+	// Disclosure fetch: with_changes=1 attaches the per-path list.
+	req = httptest.NewRequest(http.MethodGet, "/api/repos/"+repo+"/log?limit=10&with_changes=1", nil)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("disclosure log: expected 200, got %d", rec.Code)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode disclosure: %v", err)
+	}
+	// Find the "first" commit (root, with `a.txt` added) and verify
+	// the change list — root commit diffs against the empty tree.
+	var first *gitmanager.LogEntry
+	for i := range body.Entries {
+		if body.Entries[i].Message == "first" {
+			first = &body.Entries[i]
+			break
+		}
+	}
+	if first == nil {
+		t.Fatalf("no 'first' commit in disclosure response")
+	}
+	if len(first.Changes) != 1 || first.Changes[0].Path != "a.txt" || !strings.HasPrefix(first.Changes[0].Status, "A") {
+		t.Errorf("first commit should disclose A a.txt, got %+v", first.Changes)
+	}
+}
+
+// writeWorkFile is a tiny helper so the graph-shape test reads
+// linearly. Keeps the seedFile API for the existing tests untouched.
+func writeWorkFile(t *testing.T, work, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(work+"/"+name, []byte(content), 0644); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+}
+
+func refsOf(entries []gitmanager.LogEntry) [][]string {
+	out := make([][]string, len(entries))
+	for i, e := range entries {
+		out[i] = e.Refs
+	}
+	return out
 }

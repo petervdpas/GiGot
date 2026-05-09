@@ -88,6 +88,13 @@ definitions:
       path:
         type: string
     type: object
+  git.ChangeFile:
+    properties:
+      path:
+        type: string
+      status:
+        type: string
+    type: object
   git.ChangesInfo:
     properties:
       changes:
@@ -132,12 +139,26 @@ definitions:
     properties:
       author:
         type: string
+      changes:
+        items:
+          $ref: '#/definitions/git.ChangeFile'
+        type: array
       date:
+        type: string
+      email:
         type: string
       hash:
         type: string
       message:
         type: string
+      parents:
+        items:
+          type: string
+        type: array
+      refs:
+        items:
+          type: string
+        type: array
     type: object
   git.SnapshotFile:
     properties:
@@ -4685,7 +4706,13 @@ paths:
       - sync
   /repos/{name}/log:
     get:
-      description: Returns recent commits from a repository
+      description: |-
+        Returns recent commits from a repository, including each
+        commit's parents and ref decoration so callers can render
+        a graph. Set with_changes=1 to also disclose the per-path
+        file changes for every commit (heavier payload — one extra
+        diff-tree per commit). Defaults to the lean shape so graph
+        views stay cheap.
       parameters:
       - description: Repository name
         in: path
@@ -4697,6 +4724,10 @@ paths:
         in: query
         name: limit
         type: integer
+      - description: Include per-commit file changes
+        in: query
+        name: with_changes
+        type: boolean
       produces:
       - application/json
       responses:

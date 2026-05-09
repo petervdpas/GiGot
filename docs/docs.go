@@ -4782,7 +4782,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns recent commits from a repository",
+                "description": "Returns recent commits from a repository, including each\ncommit's parents and ref decoration so callers can render\na graph. Set with_changes=1 to also disclose the per-path\nfile changes for every commit (heavier payload — one extra\ndiff-tree per commit). Defaults to the lean shape so graph\nviews stay cheap.",
                 "produces": [
                     "application/json"
                 ],
@@ -4803,6 +4803,12 @@ const docTemplate = `{
                         "default": 20,
                         "description": "Max number of commits",
                         "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include per-commit file changes",
+                        "name": "with_changes",
                         "in": "query"
                     }
                 ],
@@ -5106,6 +5112,17 @@ const docTemplate = `{
                 }
             }
         },
+        "git.ChangeFile": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "git.ChangesInfo": {
             "type": "object",
             "properties": {
@@ -5174,7 +5191,16 @@ const docTemplate = `{
                 "author": {
                     "type": "string"
                 },
+                "changes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/git.ChangeFile"
+                    }
+                },
                 "date": {
+                    "type": "string"
+                },
+                "email": {
                     "type": "string"
                 },
                 "hash": {
@@ -5182,6 +5208,18 @@ const docTemplate = `{
                 },
                 "message": {
                     "type": "string"
+                },
+                "parents": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "refs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

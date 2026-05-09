@@ -423,16 +423,54 @@ func (m *Manager) CommitCount(name string) (int, error) {
 	return n, nil
 }
 
-// LogEntry describes a single commit.
-type LogEntry struct {
-	Hash    string `json:"hash"`
-	Author  string `json:"author"`
-	Date    string `json:"date"`
-	Message string `json:"message"`
+// ChangeFile is one row in LogEntry.Changes — a path that landed in
+// the commit, with git's standard single-letter status code:
+//   - A: added (file present in commit, absent in parent)
+//   - M: modified (different blob hash from parent)
+//   - D: deleted (file absent in commit, present in parent)
+//   - R: renamed (path changed; status carries similarity score from
+//     `--name-status -M`, e.g. R100 — clients usually only look at
+//     the first byte)
+//
+// For merge commits the diff is reported against the first parent, so
+// changes brought in only by the merge's other parent show up under
+// that parent's own commit — same convention git log uses by default.
+type ChangeFile struct {
+	Path   string `json:"path"`
+	Status string `json:"status"`
 }
 
-// Log returns recent commits from a repository.
-func (m *Manager) Log(name string, limit int) ([]LogEntry, error) {
+// LogEntry describes a single commit. Parents/Refs/Email are populated
+// unconditionally. Changes is only populated when Log is called with
+// withChanges=true (e.g. via /repos/{name}/log?with_changes=1) and is
+// omitted from JSON when nil so the lean shape stays clean for graph
+// callers that don't need the disclosure payload.
+type LogEntry struct {
+	Hash    string       `json:"hash"`
+	Parents []string     `json:"parents"`
+	Refs    []string     `json:"refs"`
+	Author  string       `json:"author"`
+	Email   string       `json:"email"`
+	Date    string       `json:"date"`
+	Message string       `json:"message"`
+	Changes []ChangeFile `json:"changes,omitempty"`
+}
+
+// fieldSep / recordSep are ASCII control bytes (US / RS) used to fence
+// `git log --format` output. Picked over `|` because commit subjects
+// and ref decorations both contain `|` in the wild — these bytes do
+// not appear in normal git output.
+const (
+	fieldSep  = "\x1f"
+	recordSep = "\x1e"
+)
+
+// Log returns recent commits from a repository, including each
+// commit's parents, ref decoration, and author email. When
+// withChanges is true, every entry also carries its per-path file
+// changes (one extra `git diff-tree` call per commit; deliberately
+// opt-in so the default graph fetch stays cheap).
+func (m *Manager) Log(name string, limit int, withChanges bool) ([]LogEntry, error) {
 	path := m.RepoPath(name)
 	if !m.Exists(name) {
 		return nil, fmt.Errorf("repository %q does not exist", name)
@@ -442,9 +480,11 @@ func (m *Manager) Log(name string, limit int) ([]LogEntry, error) {
 		limit = 20
 	}
 
+	// Format: hash | parents | refs | author-name | author-email | iso-date | subject
+	// Records are %x1e-separated so newlines in subjects don't split rows.
 	cmd := exec.Command("git", "-C", path, "log",
 		fmt.Sprintf("--max-count=%d", limit),
-		"--format=%H|%an|%ai|%s",
+		"--format=%H"+fieldSep+"%P"+fieldSep+"%D"+fieldSep+"%an"+fieldSep+"%ae"+fieldSep+"%aI"+fieldSep+"%s"+recordSep,
 	)
 	out, err := cmd.Output()
 	if err != nil {
@@ -452,20 +492,111 @@ func (m *Manager) Log(name string, limit int) ([]LogEntry, error) {
 	}
 
 	var entries []LogEntry
+	for _, raw := range strings.Split(string(out), recordSep) {
+		raw = strings.Trim(raw, "\n")
+		if raw == "" {
+			continue
+		}
+		parts := strings.Split(raw, fieldSep)
+		if len(parts) < 7 {
+			continue
+		}
+		e := LogEntry{
+			Hash:    parts[0],
+			Parents: splitParents(parts[1]),
+			Refs:    parseRefs(parts[2]),
+			Author:  parts[3],
+			Email:   parts[4],
+			Date:    parts[5],
+			Message: parts[6],
+		}
+		if withChanges {
+			e.Changes = commitChanges(path, e.Hash, len(e.Parents))
+		}
+		entries = append(entries, e)
+	}
+	return entries, nil
+}
+
+// splitParents splits the space-separated list emitted by %P. An empty
+// input (root commit) returns a nil slice rather than [""] so JSON
+// serialises as [] and downstream length checks work as expected.
+func splitParents(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, " ")
+}
+
+// parseRefs extracts the bare ref names from %D's decoration string.
+// Git emits things like:
+//
+//	HEAD -> master, origin/master, tag: v1.2, origin/HEAD
+//
+// We strip the "HEAD -> " arrow so HEAD and the branch name both land
+// in the slice, drop "tag: " prefixes, and ignore "origin/HEAD"
+// symbolic refs (they alias another entry already in the list).
+func parseRefs(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	var refs []string
+	for _, raw := range strings.Split(s, ",") {
+		ref := strings.TrimSpace(raw)
+		if ref == "" {
+			continue
+		}
+		// "HEAD -> master" → emit both "HEAD" and "master".
+		if strings.Contains(ref, " -> ") {
+			pair := strings.SplitN(ref, " -> ", 2)
+			refs = append(refs, strings.TrimSpace(pair[0]), strings.TrimSpace(pair[1]))
+			continue
+		}
+		// Skip symbolic-ref aliases like "origin/HEAD" — they always
+		// duplicate another concrete entry on the same commit.
+		if strings.HasSuffix(ref, "/HEAD") {
+			continue
+		}
+		refs = append(refs, strings.TrimPrefix(ref, "tag: "))
+	}
+	return refs
+}
+
+// commitChanges runs `git diff-tree --name-status -r` for one commit
+// and returns the resulting [{path, status}] list. For merges the
+// implicit base is the first parent (matches `git log` default). On a
+// root commit (no parents) we diff against the empty tree so the
+// initial set of files surfaces with status A.
+func commitChanges(repoPath, hash string, parentCount int) []ChangeFile {
+	args := []string{"-C", repoPath, "diff-tree", "--no-commit-id", "--name-status", "-r"}
+	if parentCount == 0 {
+		// 4b825dc642cb6eb9a060e54bf8d69288fbee4904 is git's well-known
+		// empty-tree SHA; works without writing it into the object DB.
+		args = append(args, "4b825dc642cb6eb9a060e54bf8d69288fbee4904", hash)
+	} else {
+		args = append(args, hash)
+	}
+	out, err := exec.Command("git", args...).Output()
+	if err != nil {
+		return nil
+	}
+	var out2 []ChangeFile
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 4)
-		if len(parts) < 4 {
+		// Tab-delimited: STATUS\tPATH (or STATUS\tOLD\tNEW for renames).
+		parts := strings.Split(line, "\t")
+		if len(parts) < 2 {
 			continue
 		}
-		entries = append(entries, LogEntry{
-			Hash:    parts[0],
-			Author:  parts[1],
-			Date:    parts[2],
-			Message: parts[3],
-		})
+		path := parts[1]
+		if len(parts) >= 3 {
+			path = parts[len(parts)-1] // rename target
+		}
+		out2 = append(out2, ChangeFile{Status: parts[0], Path: path})
 	}
-	return entries, nil
+	return out2
 }
