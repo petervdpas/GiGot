@@ -79,11 +79,13 @@ func MergeMeta(base, theirs, yours map[string]any) (map[string]any, []FieldConfl
 	return merged, conflicts
 }
 
-// UpdatedWinner returns "theirs" or "yours" based on max(meta.updated).
+// UpdatedWinner returns "theirs" or "yours" based on max(meta.updated.at).
 // Non-RFC3339 or missing values fall back to "yours" so a write with
 // a fresher clock on either side still deterministically resolves.
 // Equal timestamps resolve to "yours" (the incoming side) — arbitrary
-// but stable.
+// but stable. Accepts both the canonical audit-block form
+// ({at, name, email}) emitted by current Formidable and the legacy
+// flat RFC3339 string form from older records.
 func UpdatedWinner(theirs, yours map[string]any) string {
 	tt, tok := parseUpdated(theirs)
 	yt, yok := parseUpdated(yours)
@@ -108,20 +110,32 @@ func parseUpdated(m map[string]any) (time.Time, bool) {
 	if !ok {
 		return time.Time{}, false
 	}
-	s, ok := v.(string)
-	if !ok {
+	return parseAuditAt(v)
+}
+
+// parseAuditAt accepts both the canonical audit-block object
+// ({at, name, email}) emitted by current Formidable and the legacy
+// flat RFC3339 string form. Returns false when neither parses.
+func parseAuditAt(v any) (time.Time, bool) {
+	if obj, ok := v.(map[string]any); ok {
+		if s, ok := obj["at"].(string); ok {
+			if t, err := time.Parse(time.RFC3339, s); err == nil {
+				return t, true
+			}
+		}
 		return time.Time{}, false
 	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return time.Time{}, false
+	if s, ok := v.(string); ok {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			return t, true
+		}
 	}
-	return t, true
+	return time.Time{}, false
 }
 
 func mergeUpdated(theirs, yours any) any {
-	ts, tok := asTime(theirs)
-	ys, yok := asTime(yours)
+	ts, tok := parseAuditAt(theirs)
+	ys, yok := parseAuditAt(yours)
 	switch {
 	case tok && yok:
 		if ts.After(ys) {
@@ -139,18 +153,6 @@ func mergeUpdated(theirs, yours any) any {
 		}
 		return theirs
 	}
-}
-
-func asTime(v any) (time.Time, bool) {
-	s, ok := v.(string)
-	if !ok {
-		return time.Time{}, false
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return t, true
 }
 
 func mergeTags(theirs, yours any) any {

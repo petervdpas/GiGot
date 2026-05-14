@@ -51,9 +51,11 @@ type FormidableTemplate struct {
 }
 
 // FormidableStorage is one template-directory under storage/ that
-// holds at least one file. Lets a client populate the sidebar with
+// holds at least one record. Lets a client populate the sidebar with
 // directory names that actually have content without listing every
-// blob.
+// blob. Files counts .meta.json records only — the storage/<tpl>/
+// images/ subtree and any other non-record files are excluded so the
+// number matches Formidable's own record count.
 type FormidableStorage struct {
 	Template string `json:"template"`
 	Files    int    `json:"files"`
@@ -185,7 +187,11 @@ func collectFormidableTemplates(tree []gitmanager.TreeEntry) []FormidableTemplat
 }
 
 // collectFormidableStorage groups storage entries by their first
-// segment (the template-directory name) and counts files under each.
+// segment (the template-directory name) and counts records under
+// each. A "record" is a .meta.json blob directly under
+// storage/<template>/ — not nested under any subdirectory. The
+// storage/<template>/images/ subtree and any other non-record paths
+// are excluded so the count matches Formidable's own record count.
 // Entries directly at storage/ root are ignored — Formidable's
 // storage layout is always storage/<template>/...
 func collectFormidableStorage(tree []gitmanager.TreeEntry) []FormidableStorage {
@@ -196,12 +202,21 @@ func collectFormidableStorage(tree []gitmanager.TreeEntry) []FormidableStorage {
 			continue
 		}
 		rest := e.Path[len(prefix):]
-		// Need at least <template>/<file>.
+		// Need exactly <template>/<file>. Anything deeper (e.g.
+		// images/<name>.png) is not a record and must not inflate
+		// the count.
 		idx := strings.Index(rest, "/")
 		if idx <= 0 {
 			continue
 		}
 		template := rest[:idx]
+		tail := rest[idx+1:]
+		if strings.Contains(tail, "/") {
+			continue
+		}
+		if !strings.HasSuffix(tail, ".meta.json") {
+			continue
+		}
 		counts[template]++
 	}
 	out := make([]FormidableStorage, 0, len(counts))

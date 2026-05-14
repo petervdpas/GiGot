@@ -140,13 +140,16 @@ func TestCollectFormidableTemplates_FlatYamlOnly(t *testing.T) {
 }
 
 // TestCollectFormidableStorage_GroupsByTemplate — storage entries
-// roll up under their first segment with file counts. Files
-// directly at storage/ root are ignored (no template name).
+// roll up under their first segment with record counts. Files count
+// is .meta.json blobs directly under storage/<template>/ only — the
+// images/ subtree and non-record files are excluded so the number
+// matches Formidable's own record count. Files directly at storage/
+// root are ignored (no template name).
 func TestCollectFormidableStorage_GroupsByTemplate(t *testing.T) {
 	tree := fakeTree(
 		"storage/addresses/oak.meta.json",
 		"storage/addresses/elm.meta.json",
-		"storage/addresses/images/photo.jpg",
+		"storage/addresses/images/photo.jpg", // image — skip
 		"storage/notes/one.meta.json",
 		"storage/loose-file-no-template", // no template segment — skip
 		"templates/basic.yaml",           // wrong dir — skip
@@ -156,11 +159,30 @@ func TestCollectFormidableStorage_GroupsByTemplate(t *testing.T) {
 		t.Fatalf("len = %d, want 2: %+v", len(got), got)
 	}
 	// Sorted alphabetically.
-	if got[0].Template != "addresses" || got[0].Files != 3 {
-		t.Fatalf("got[0] = %+v, want {addresses, 3}", got[0])
+	if got[0].Template != "addresses" || got[0].Files != 2 {
+		t.Fatalf("got[0] = %+v, want {addresses, 2}", got[0])
 	}
 	if got[1].Template != "notes" || got[1].Files != 1 {
 		t.Fatalf("got[1] = %+v, want {notes, 1}", got[1])
+	}
+}
+
+// TestCollectFormidableStorage_ExcludesNonRecords — a template
+// directory holding only images (or other non-.meta.json files) must
+// not appear in the response at all: its record count is zero.
+func TestCollectFormidableStorage_ExcludesNonRecords(t *testing.T) {
+	tree := fakeTree(
+		"storage/photo-only/images/a.jpg",
+		"storage/photo-only/images/b.png",
+		"storage/photo-only/readme.txt",
+		"storage/records/one.meta.json",
+	)
+	got := collectFormidableStorage(tree)
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1 (photo-only has zero records): %+v", len(got), got)
+	}
+	if got[0].Template != "records" || got[0].Files != 1 {
+		t.Fatalf("got[0] = %+v, want {records, 1}", got[0])
 	}
 }
 

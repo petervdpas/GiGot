@@ -185,3 +185,89 @@ func TestUpdatedWinner_UnparsableFallsBackToPresentSide(t *testing.T) {
 		t.Errorf("unparsable theirs should lose to parsable yours, got %s", got)
 	}
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Canonical Formidable audit-block shape: meta.updated is an object
+// with {at, name, email} rather than a flat RFC3339 string. Both
+// shapes must be accepted so legacy records and current records can
+// be merged in either direction.
+// ─────────────────────────────────────────────────────────────────────
+
+func TestUpdatedWinner_AuditBlockShapeBothSides(t *testing.T) {
+	theirs := map[string]any{"updated": map[string]any{
+		"at":    "2025-01-01T00:00:00Z",
+		"name":  "alice",
+		"email": "alice@example.com",
+	}}
+	yours := map[string]any{"updated": map[string]any{
+		"at":    "2025-06-01T00:00:00Z",
+		"name":  "bob",
+		"email": "bob@example.com",
+	}}
+	if got := UpdatedWinner(theirs, yours); got != "yours" {
+		t.Errorf("audit-block yours (newer) should win, got %s", got)
+	}
+}
+
+func TestUpdatedWinner_AuditBlockMixedWithLegacyString(t *testing.T) {
+	theirs := map[string]any{"updated": map[string]any{
+		"at": "2025-06-01T00:00:00Z",
+	}}
+	yours := map[string]any{"updated": "2025-01-01T00:00:00Z"}
+	if got := UpdatedWinner(theirs, yours); got != "theirs" {
+		t.Errorf("audit-block theirs (newer) should beat legacy-string yours (older), got %s", got)
+	}
+}
+
+func TestUpdatedWinner_AuditBlockWithoutAtIsUnparsable(t *testing.T) {
+	theirs := map[string]any{"updated": map[string]any{"name": "alice"}}
+	yours := map[string]any{"updated": "2025-01-01T00:00:00Z"}
+	if got := UpdatedWinner(theirs, yours); got != "yours" {
+		t.Errorf("audit block without parseable at should lose to legacy string, got %s", got)
+	}
+}
+
+func TestMergeMeta_UpdatedAuditBlockTakesMax(t *testing.T) {
+	theirs := map[string]any{"updated": map[string]any{
+		"at":    "2025-01-01T00:00:00Z",
+		"name":  "alice",
+		"email": "alice@example.com",
+	}}
+	yours := map[string]any{"updated": map[string]any{
+		"at":    "2025-06-01T00:00:00Z",
+		"name":  "bob",
+		"email": "bob@example.com",
+	}}
+	merged, conflicts := MergeMeta(nil, theirs, yours)
+	if len(conflicts) != 0 {
+		t.Fatalf("unexpected conflicts: %v", conflicts)
+	}
+	gotObj, ok := merged["updated"].(map[string]any)
+	if !ok {
+		t.Fatalf("merged.updated is not an object: %T", merged["updated"])
+	}
+	if gotObj["at"] != "2025-06-01T00:00:00Z" {
+		t.Errorf("merged.updated.at = %v, want yours (newer)", gotObj["at"])
+	}
+	if gotObj["name"] != "bob" {
+		t.Errorf("merged.updated.name = %v, want bob (winner)", gotObj["name"])
+	}
+}
+
+func TestMergeMeta_OtherKeysFollowAuditBlockWinner(t *testing.T) {
+	// Same shape as TestMergeMeta_AuthorFollowsUpdatedWinner but with
+	// the canonical audit-block instead of a flat string. Default-LWW
+	// keys (here custom_note) must follow the audit-block timestamp.
+	theirs := map[string]any{
+		"updated":     map[string]any{"at": "2025-01-01T00:00:00Z"},
+		"custom_note": "t-note",
+	}
+	yours := map[string]any{
+		"updated":     map[string]any{"at": "2025-06-01T00:00:00Z"},
+		"custom_note": "y-note",
+	}
+	merged, _ := MergeMeta(nil, theirs, yours)
+	if merged["custom_note"] != "y-note" {
+		t.Errorf("default LWW must use audit-block timestamp, got custom_note=%v", merged["custom_note"])
+	}
+}
