@@ -17,11 +17,14 @@ import (
 	"net/http/cookiejar"
 	"os/exec"
 
+	"time"
+
 	"github.com/cucumber/godog"
 	"github.com/petervdpas/GiGot/internal/accounts"
 	"github.com/petervdpas/GiGot/internal/auth"
 	"github.com/petervdpas/GiGot/internal/config"
 	"github.com/petervdpas/GiGot/internal/crypto"
+	"github.com/petervdpas/GiGot/internal/destinations"
 	gitmanager "github.com/petervdpas/GiGot/internal/git"
 	"github.com/petervdpas/GiGot/internal/policy"
 	"github.com/petervdpas/GiGot/internal/server"
@@ -1408,6 +1411,69 @@ func stringContains(s, substr string) bool {
 	return false
 }
 
+// destinationRemoteStatusIs primes a destination's Remote* observability
+// fields so a scenario can verify they get invalidated by a downstream
+// HEAD-bumping write. Production code only sets these via mirror push
+// or ls-remote — neither runs in the integration harness against a
+// real remote — so the test drives the store directly.
+func (tc *testContext) destinationRemoteStatusIs(destSaveKey, repo, status string) error {
+	id := tc.savedValues[destSaveKey]
+	if id == "" {
+		return fmt.Errorf("no saved destination id under %q", destSaveKey)
+	}
+	now := time.Now().UTC()
+	_, err := tc.srv.DestinationsStore().Update(repo, id, func(d *destinations.Destination) {
+		d.RemoteStatus = status
+		d.RemoteCheckedAt = &now
+		d.RemoteRefs = []destinations.RemoteRefStatus{
+			{Ref: "refs/heads/main", Local: "abc", Remote: "abc", State: "same"},
+		}
+	})
+	return err
+}
+
+// destinationRemoteStatusShouldBeEmpty asserts the destination's
+// RemoteStatus + RemoteCheckedAt are cleared — the post-condition of
+// afterRepoHeadBump after any write that moves HEAD.
+func (tc *testContext) destinationRemoteStatusShouldBeEmpty(destSaveKey, repo string) error {
+	id := tc.savedValues[destSaveKey]
+	if id == "" {
+		return fmt.Errorf("no saved destination id under %q", destSaveKey)
+	}
+	d, err := tc.srv.DestinationsStore().Get(repo, id)
+	if err != nil {
+		return fmt.Errorf("lookup destination %s/%s: %w", repo, id, err)
+	}
+	if d.RemoteStatus != "" {
+		return fmt.Errorf("RemoteStatus = %q, want empty", d.RemoteStatus)
+	}
+	if d.RemoteCheckedAt != nil {
+		return fmt.Errorf("RemoteCheckedAt should be nil after invalidation")
+	}
+	if len(d.RemoteRefs) != 0 {
+		return fmt.Errorf("RemoteRefs should be empty after invalidation, got %d entries", len(d.RemoteRefs))
+	}
+	return nil
+}
+
+// destinationRemoteStatusShouldStillBe asserts RemoteStatus survived —
+// used in negative-path scenarios where a write fails and must not
+// invalidate state it never moved past.
+func (tc *testContext) destinationRemoteStatusShouldStillBe(destSaveKey, repo, want string) error {
+	id := tc.savedValues[destSaveKey]
+	if id == "" {
+		return fmt.Errorf("no saved destination id under %q", destSaveKey)
+	}
+	d, err := tc.srv.DestinationsStore().Get(repo, id)
+	if err != nil {
+		return err
+	}
+	if d.RemoteStatus != want {
+		return fmt.Errorf("RemoteStatus = %q, want %q (failed write must not invalidate)", d.RemoteStatus, want)
+	}
+	return nil
+}
+
 func InitializeScenario(ctx *godog.ScenarioContext) {
 	tc := &testContext{}
 
@@ -1525,6 +1591,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I save the JSON response "([^"]*)" as "([^"]*)"$`, tc.iSaveTheJSONResponseAs)
 	ctx.Step(`^I save the current token as "([^"]*)"$`, tc.iSaveTheCurrentTokenAs)
 	ctx.Step(`^the JSON response "([^"]*)" should equal saved "([^"]*)"$`, tc.theJSONResponseShouldEqualSaved)
+	ctx.Step(`^destination saved as "([^"]*)" on repo "([^"]*)" has remote_status "([^"]*)"$`, tc.destinationRemoteStatusIs)
+	ctx.Step(`^destination saved as "([^"]*)" on repo "([^"]*)" should have empty remote_status$`, tc.destinationRemoteStatusShouldBeEmpty)
+	ctx.Step(`^destination saved as "([^"]*)" on repo "([^"]*)" should still have remote_status "([^"]*)"$`, tc.destinationRemoteStatusShouldStillBe)
 	ctx.Step(`^the server restarts$`, tc.theServerRestarts)
 	ctx.Step(`^the server restarts with auth (enabled|disabled)$`, tc.theServerRestartsWithAuth)
 

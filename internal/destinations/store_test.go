@@ -2,7 +2,9 @@ package destinations
 
 import (
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/petervdpas/GiGot/internal/crypto"
 )
@@ -248,5 +250,186 @@ func TestAdd_ReturnsCopyNotAlias(t *testing.T) {
 	}
 	if !fresh.Enabled {
 		t.Error("caller mutation leaked into store: Enabled flipped to false")
+	}
+}
+
+// addWithRemoteStatus is a test helper that adds a destination and
+// then stamps every remote-status field on it so the tests below can
+// observe what InvalidateRepoRemoteStatus clears.
+func addWithRemoteStatus(t *testing.T, s *Store, repo string) string {
+	t.Helper()
+	d, err := s.Add(repo, Destination{URL: "u", CredentialName: "c", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	_, err = s.Update(repo, d.ID, func(x *Destination) {
+		x.RemoteStatus = "in_sync"
+		x.RemoteCheckedAt = &now
+		x.RemoteCheckError = "stale-but-cleared"
+		x.RemoteRefs = []RemoteRefStatus{
+			{Ref: "refs/heads/main", Local: "abc", Remote: "abc", State: "same"},
+		}
+		past := now.Add(-time.Hour)
+		x.LastSyncAt = &past
+		x.LastSyncStatus = "ok"
+		x.LastSyncError = ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d.ID
+}
+
+func TestInvalidateRepoRemoteStatus_ClearsRemoteFields(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	id := addWithRemoteStatus(t, s, "r")
+
+	if err := s.InvalidateRepoRemoteStatus("r"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Get("r", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RemoteStatus != "" {
+		t.Errorf("RemoteStatus = %q, want empty", got.RemoteStatus)
+	}
+	if got.RemoteCheckedAt != nil {
+		t.Errorf("RemoteCheckedAt = %v, want nil", got.RemoteCheckedAt)
+	}
+	if got.RemoteCheckError != "" {
+		t.Errorf("RemoteCheckError = %q, want empty", got.RemoteCheckError)
+	}
+	if len(got.RemoteRefs) != 0 {
+		t.Errorf("RemoteRefs = %+v, want empty", got.RemoteRefs)
+	}
+}
+
+func TestInvalidateRepoRemoteStatus_LeavesLastSyncIntact(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	id := addWithRemoteStatus(t, s, "r")
+
+	if err := s.InvalidateRepoRemoteStatus("r"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := s.Get("r", id)
+	if got.LastSyncStatus != "ok" {
+		t.Errorf("LastSyncStatus = %q, want ok", got.LastSyncStatus)
+	}
+	if got.LastSyncAt == nil {
+		t.Error("LastSyncAt was nilled out — should survive remote-status invalidation")
+	}
+}
+
+func TestInvalidateRepoRemoteStatus_LeavesOtherReposAlone(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	_ = addWithRemoteStatus(t, s, "r1")
+	otherID := addWithRemoteStatus(t, s, "r2")
+
+	if err := s.InvalidateRepoRemoteStatus("r1"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := s.Get("r2", otherID)
+	if got.RemoteStatus != "in_sync" {
+		t.Errorf("r2 RemoteStatus was wrongly cleared: %q", got.RemoteStatus)
+	}
+	if got.RemoteCheckedAt == nil {
+		t.Error("r2 RemoteCheckedAt was wrongly cleared")
+	}
+}
+
+func TestInvalidateRepoRemoteStatus_UnknownRepoIsNoop(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	if err := s.InvalidateRepoRemoteStatus("never-existed"); err != nil {
+		t.Fatalf("want no error on unknown repo, got %v", err)
+	}
+}
+
+func TestInvalidateRepoRemoteStatus_AllDestinationsOnRepoCleared(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	idA := addWithRemoteStatus(t, s, "r")
+	idB := addWithRemoteStatus(t, s, "r")
+	idC := addWithRemoteStatus(t, s, "r")
+
+	if err := s.InvalidateRepoRemoteStatus("r"); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{idA, idB, idC} {
+		got, _ := s.Get("r", id)
+		if got.RemoteStatus != "" || got.RemoteCheckedAt != nil || len(got.RemoteRefs) != 0 {
+			t.Errorf("destination %s not fully cleared: %+v", id, got)
+		}
+	}
+}
+
+func TestInvalidateRepoRemoteStatus_IdempotentOnAlreadyEmpty(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	d, err := s.Add("r", Destination{URL: "u", CredentialName: "c", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InvalidateRepoRemoteStatus("r"); err != nil {
+		t.Fatalf("first invalidate on never-checked destination: %v", err)
+	}
+	if err := s.InvalidateRepoRemoteStatus("r"); err != nil {
+		t.Fatalf("second invalidate (idempotent): %v", err)
+	}
+	got, _ := s.Get("r", d.ID)
+	if got.RemoteStatus != "" || got.URL != "u" || got.CredentialName != "c" {
+		t.Errorf("idempotent invalidate corrupted state: %+v", got)
+	}
+}
+
+// TestInvalidateRepoRemoteStatus_ConcurrentSafeUnderRace exercises the
+// write-lock: a burst of concurrent invalidations on the same repo
+// must not race or leave the store in a torn state. Pair with
+// `go test -race`.
+func TestInvalidateRepoRemoteStatus_ConcurrentSafeUnderRace(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	for i := 0; i < 5; i++ {
+		_ = addWithRemoteStatus(t, s, "r")
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.InvalidateRepoRemoteStatus("r"); err != nil {
+				t.Errorf("concurrent invalidate: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	for _, d := range s.All("r") {
+		if d.RemoteStatus != "" || d.RemoteCheckedAt != nil {
+			t.Errorf("concurrent invalidate left tear: %+v", d)
+		}
+	}
+}
+
+func TestInvalidateRepoRemoteStatus_PersistsAcrossReopen(t *testing.T) {
+	s, enc, path := newTestStore(t)
+	id := addWithRemoteStatus(t, s, "r")
+
+	if err := s.InvalidateRepoRemoteStatus("r"); err != nil {
+		t.Fatal(err)
+	}
+
+	s2, err := Open(path, enc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s2.Get("r", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RemoteStatus != "" || got.RemoteCheckedAt != nil {
+		t.Fatalf("invalidation not persisted: %+v", got)
 	}
 }

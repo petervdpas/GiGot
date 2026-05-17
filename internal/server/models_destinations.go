@@ -26,6 +26,13 @@ type UpdateDestinationRequest struct {
 
 // DestinationView is the wire-format destination returned on list /
 // get / create / update responses.
+//
+// The remote_* fields are invalidated (cleared) on any HEAD-bumping
+// write to the repo (POST /commits, PUT /files, smart-HTTP push) so
+// a stale in_sync verdict cannot outlive the commit that made it
+// stale. Auto-mirror destinations get re-marked in_sync by the
+// worker; manual-only destinations stay cleared until the operator
+// runs /status/refresh or /sync.
 type DestinationView struct {
 	ID             string     `json:"id"`
 	URL            string     `json:"url"`
@@ -36,10 +43,12 @@ type DestinationView struct {
 	LastSyncError  string     `json:"last_sync_error,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 
-	RemoteStatus     string                  `json:"remote_status,omitempty"`
-	RemoteCheckedAt  *time.Time              `json:"remote_checked_at,omitempty"`
-	RemoteCheckError string                  `json:"remote_check_error,omitempty"`
-	RemoteRefs       []RemoteRefStatusView   `json:"remote_refs,omitempty"`
+	// RemoteStatus is one of "" (never checked / invalidated by a
+	// HEAD bump), "in_sync", "diverged", or "error".
+	RemoteStatus     string                `json:"remote_status,omitempty"`
+	RemoteCheckedAt  *time.Time            `json:"remote_checked_at,omitempty"`
+	RemoteCheckError string                `json:"remote_check_error,omitempty"`
+	RemoteRefs       []RemoteRefStatusView `json:"remote_refs,omitempty"`
 }
 
 // RemoteRefStatusView is the wire shape of one per-ref entry in the

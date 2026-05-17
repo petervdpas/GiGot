@@ -103,7 +103,13 @@ func (s *Server) handleGitUploadPack(w http.ResponseWriter, r *http.Request) {
 
 // handleGitReceivePack godoc
 // @Summary      Git push
-// @Description  Git smart HTTP protocol — receives packfile data for push operations
+// @Description  Git smart HTTP protocol — receives packfile data for push operations.
+// @Description  When at least one ref actually moves, every destination's
+// @Description  `remote_status` on this repo is invalidated (the prior
+// @Description  in_sync verdict was for the old HEAD); enabled-for-auto
+// @Description  destinations are re-marked in_sync as the worker pushes
+// @Description  them, manual-only destinations fall back to "" until the
+// @Description  operator runs Refresh status or Push to remote.
 // @Tags        git
 // @Param        name  path  string  true  "Repository name"
 // @Accept       octet-stream
@@ -182,10 +188,9 @@ func (s *Server) handleGitService(w http.ResponseWriter, r *http.Request, servic
 		// Fan out to mirror destinations only when at least one ref
 		// actually moved. A receive-pack that rejected every update
 		// leaves the tree exactly as the mirrors already have it; no
-		// point firing a no-op push. Worker is optional — tests that
-		// want deterministic behavior can nil it out.
-		if anyMoved && s.mirrorWorker != nil {
-			s.mirrorWorker.enqueue(name)
+		// point invalidating or firing a no-op push.
+		if anyMoved {
+			s.afterRepoHeadBump(name)
 		}
 	}
 

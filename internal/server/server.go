@@ -518,6 +518,15 @@ func (s *Server) TokenStrategy() *auth.TokenStrategy {
 	return s.tokenStrategy
 }
 
+// DestinationsStore returns the mirror-destinations store so external
+// callers (integration tests primarily) can read/seed destination
+// state without going through the HTTP surface — useful when a
+// scenario needs to prime fields (RemoteStatus, RemoteCheckedAt) that
+// real production code only mutates via mirror push / ls-remote.
+func (s *Server) DestinationsStore() *destinations.Store {
+	return s.destinations
+}
+
 // SetVersion stamps the build-time version onto the server so brand
 // strips (landing page, login, register, admin sidebar) can render
 // "GiGot vX.Y.Z". Called once from cli.Execute after server.New;

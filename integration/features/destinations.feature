@@ -279,3 +279,89 @@ Feature: Mirror-sync destinations (admin)
     And I log in as admin "alice" with password "hunter2"
     And I GET "/api/admin/repos/addresses/destinations"
     Then the JSON response "count" should be 1
+
+  # ── Remote-status invalidation after HEAD bumps ──────────────────
+  #
+  # When a write moves the repo's HEAD (POST /commits, PUT /files,
+  # smart-HTTP receive-pack), the server invalidates every
+  # destination's RemoteStatus on that repo. This keeps the
+  # admin-UI "in_sync" badge honest for manual-only destinations
+  # (Enabled=false), where the auto-mirror worker would otherwise
+  # never run to re-stamp the badge after the new HEAD lands.
+
+  Scenario: POST /commits clears RemoteStatus on every destination of the repo
+    Given the server is running in formidable-first mode
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/credentials" with body '{"name":"c","kind":"pat","secret":"s"}'
+    And I POST "/api/repos" with body '{"name":"invalidate-on-commit"}'
+    Then the response status should be 201
+    When I POST "/api/admin/repos/invalidate-on-commit/destinations" with body '{"url":"https://x","credential_name":"c","enabled":false}'
+    Then the response status should be 201
+    And I save the JSON response "id" as "dest_id"
+    Given destination saved as "dest_id" on repo "invalidate-on-commit" has remote_status "in_sync"
+    When I GET "/api/repos/invalidate-on-commit/head"
+    And I save the JSON response "version" as "head0"
+    And I POST "/api/repos/invalidate-on-commit/commits" with body '{"parent_version":"${head0}","changes":[{"op":"put","path":"templates/a.yaml","content_b64":"YTogMQo="}],"message":"first"}'
+    Then the response status should be 200
+    And destination saved as "dest_id" on repo "invalidate-on-commit" should have empty remote_status
+
+  Scenario: PUT /files clears RemoteStatus on every destination of the repo
+    Given the server is running in formidable-first mode
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/credentials" with body '{"name":"c","kind":"pat","secret":"s"}'
+    And I POST "/api/repos" with body '{"name":"invalidate-on-put"}'
+    Then the response status should be 201
+    When I POST "/api/admin/repos/invalidate-on-put/destinations" with body '{"url":"https://x","credential_name":"c","enabled":false}'
+    Then the response status should be 201
+    And I save the JSON response "id" as "dest_id"
+    Given destination saved as "dest_id" on repo "invalidate-on-put" has remote_status "in_sync"
+    When I GET "/api/repos/invalidate-on-put/head"
+    And I save the JSON response "version" as "head0"
+    And I put binary file "templates/new.yaml" in repo "invalidate-on-put" with bytes "6e616d653a206e6577" and parent "${head0}"
+    Then the response status should be 200
+    And destination saved as "dest_id" on repo "invalidate-on-put" should have empty remote_status
+
+  Scenario: Invalidation is scoped to the writing repo
+    Given the server is running in formidable-first mode
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/credentials" with body '{"name":"c","kind":"pat","secret":"s"}'
+    And I POST "/api/repos" with body '{"name":"repo-a"}'
+    Then the response status should be 201
+    When I POST "/api/repos" with body '{"name":"repo-b"}'
+    Then the response status should be 201
+    When I POST "/api/admin/repos/repo-a/destinations" with body '{"url":"https://x-a","credential_name":"c","enabled":false}'
+    Then the response status should be 201
+    And I save the JSON response "id" as "dest_a"
+    When I POST "/api/admin/repos/repo-b/destinations" with body '{"url":"https://x-b","credential_name":"c","enabled":false}'
+    Then the response status should be 201
+    And I save the JSON response "id" as "dest_b"
+    Given destination saved as "dest_a" on repo "repo-a" has remote_status "in_sync"
+    And destination saved as "dest_b" on repo "repo-b" has remote_status "in_sync"
+    When I GET "/api/repos/repo-a/head"
+    And I save the JSON response "version" as "head_a"
+    And I POST "/api/repos/repo-a/commits" with body '{"parent_version":"${head_a}","changes":[{"op":"put","path":"templates/a.yaml","content_b64":"YTogMQo="}],"message":"a"}'
+    Then the response status should be 200
+    And destination saved as "dest_a" on repo "repo-a" should have empty remote_status
+    And destination saved as "dest_b" on repo "repo-b" should still have remote_status "in_sync"
+
+  Scenario: A rejected commit leaves RemoteStatus untouched
+    Given the server is running in formidable-first mode
+    And an admin "alice" exists with password "hunter2"
+    When I log in as admin "alice" with password "hunter2"
+    And I POST "/api/admin/credentials" with body '{"name":"c","kind":"pat","secret":"s"}'
+    And I POST "/api/repos" with body '{"name":"rejected-commit"}'
+    Then the response status should be 201
+    When I POST "/api/admin/repos/rejected-commit/destinations" with body '{"url":"https://x","credential_name":"c","enabled":false}'
+    Then the response status should be 201
+    And I save the JSON response "id" as "dest_id"
+    Given destination saved as "dest_id" on repo "rejected-commit" has remote_status "in_sync"
+    # parent_version is not a known commit — the server rejects with
+    # 422 before any HEAD movement. The invariant being exercised is
+    # "no HEAD movement → no invalidation", regardless of which 4xx
+    # surfaces the rejection.
+    When I POST "/api/repos/rejected-commit/commits" with body '{"parent_version":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","changes":[{"op":"put","path":"templates/a.yaml","content_b64":"YTogMQo="}],"message":"unknown parent"}'
+    Then the response status should be 422
+    And destination saved as "dest_id" on repo "rejected-commit" should still have remote_status "in_sync"

@@ -266,6 +266,60 @@ func (s *Store) Remove(repo, id string) error {
 	return s.persist()
 }
 
+// InvalidateRepoRemoteStatus clears the Remote* observability fields
+// on every destination of the given repo and persists once. Called
+// from the post-HEAD-bump hook so a manual mirror destination
+// (Enabled=false, auto-mirror toggled off) doesn't continue to
+// advertise the prior commit's "in_sync" verdict after the local HEAD
+// has moved past it. Auto-mirror destinations get re-marked
+// "in_sync" by the worker moments later, so no UI flicker in
+// practice; manual destinations correctly fall back to "" (never
+// checked) until the operator clicks Refresh status / Push to remote.
+//
+// LastSync* fields are deliberately preserved: they record the last
+// push attempt's outcome (separate from the remote-comparison badge)
+// and remain meaningful as history even when the remote view is now
+// stale. Unknown repos are a no-op.
+func (s *Store) InvalidateRepoRemoteStatus(repo string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	byID, ok := s.items[repo]
+	if !ok || len(byID) == 0 {
+		return nil
+	}
+	type snapshot struct {
+		status   string
+		at       *time.Time
+		errText  string
+		refs     []RemoteRefStatus
+		dest     *Destination
+	}
+	prev := make([]snapshot, 0, len(byID))
+	for _, d := range byID {
+		prev = append(prev, snapshot{
+			status:  d.RemoteStatus,
+			at:      d.RemoteCheckedAt,
+			errText: d.RemoteCheckError,
+			refs:    d.RemoteRefs,
+			dest:    d,
+		})
+		d.RemoteStatus = ""
+		d.RemoteCheckedAt = nil
+		d.RemoteCheckError = ""
+		d.RemoteRefs = nil
+	}
+	if err := s.persist(); err != nil {
+		for _, p := range prev {
+			p.dest.RemoteStatus = p.status
+			p.dest.RemoteCheckedAt = p.at
+			p.dest.RemoteCheckError = p.errText
+			p.dest.RemoteRefs = p.refs
+		}
+		return err
+	}
+	return nil
+}
+
 // RemoveAll drops every destination for a repo. Used when a repo
 // itself is deleted so destinations don't dangle under a name that no
 // longer exists.

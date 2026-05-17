@@ -243,7 +243,12 @@ type WriteFileConflictResponse struct {
 // @Description  or 409 with only current_version + yours when parent_version
 // @Description  is not an ancestor of HEAD. On success, appends one
 // @Description  `file_put` entry to refs/audit/main — see
-// @Description  docs/design/audit-trail.md.
+// @Description  docs/design/audit-trail.md. The new HEAD invalidates every
+// @Description  destination's `remote_status` on this repo (the prior
+// @Description  in_sync verdict was for the old HEAD); enabled-for-auto
+// @Description  destinations are re-marked in_sync as the worker pushes
+// @Description  them, manual-only destinations fall back to "" until the
+// @Description  operator runs Refresh status or Push to remote.
 // @Tags        sync
 // @Accept       json
 // @Produce      json
@@ -355,18 +360,17 @@ func (s *Server) handleRepoFilePut(w http.ResponseWriter, r *http.Request) {
 	})
 	// REST writes need the same mirror fan-out as git-receive-pack, or
 	// a Formidable push via the structured-sync-api never reaches any
-	// configured destination (GitHub, Azure DevOps, …). Worker is
-	// optional so tests that want deterministic behavior can nil it.
-	if s.mirrorWorker != nil {
-		s.mirrorWorker.enqueue(name)
-	}
+	// configured destination (GitHub, Azure DevOps, …). afterRepoHeadBump
+	// also invalidates each destination's RemoteStatus so the in_sync
+	// badge doesn't outlive the commit that made it stale.
+	s.afterRepoHeadBump(name)
 	// Self-heal .gitignore on Formidable-first repos so existing repos
 	// created before this fix landed still protect teammates from
 	// accidentally committing .formidable/sync.json via git CLI. The
-	// fix is a separate commit on top of the user's; we enqueue the
-	// worker a second time so the mirror carries it to GitHub.
-	if s.autofixFormidableGitignore(r, name) && s.mirrorWorker != nil {
-		s.mirrorWorker.enqueue(name)
+	// fix is a separate commit on top of the user's; we re-invalidate
+	// + re-enqueue so the second HEAD bump propagates correctly.
+	if s.autofixFormidableGitignore(r, name) {
+		s.afterRepoHeadBump(name)
 	}
 	writeJSON(w, http.StatusOK, res)
 }
@@ -416,7 +420,12 @@ type CommitRecordConflictResponse struct {
 // @Description  Returns 409 with conflicts[] if any path conflicts — the
 // @Description  whole commit is rejected, no partial apply. On success,
 // @Description  appends one `commit` entry to refs/audit/main — see
-// @Description  docs/design/audit-trail.md.
+// @Description  docs/design/audit-trail.md. The new HEAD invalidates every
+// @Description  destination's `remote_status` on this repo (the prior
+// @Description  in_sync verdict was for the old HEAD); enabled-for-auto
+// @Description  destinations are re-marked in_sync as the worker pushes
+// @Description  them, manual-only destinations fall back to "" until the
+// @Description  operator runs Refresh status or Push to remote.
 // @Tags        sync
 // @Accept       json
 // @Produce      json
@@ -561,14 +570,15 @@ func (s *Server) handleRepoCommits(w http.ResponseWriter, r *http.Request) {
 		SHA:   res.Version,
 	})
 	// REST writes need the same mirror fan-out as git-receive-pack.
-	// See the matching call in handleRepoFilePut for the rationale.
-	if s.mirrorWorker != nil {
-		s.mirrorWorker.enqueue(name)
-	}
+	// See the matching call in handleRepoFilePut for the rationale —
+	// afterRepoHeadBump invalidates each destination's RemoteStatus
+	// (so a stale in_sync badge can't outlive this commit) and then
+	// enqueues the auto-mirror worker.
+	s.afterRepoHeadBump(name)
 	// Self-heal .gitignore on Formidable-first repos — see
 	// handleRepoFilePut for the rationale.
-	if s.autofixFormidableGitignore(r, name) && s.mirrorWorker != nil {
-		s.mirrorWorker.enqueue(name)
+	if s.autofixFormidableGitignore(r, name) {
+		s.afterRepoHeadBump(name)
 	}
 	writeJSON(w, http.StatusOK, res)
 }

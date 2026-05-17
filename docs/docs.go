@@ -9,7 +9,12 @@ const docTemplate = `{
     "info": {
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
-        "contact": {},
+        "contact": {
+            "name": "Peter van de Pas"
+        },
+        "license": {
+            "name": "MIT"
+        },
         "version": "{{.Version}}"
     },
     "host": "{{.Host}}",
@@ -3145,7 +3150,7 @@ const docTemplate = `{
                         "BasicAuth": []
                     }
                 ],
-                "description": "Git smart HTTP protocol — receives packfile data for push operations",
+                "description": "Git smart HTTP protocol — receives packfile data for push operations.\nWhen at least one ref actually moves, every destination's\n` + "`" + `remote_status` + "`" + ` on this repo is invalidated (the prior\nin_sync verdict was for the old HEAD); enabled-for-auto\ndestinations are re-marked in_sync as the worker pushes\nthem, manual-only destinations fall back to \"\" until the\noperator runs Refresh status or Push to remote.",
                 "consumes": [
                     "application/octet-stream"
                 ],
@@ -3814,7 +3819,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Applies an ordered list of put/delete changes against the\ngiven parent_version as a single commit. Returns 200 with\nthe new version on success (fast-forward or auto-merged).\nReturns 409 with conflicts[] if any path conflicts — the\nwhole commit is rejected, no partial apply. On success,\nappends one ` + "`" + `commit` + "`" + ` entry to refs/audit/main — see\ndocs/design/audit-trail.md.",
+                "description": "Applies an ordered list of put/delete changes against the\ngiven parent_version as a single commit. Returns 200 with\nthe new version on success (fast-forward or auto-merged).\nReturns 409 with conflicts[] if any path conflicts — the\nwhole commit is rejected, no partial apply. On success,\nappends one ` + "`" + `commit` + "`" + ` entry to refs/audit/main — see\ndocs/design/audit-trail.md. The new HEAD invalidates every\ndestination's ` + "`" + `remote_status` + "`" + ` on this repo (the prior\nin_sync verdict was for the old HEAD); enabled-for-auto\ndestinations are re-marked in_sync as the worker pushes\nthem, manual-only destinations fall back to \"\" until the\noperator runs Refresh status or Push to remote.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4494,7 +4499,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Commits one file against the given parent_version. Returns\n200 with the new version for a fast-forward or auto-merged\ncommit (merged_from/merged_with populated on auto-merge).\nReturns 409 with base/theirs/yours blobs on a real conflict,\nor 409 with only current_version + yours when parent_version\nis not an ancestor of HEAD. On success, appends one\n` + "`" + `file_put` + "`" + ` entry to refs/audit/main — see\ndocs/design/audit-trail.md.",
+                "description": "Commits one file against the given parent_version. Returns\n200 with the new version for a fast-forward or auto-merged\ncommit (merged_from/merged_with populated on auto-merge).\nReturns 409 with base/theirs/yours blobs on a real conflict,\nor 409 with only current_version + yours when parent_version\nis not an ancestor of HEAD. On success, appends one\n` + "`" + `file_put` + "`" + ` entry to refs/audit/main — see\ndocs/design/audit-trail.md. The new HEAD invalidates every\ndestination's ` + "`" + `remote_status` + "`" + ` on this repo (the prior\nin_sync verdict was for the old HEAD); enabled-for-auto\ndestinations are re-marked in_sync as the worker pushes\nthem, manual-only destinations fall back to \"\" until the\noperator runs Refresh status or Push to remote.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5738,6 +5743,7 @@ const docTemplate = `{
                     }
                 },
                 "remote_status": {
+                    "description": "RemoteStatus is one of \"\" (never checked / invalidated by a\nHEAD bump), \"in_sync\", \"diverged\", or \"error\".",
                     "type": "string"
                 },
                 "url": {
@@ -6692,17 +6698,34 @@ const docTemplate = `{
                 }
             }
         }
+    },
+    "securityDefinitions": {
+        "BasicAuth": {
+            "type": "basic"
+        },
+        "BearerAuth": {
+            "description": "Enter your bearer token as: Bearer \u003ctoken\u003e",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        },
+        "SessionAuth": {
+            "description": "Session cookie minted by POST /api/admin/login (or any successful OAuth callback). Required by every /api/admin/* endpoint and the /fragments/* template server. Browsers attach it automatically; programmatic callers must include the cookie header on every request.",
+            "type": "apiKey",
+            "name": "gigot_session",
+            "in": "cookie"
+        }
     }
 }`
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "",
-	Host:             "",
-	BasePath:         "",
+	Version:          "0.1.0",
+	Host:             "localhost:3417",
+	BasePath:         "/api",
 	Schemes:          []string{},
-	Title:            "",
-	Description:      "",
+	Title:            "GiGot API",
+	Description:      "HTTP Basic with the subscription token as the password. The username is ignored — tokens are self-identifying. This is the form `git clone http://user:<token>@host/git/repo` produces, so git-over-HTTP works out of the box.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

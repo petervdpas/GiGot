@@ -356,6 +356,25 @@ func (s *Server) markRemoteInSync(repo, id string) {
 	})
 }
 
+// afterRepoHeadBump invalidates every destination's Remote* observability
+// fields on the given repo and then enqueues the auto-mirror worker.
+// Called from every HEAD-bumping write site (POST /commits, PUT /files,
+// git receive-pack) so the in_sync badge cannot lie past the commit
+// that made it stale.
+//
+// Order matters: we invalidate FIRST, then enqueue. The async worker
+// will mark enabled destinations back to in_sync as it processes them
+// (no UI flicker in practice), while manual-only destinations
+// correctly fall back to "" until the operator acts. A failed write
+// must not call this — the invalidation should only fire after the
+// HEAD actually moved.
+func (s *Server) afterRepoHeadBump(repo string) {
+	_ = s.destinations.InvalidateRepoRemoteStatus(repo)
+	if s.mirrorWorker != nil {
+		s.mirrorWorker.enqueue(repo)
+	}
+}
+
 // localMirroredRefs returns the subset of refs/heads/* + refs/audit/*
 // from the bare repo. Built on RefSnapshot (which already excludes
 // refs/audit/*) plus a second for-each-ref for the audit namespace,
