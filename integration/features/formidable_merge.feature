@@ -4,9 +4,10 @@ Feature: Structured per-field merge for Formidable records (Phase F1)
   So that two edits to different fields on the same record both land
   without me having to resolve a line-based JSON conflict by hand.
 
-  # Covers §10.2–§10.3 + §11 F1. Uniform rule: every data field is
-  # atomic, last-writer-wins by meta.updated. Immutable meta fields
-  # (created, id, template) are the only conflict source.
+  # Covers §10.2–§10.3 + §11 F1. Every data field is atomic: disjoint
+  # edits merge, but both sides changing the same field (or an immutable
+  # meta field: created, id, template) is a conflict surfaced as 409, not
+  # a silent last-writer-wins. Full parity with git: no edit silently lost.
 
   Scenario: Two clients editing disjoint data fields on the same record auto-merge
     Given the server is running in formidable-first mode
@@ -25,12 +26,10 @@ Feature: Structured per-field merge for Formidable records (Phase F1)
     And the resulting record "storage/addresses/oak.meta.json" in repo "rec-merge" has data field "name" equal to "Oak Rd"
     And the resulting record "storage/addresses/oak.meta.json" in repo "rec-merge" has data field "country" equal to "uk"
 
-  Scenario: Client mutating immutable meta.created is silently reconciled to HEAD
-    # Take-theirs policy: immutable-meta divergence used to surface as
-    # 409+RecordConflict; with the silent take-theirs flow the server
-    # reconciles to its own HEAD content instead, so the client's bad
-    # write becomes a no-op at the content level. The audit-log keeps
-    # the merge commit so the attempt is still recorded.
+  Scenario: Client mutating immutable meta.created is refused with a conflict
+    # Immutable-meta divergence surfaces as 409 carrying the per-field
+    # conflict, so the client sees its write was refused instead of being
+    # silently reconciled to HEAD. The whole write aborts; HEAD is unchanged.
     Given the server is running in formidable-first mode
     When I POST "/api/repos" with body '{"name":"rec-imm"}'
     Then the response status should be 201
@@ -43,5 +42,6 @@ Feature: Structured per-field merge for Formidable records (Phase F1)
     And I put a record "storage/addresses/oak.meta.json" in repo "rec-imm" with data '{"name":"Oak"}' updated "2025-02-01T00:00:00Z" and parent "${head1}"
     And the response status should be 200
     When I put a record "storage/addresses/oak.meta.json" in repo "rec-imm" with data '{"name":"Oak"}' created "1999-01-01T00:00:00Z" updated "2025-03-01T00:00:00Z" and parent "${head1}"
-    Then the response status should be 200
+    Then the response status should be 409
+    And the response body should contain "immutable"
     And the resulting record "storage/addresses/oak.meta.json" in repo "rec-imm" has data field "name" equal to "Oak"

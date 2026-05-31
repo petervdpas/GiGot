@@ -110,9 +110,11 @@ func TestFormidableMerge_AutoMergesDisjointDataFields(t *testing.T) {
 	}
 }
 
-func TestFormidableMerge_LWWOnSameField(t *testing.T) {
+// Both sides changing the same data field is a conflict, surfaced as 409,
+// not a silent last-writer-wins (full parity with git). The user reconciles.
+func TestFormidableMerge_SameFieldConflicts(t *testing.T) {
 	srv := testServer(t)
-	repo := "fm-lww"
+	repo := "fm-samefield"
 	base := recordJSON(t, "2025-01-01T00:00:00Z", map[string]any{"name": "Base"})
 	parent := seedFormidableRepo(t, srv, repo, recordPath, base)
 
@@ -120,30 +122,24 @@ func TestFormidableMerge_LWWOnSameField(t *testing.T) {
 	serverRec := recordJSON(t, "2025-02-01T00:00:00Z", map[string]any{"name": "Theirs"})
 	seedFile(t, srv, repo, recordPath, serverRec, "server change")
 
-	// Client change: name=Yours at 2025-03-01 (newer).
+	// Client change: name=Yours at 2025-03-01 (newer). Same field, diverges.
 	clientRec := recordJSON(t, "2025-03-01T00:00:00Z", map[string]any{"name": "Yours"})
 	rec := putFile(t, srv, repo, recordPath, parent, clientRec)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("same-field divergence must 409, got %d: %s", rec.Code, rec.Body.String())
 	}
-
-	raw := decodeFile(t, srv, repo, recordPath)
-	var merged map[string]any
-	json.Unmarshal(raw, &merged)
-	data := merged["data"].(map[string]any)
-	if data["name"] != "Yours" {
-		t.Errorf("LWW: expected yours to win (newer updated), got %v", data["name"])
+	var conflict formidable.RecordConflict
+	if err := json.Unmarshal(rec.Body.Bytes(), &conflict); err != nil {
+		t.Fatalf("decode conflict: %v", err)
+	}
+	if len(conflict.FieldConflicts) != 1 || conflict.FieldConflicts[0].Key != "name" {
+		t.Fatalf("want a single name conflict, got %+v", conflict.FieldConflicts)
 	}
 }
 
-// TestFormidableMerge_ImmutableMetaSilentlyTakesTheirs — when the
-// client tries to mutate an immutable meta key (created/id/template),
-// the server silently reconciles to HEAD's content instead of
-// returning 409. The client's write becomes a no-op at the content
-// level — the server-authored merge commit's tree equals HEAD's tree.
-// (Formerly TestFormidableMerge_ImmutableMetaReturns409 — the 409
-// path was removed when the take-theirs policy landed.)
-func TestFormidableMerge_ImmutableMetaSilentlyTakesTheirs(t *testing.T) {
+// Mutating an immutable meta key (created/id/template) is a conflict surfaced
+// as 409, not a silent take-theirs. The user sees their write was refused.
+func TestFormidableMerge_ImmutableMetaConflicts(t *testing.T) {
 	srv := testServer(t)
 	repo := "fm-imm"
 	base := recordJSON(t, "2025-01-01T00:00:00Z", map[string]any{"name": "Oak"})
@@ -167,21 +163,27 @@ func TestFormidableMerge_ImmutableMetaSilentlyTakesTheirs(t *testing.T) {
 	}
 	raw, _ := json.Marshal(badMeta)
 	rec := putFile(t, srv, repo, recordPath, parent, string(raw))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 (silent take-theirs), got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("immutable-meta change must 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var conflict formidable.RecordConflict
+	if err := json.Unmarshal(rec.Body.Bytes(), &conflict); err != nil {
+		t.Fatalf("decode conflict: %v", err)
+	}
+	foundCreated := false
+	for _, fc := range conflict.FieldConflicts {
+		if fc.Key == "created" {
+			foundCreated = true
+		}
+	}
+	if !foundCreated {
+		t.Errorf("want a created conflict, got %+v", conflict.FieldConflicts)
 	}
 
-	// Body should NOT be a RecordConflict — that path is dead now.
-	var conflictProbe formidable.RecordConflict
-	if err := json.Unmarshal(rec.Body.Bytes(), &conflictProbe); err == nil && len(conflictProbe.FieldConflicts) > 0 {
-		t.Errorf("response unexpectedly carries RecordConflict body: %+v", conflictProbe)
-	}
-
-	// Read back: the on-disk record at HEAD must match the SERVER's
-	// content, not the client's bad meta.
+	// Nothing landed: HEAD still holds the server's content.
 	got := decodeFile(t, srv, repo, recordPath)
 	if string(got) != serverContent {
-		t.Errorf("expected HEAD blob == server content (silent take-theirs), got %s", string(got))
+		t.Errorf("a rejected write must not change HEAD; got %s", string(got))
 	}
 }
 
@@ -217,7 +219,7 @@ func TestFormidableMerge_RejectsInvalidRecordPath(t *testing.T) {
 		want bool
 	}{
 		{"storage/addresses/oak.meta.json", true},
-		{"storage/addresses/images/foo.png", false}, // images/ guard
+		{"storage/addresses/images/foo.png", false},  // images/ guard
 		{"storage/addresses/sub/x.meta.json", false}, // too deep
 		{"storage/oak.meta.json", false},             // too shallow
 		{"templates/x.yaml", false},
@@ -241,7 +243,10 @@ func TestFormidableMerge_RejectsInvalidRecordPath(t *testing.T) {
 // (Formerly TestFormidableMerge_CommitAggregatesImmutableConflicts —
 // the conflict-aggregation path was removed when the take-theirs
 // policy landed.)
-func TestFormidableMerge_CommitSilentlyTakesTheirsOnImmutableMeta(t *testing.T) {
+// A batch commit that conflicts on a record (here an immutable meta change)
+// is refused with 409 + CommitRecordConflictResponse carrying per-field
+// detail, not silently reconciled. The whole commit aborts; HEAD is unchanged.
+func TestFormidableMerge_CommitRecordConflictSurfaces(t *testing.T) {
 	srv := testServer(t)
 	repo := "fm-commit"
 	base := recordJSON(t, "2025-01-01T00:00:00Z", map[string]any{"name": "Oak"})
@@ -278,21 +283,29 @@ func TestFormidableMerge_CommitSilentlyTakesTheirsOnImmutableMeta(t *testing.T) 
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 (silent take-theirs), got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("record conflict in a commit must 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var conflict CommitRecordConflictResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &conflict); err != nil {
+		t.Fatalf("decode CommitRecordConflictResponse: %v", err)
+	}
+	if len(conflict.RecordConflicts) != 1 || conflict.RecordConflicts[0].Path != recordPath {
+		t.Fatalf("want one record conflict for %s, got %+v", recordPath, conflict.RecordConflicts)
+	}
+	foundCreated := false
+	for _, fc := range conflict.RecordConflicts[0].FieldConflicts {
+		if fc.Key == "created" {
+			foundCreated = true
+		}
+	}
+	if !foundCreated {
+		t.Errorf("want a created field conflict, got %+v", conflict.RecordConflicts[0].FieldConflicts)
 	}
 
-	// Body must NOT carry a CommitRecordConflictResponse — that path
-	// is dead now.
-	var conflictProbe CommitRecordConflictResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &conflictProbe); err == nil && len(conflictProbe.RecordConflicts) > 0 {
-		t.Errorf("response unexpectedly carries RecordConflicts: %+v", conflictProbe.RecordConflicts)
-	}
-
-	// Read back: the on-disk record at HEAD must match the SERVER's
-	// content, not the client's bad meta.
+	// The whole commit aborts: HEAD still holds the server's content.
 	got := decodeFile(t, srv, repo, recordPath)
 	if string(got) != serverContent {
-		t.Errorf("expected HEAD blob == server content (silent take-theirs), got %s", string(got))
+		t.Errorf("a rejected commit must not change HEAD; got %s", string(got))
 	}
 }

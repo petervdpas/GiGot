@@ -48,31 +48,44 @@ func TestMerge_DisjointDataFieldsAutoMerge(t *testing.T) {
 	}
 }
 
-func TestMerge_SameFieldDifferentValuesLWW_YoursNewer(t *testing.T) {
+// Full parity with git: when both sides change the SAME data field to
+// different values it is a conflict, not a silent last-writer-wins. The
+// updated timestamp no longer silently decides a winner; the user reconciles.
+func TestMerge_SameFieldDifferentValuesConflicts(t *testing.T) {
 	base := recordFrom(t, `{"meta":{"updated":"2025-01-01T00:00:00Z"},"data":{"name":"Old"}}`)
 	theirs := recordFrom(t, `{"meta":{"updated":"2025-02-01T00:00:00Z"},"data":{"name":"Theirs"}}`)
 	yours := recordFrom(t, `{"meta":{"updated":"2025-03-01T00:00:00Z"},"data":{"name":"Yours"}}`)
 
-	res, err := Merge("p", base, theirs, yours)
+	res, err := Merge("storage/x/r.meta.json", base, theirs, yours)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Conflict != nil {
-		t.Fatal("unexpected conflict")
+	if res.Conflict == nil {
+		t.Fatal("same-field divergence must conflict, not silently last-writer-win")
 	}
-	if extractData(t, res.Merged)["name"] != "Yours" {
-		t.Errorf("expected yours to win, got %v", extractData(t, res.Merged)["name"])
+	if res.Merged != nil {
+		t.Error("Merged must be nil on conflict")
+	}
+	if len(res.Conflict.FieldConflicts) != 1 ||
+		res.Conflict.FieldConflicts[0].Scope != "data" ||
+		res.Conflict.FieldConflicts[0].Key != "name" {
+		t.Fatalf("want a single data/name conflict, got %+v", res.Conflict.FieldConflicts)
 	}
 }
 
-func TestMerge_SameFieldDifferentValuesLWW_TheirsNewer(t *testing.T) {
+// Modify/delete on the same field is a conflict too: theirs changes it, yours
+// removes it. Neither side silently wins.
+func TestMerge_ModifyDeleteConflicts(t *testing.T) {
 	base := recordFrom(t, `{"meta":{"updated":"2025-01-01T00:00:00Z"},"data":{"name":"Old"}}`)
-	theirs := recordFrom(t, `{"meta":{"updated":"2025-06-01T00:00:00Z"},"data":{"name":"Theirs"}}`)
-	yours := recordFrom(t, `{"meta":{"updated":"2025-03-01T00:00:00Z"},"data":{"name":"Yours"}}`)
+	theirs := recordFrom(t, `{"meta":{"updated":"2025-02-01T00:00:00Z"},"data":{"name":"Changed"}}`)
+	yours := recordFrom(t, `{"meta":{"updated":"2025-03-01T00:00:00Z"},"data":{}}`)
 
 	res, _ := Merge("p", base, theirs, yours)
-	if extractData(t, res.Merged)["name"] != "Theirs" {
-		t.Errorf("expected theirs to win, got %v", extractData(t, res.Merged)["name"])
+	if res.Conflict == nil {
+		t.Fatal("modify/delete on the same field must conflict")
+	}
+	if res.Conflict.FieldConflicts[0].Key != "name" {
+		t.Errorf("want name conflict, got %+v", res.Conflict.FieldConflicts)
 	}
 }
 
@@ -113,16 +126,20 @@ func TestMerge_ImmutableMetaViolationReturnsConflict(t *testing.T) {
 	}
 }
 
-func TestMerge_NestedStructureAtomic(t *testing.T) {
+// A nested object is one atomic field: both sides editing different sub-keys
+// of the same object still conflict, because the field (not the sub-key) is
+// the unit of merge.
+func TestMerge_NestedStructureConflictsAtomically(t *testing.T) {
 	base := recordFrom(t, `{"meta":{"updated":"2025-01-01T00:00:00Z"},"data":{"addr":{"city":"NYC","zip":"10001"}}}`)
 	theirs := recordFrom(t, `{"meta":{"updated":"2025-02-01T00:00:00Z"},"data":{"addr":{"city":"NYC","zip":"10002"}}}`)
 	yours := recordFrom(t, `{"meta":{"updated":"2025-03-01T00:00:00Z"},"data":{"addr":{"city":"LA","zip":"10001"}}}`)
 
 	res, _ := Merge("p", base, theirs, yours)
-	addr := extractData(t, res.Merged)["addr"].(map[string]any)
-	// yours is newer → yours wins the whole sub-object, not a deep merge.
-	if addr["city"] != "LA" || addr["zip"] != "10001" {
-		t.Errorf("nested object should resolve atomically via LWW, got %+v", addr)
+	if res.Conflict == nil {
+		t.Fatal("both sides changed the same atomic field — expected a conflict")
+	}
+	if res.Conflict.FieldConflicts[0].Key != "addr" {
+		t.Errorf("want addr conflict, got %+v", res.Conflict.FieldConflicts)
 	}
 }
 

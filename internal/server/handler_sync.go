@@ -408,8 +408,8 @@ type CommitConflictResponse struct {
 // before the generic merge runs. Structurally distinct from
 // CommitConflictResponse so clients can switch on the body shape.
 type CommitRecordConflictResponse struct {
-	CurrentVersion string                        `json:"current_version" example:"def456..."`
-	RecordConflicts []formidable.RecordConflict  `json:"record_conflicts"`
+	CurrentVersion  string                      `json:"current_version" example:"def456..."`
+	RecordConflicts []formidable.RecordConflict `json:"record_conflicts"`
 }
 
 // handleRepoCommits godoc
@@ -510,6 +510,8 @@ func (s *Server) handleRepoCommits(w http.ResponseWriter, r *http.Request) {
 	//
 	// Non-record changes and non-record repos pass through unaffected.
 	recordHeadVersion := ""
+	var recordConflicts []formidable.RecordConflict
+	conflictHead := ""
 	for i := range changes {
 		c := &changes[i]
 		if c.Op != gitmanager.OpPut {
@@ -518,15 +520,29 @@ func (s *Server) handleRepoCommits(w http.ResponseWriter, r *http.Request) {
 		if !isFormidableRecordPath(c.Path) {
 			continue
 		}
-		merged, _, headV, applicable, mergeErr := s.maybeFormidableMerge(name, c.Path, req.ParentVersion, c.Content)
+		merged, recConflict, headV, applicable, mergeErr := s.maybeFormidableMerge(name, c.Path, req.ParentVersion, c.Content)
 		if mergeErr != nil {
 			writeError(w, http.StatusInternalServerError, mergeErr.Error())
 			return
+		}
+		if recConflict != nil {
+			recordConflicts = append(recordConflicts, *recConflict)
+			conflictHead = headV
+			continue
 		}
 		if applicable && merged != nil {
 			c.Content = merged
 			recordHeadVersion = headV
 		}
+	}
+	// Transactional: any record conflict aborts the whole commit before the
+	// generic merge runs, surfaced with per-field detail (§10.6).
+	if len(recordConflicts) > 0 {
+		writeJSON(w, http.StatusConflict, CommitRecordConflictResponse{
+			CurrentVersion:  conflictHead,
+			RecordConflicts: recordConflicts,
+		})
+		return
 	}
 	if recordHeadVersion != "" {
 		req.ParentVersion = recordHeadVersion
