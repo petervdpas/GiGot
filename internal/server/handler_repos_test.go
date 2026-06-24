@@ -569,18 +569,24 @@ func seedCloneSourceWithFullFormidable(t *testing.T) string {
 	if err := os.MkdirAll(filepath.Join(dir, "storage"), 0755); err != nil {
 		t.Fatalf("mkdir storage: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Join(dir, "relations"), 0755); err != nil {
+		t.Fatalf("mkdir relations: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "templates", "basic.yaml"), []byte("name: Basic\n"), 0644); err != nil {
 		t.Fatalf("write templates/basic.yaml: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "storage", ".gitkeep"), nil, 0644); err != nil {
 		t.Fatalf("write storage/.gitkeep: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "relations", ".gitkeep"), nil, 0644); err != nil {
+		t.Fatalf("write relations/.gitkeep: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"),
 		[]byte(".formidable/sync.json\n"), 0644); err != nil {
 		t.Fatalf("write .gitignore: %v", err)
 	}
 	cmds := [][]string{
-		{"-C", dir, "add", "templates", "storage", ".gitignore"},
+		{"-C", dir, "add", "templates", "storage", "relations", ".gitignore"},
 		{"-C", dir, "commit", "-m", "add formidable layout"},
 	}
 	for _, args := range cmds {

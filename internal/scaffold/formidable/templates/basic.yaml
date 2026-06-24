@@ -1,14 +1,16 @@
 name: Basic
 filename: basic.yaml
 enable_collection: true
+item_field: name
 fields:
   - key: id
     type: guid
     label: GUID
     description: ''
+    level_scope: 0
     primary_key: true
   - key: name
     type: text
     label: Name
     description: Short identifier or title for this entry.
-    collection: entries
+    level_scope: 0

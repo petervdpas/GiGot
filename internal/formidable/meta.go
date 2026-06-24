@@ -54,6 +54,17 @@ func MergeMeta(base, theirs, yours map[string]any) (map[string]any, []FieldConfl
 			merged[k] = mergeUpdated(theirs[k], yours[k])
 		case "tags":
 			merged[k] = mergeTags(theirs[k], yours[k])
+		case "facets":
+			// Facets are Formidable's per-record meta-tagging (a map of
+			// facet-key -> {set, selected}). Merge per facet key so two
+			// clients tagging DIFFERENT facets both survive; only a divergent
+			// edit to the SAME facet is a conflict. Merging the whole map by
+			// updated-winner (the default path) would silently drop one side.
+			fm, fc := mergeFacets(base, theirs, yours)
+			if len(fm) > 0 {
+				merged[k] = fm
+			}
+			conflicts = append(conflicts, fc...)
 		case "flagged":
 			merged[k] = mergeFlagged(theirs[k], yours[k])
 		case "created", "id", "template":
@@ -77,6 +88,71 @@ func MergeMeta(base, theirs, yours map[string]any) (map[string]any, []FieldConfl
 	}
 
 	return merged, conflicts
+}
+
+// mergeFacets applies the data-field 3-way rule at facet-key granularity over
+// meta.facets: neither-side-changed keeps base, exactly-one-side-changed takes
+// that side (a removal included), both sides setting a facet to the same value
+// converges, and a divergent edit to the same facet is a conflict scoped
+// "meta" keyed "facets.<facetKey>". A facet value ({set, selected}) is compared
+// whole via sameField, matching how data fields are compared. The merged map is
+// empty (caller omits the key) when no facets remain.
+func mergeFacets(base, theirs, yours map[string]any) (map[string]any, []FieldConflict) {
+	bf := facetMap(base)
+	tf := facetMap(theirs)
+	yf := facetMap(yours)
+
+	merged := map[string]any{}
+	var conflicts []FieldConflict
+	for _, fk := range unionKeys(bf, tf, yf) {
+		bv, bok := bf[fk]
+		tv, tok := tf[fk]
+		yv, yok := yf[fk]
+
+		tChanged := !sameField(bok, bv, tok, tv)
+		yChanged := !sameField(bok, bv, yok, yv)
+
+		switch {
+		case !tChanged && !yChanged:
+			if bok {
+				merged[fk] = bv
+			}
+		case tChanged && !yChanged:
+			if tok {
+				merged[fk] = tv
+			}
+		case !tChanged && yChanged:
+			if yok {
+				merged[fk] = yv
+			}
+		default:
+			if sameField(tok, tv, yok, yv) {
+				if tok {
+					merged[fk] = tv
+				}
+				continue
+			}
+			conflicts = append(conflicts, FieldConflict{Scope: "meta", Key: "facets." + fk})
+		}
+	}
+	return merged, conflicts
+}
+
+// facetMap returns meta["facets"] as a map (nil-safe). A missing or non-map
+// value yields nil, so a record without facets degrades to an empty merge.
+func facetMap(meta map[string]any) map[string]any {
+	if meta == nil {
+		return nil
+	}
+	v, ok := meta["facets"]
+	if !ok {
+		return nil
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil
+	}
+	return m
 }
 
 // UpdatedWinner returns "theirs" or "yours" based on max(meta.updated.at).

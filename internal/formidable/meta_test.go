@@ -59,6 +59,53 @@ func TestMergeMeta_FlaggedTrueWins(t *testing.T) {
 	}
 }
 
+// Two clients tagging DIFFERENT facets concurrently must both survive — the
+// whole-map updated-winner path would have dropped one. Base has neither facet.
+func TestMergeMeta_FacetsDisjointKeysBothSurvive(t *testing.T) {
+	base := map[string]any{"facets": map[string]any{}}
+	theirs := map[string]any{"facets": map[string]any{
+		"priority": map[string]any{"set": true, "selected": "high"},
+	}}
+	yours := map[string]any{"facets": map[string]any{
+		"status": map[string]any{"set": true, "selected": "draft"},
+	}}
+	merged, conflicts := MergeMeta(base, theirs, yours)
+	if len(conflicts) != 0 {
+		t.Fatalf("disjoint facet edits must not conflict: %v", conflicts)
+	}
+	facets, ok := merged["facets"].(map[string]any)
+	if !ok {
+		t.Fatalf("facets not a map: %T", merged["facets"])
+	}
+	if _, ok := facets["priority"]; !ok {
+		t.Errorf("theirs' facet 'priority' dropped: %v", facets)
+	}
+	if _, ok := facets["status"]; !ok {
+		t.Errorf("yours' facet 'status' dropped: %v", facets)
+	}
+}
+
+// A divergent edit to the SAME facet is a genuine conflict, scoped meta /
+// facets.<key>, not a silent last-writer-wins.
+func TestMergeMeta_FacetsSameKeyDivergesConflicts(t *testing.T) {
+	base := map[string]any{"facets": map[string]any{
+		"priority": map[string]any{"set": true, "selected": "low"},
+	}}
+	theirs := map[string]any{"facets": map[string]any{
+		"priority": map[string]any{"set": true, "selected": "high"},
+	}}
+	yours := map[string]any{"facets": map[string]any{
+		"priority": map[string]any{"set": true, "selected": "medium"},
+	}}
+	_, conflicts := MergeMeta(base, theirs, yours)
+	if len(conflicts) != 1 {
+		t.Fatalf("same-facet divergence must yield one conflict, got %v", conflicts)
+	}
+	if conflicts[0].Scope != "meta" || conflicts[0].Key != "facets.priority" {
+		t.Errorf("conflict shape = %+v, want meta/facets.priority", conflicts[0])
+	}
+}
+
 func TestMergeMeta_ImmutableCreatedDivergenceConflicts(t *testing.T) {
 	base := map[string]any{"created": "2025-01-01T00:00:00Z"}
 	theirs := map[string]any{"created": "2025-01-01T00:00:00Z"}

@@ -88,9 +88,10 @@ func stampFormidableMarker(git *gitmanager.Manager, name string, scaffoldedAt ti
 
 // ensureFormidableShape idempotently brings a repo to full Formidable
 // shape: valid context marker + at least one file under templates/ +
-// at least one file under storage/. Each missing piece is filled with
-// the embedded scaffold starter (`templates/basic.yaml`,
-// `storage/.gitkeep`); existing files are never touched. README.md is
+// at least one file under storage/ + at least one file under relations/.
+// Each missing piece is filled with the embedded scaffold starter
+// (`templates/basic.yaml`, `storage/.gitkeep`, `relations/.gitkeep`);
+// existing files are never touched. README.md is
 // deliberately never added on convert — a repo being converted already
 // owns whatever README it has.
 //
@@ -112,6 +113,7 @@ func ensureFormidableShape(git *gitmanager.Manager, name string, scaffoldedAt ti
 	hasMarker := false
 	hasTemplates := false
 	hasStorage := false
+	hasRelations := false
 	var existingGitignore []byte
 	hasGitignoreEntry := false
 	for _, e := range tree.Files {
@@ -136,6 +138,8 @@ func ensureFormidableShape(git *gitmanager.Manager, name string, scaffoldedAt ti
 			hasTemplates = true
 		case strings.HasPrefix(e.Path, "storage/"):
 			hasStorage = true
+		case strings.HasPrefix(e.Path, "relations/"):
+			hasRelations = true
 		}
 	}
 
@@ -182,6 +186,11 @@ func ensureFormidableShape(git *gitmanager.Manager, name string, scaffoldedAt ti
 	}
 	if !hasStorage {
 		if aerr := addFromScaffold("storage/.gitkeep"); aerr != nil {
+			return nil, aerr
+		}
+	}
+	if !hasRelations {
+		if aerr := addFromScaffold("relations/.gitkeep"); aerr != nil {
 			return nil, aerr
 		}
 	}

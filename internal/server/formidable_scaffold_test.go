@@ -22,13 +22,17 @@ func TestFormidableScaffoldFiles_ExpectedPayload(t *testing.T) {
 	}
 
 	// Every starter file the Formidable context needs must survive the walk.
-	for _, required := range []string{"README.md", "templates/basic.yaml", "storage/.gitkeep", ".formidable/context.json"} {
+	for _, required := range []string{"README.md", "templates/basic.yaml", "storage/.gitkeep", "relations/.gitkeep", ".formidable/context.json"} {
 		if _, ok := paths[required]; !ok {
 			t.Fatalf("scaffold missing %q (got %v)", required, keys(paths))
 		}
 	}
 
-	// basic.yaml must actually describe a Formidable template with a collection.
+	// basic.yaml must actually describe a Formidable collection template. A
+	// collection is declared by the template-level enable_collection flag (the
+	// field-level `collection:` key is api-specific in the current schema, so
+	// it must NOT appear on these plain fields); item_field names the display
+	// field every collection record sorts/labels by.
 	yaml := string(paths["templates/basic.yaml"])
 	if !strings.Contains(yaml, "enable_collection: true") {
 		t.Fatalf("basic.yaml should enable the collection; got:\n%s", yaml)
@@ -36,8 +40,8 @@ func TestFormidableScaffoldFiles_ExpectedPayload(t *testing.T) {
 	if !strings.Contains(yaml, "type: guid") || !strings.Contains(yaml, "type: text") {
 		t.Fatalf("basic.yaml should contain guid + text fields; got:\n%s", yaml)
 	}
-	if !strings.Contains(yaml, "collection:") {
-		t.Fatalf("basic.yaml should set a collection on at least one field; got:\n%s", yaml)
+	if !strings.Contains(yaml, "item_field: name") {
+		t.Fatalf("basic.yaml should name a collection item_field; got:\n%s", yaml)
 	}
 
 	// .gitkeep must be empty — its presence is what matters.
@@ -293,7 +297,7 @@ func TestEnsureFormidableShape_AddsAllWhenOnlyReadme(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
-	want := []string{formidableMarkerPath, "templates/basic.yaml", "storage/.gitkeep", gitignorePath}
+	want := []string{formidableMarkerPath, "templates/basic.yaml", "storage/.gitkeep", "relations/.gitkeep", gitignorePath}
 	if len(added) != len(want) {
 		t.Fatalf("added: want %v, got %v", want, added)
 	}
@@ -368,6 +372,28 @@ func TestEnsureFormidableShape_SkipsExistingStorage(t *testing.T) {
 	}
 }
 
+// TestEnsureFormidableShape_SkipsExistingRelations mirror of the
+// storage/ case for the relations/ half: a repo that already has a
+// relation file must not get the starter .gitkeep planted next to it.
+func TestEnsureFormidableShape_SkipsExistingRelations(t *testing.T) {
+	srv := testServer(t)
+	srv.git.InitBare("shape-keep-relations")
+	seedFile(t, srv, "shape-keep-relations", "README.md", "hi\n", "seed readme")
+	seedFile(t, srv, "shape-keep-relations", "relations/applicatie.yaml", "from: x\n", "seed relation")
+
+	added, err := ensureFormidableShape(srv.git, "shape-keep-relations",
+		time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if contains(added, "relations/.gitkeep") {
+		t.Errorf(".gitkeep should NOT be added when relations/ already has content; got %v", added)
+	}
+	if _, err := srv.git.File("shape-keep-relations", "", "relations/applicatie.yaml"); err != nil {
+		t.Errorf("user's relation should survive: %v", err)
+	}
+}
+
 // TestEnsureFormidableShape_AlreadyCompleteIsNoop — a repo that has
 // marker + templates/ + storage/ already must not produce a new commit.
 // Critical so repeat convert invocations stay quiet.
@@ -377,6 +403,7 @@ func TestEnsureFormidableShape_AlreadyCompleteIsNoop(t *testing.T) {
 	seedFile(t, srv, "shape-complete", "README.md", "hi\n", "seed readme")
 	seedFile(t, srv, "shape-complete", "templates/basic.yaml", "name: Basic\n", "seed tpl")
 	seedFile(t, srv, "shape-complete", "storage/.gitkeep", "", "seed storage")
+	seedFile(t, srv, "shape-complete", "relations/.gitkeep", "", "seed relations")
 	seedFile(t, srv, "shape-complete", formidableMarkerPath,
 		`{"version":1,"scaffolded_by":"gigot","scaffolded_at":"2024-01-01T00:00:00Z"}`+"\n",
 		"seed marker")
