@@ -65,6 +65,47 @@ func TestCommitRenameFastForward(t *testing.T) {
 	}
 }
 
+// The batched index build must preserve the per-change semantics it replaced:
+// a path repeated in one commit resolves last-wins, deleting an absent path is
+// a no-op rather than an error, and an empty put lands as an empty blob.
+func TestCommitBatchedIndexInvariants(t *testing.T) {
+	m := NewManager(t.TempDir())
+	parent := seedBareWithFile(t, m, "batch", "keep.txt", "K\n")
+
+	res, err := m.Commit("batch", makeCommitOpts(parent, []Change{
+		{Op: OpPut, Path: "dup.txt", Content: []byte("first")},
+		{Op: OpPut, Path: "dup.txt", Content: []byte("second")},
+		{Op: OpDelete, Path: "ghost.txt"},
+		{Op: OpPut, Path: "empty.txt", Content: []byte("")},
+	}, "batched changes"))
+	if err != nil {
+		t.Fatalf("Commit: %v (delete of an absent path must not error)", err)
+	}
+	if !res.FastForward {
+		t.Error("expected fast-forward")
+	}
+
+	dup, err := m.File("batch", "", "dup.txt")
+	if err != nil {
+		t.Fatalf("dup.txt missing: %v", err)
+	}
+	if got := decodeB64(t, dup.ContentB64); got != "second" {
+		t.Errorf("repeated path must resolve last-wins, got %q", got)
+	}
+
+	empty, err := m.File("batch", "", "empty.txt")
+	if err != nil {
+		t.Fatalf("empty.txt missing: %v", err)
+	}
+	if got := decodeB64(t, empty.ContentB64); got != "" {
+		t.Errorf("empty put must land empty, got %q", got)
+	}
+
+	if got, err := m.File("batch", "", "keep.txt"); err != nil || decodeB64(t, got.ContentB64) != "K\n" {
+		t.Errorf("untouched file changed: err=%v content=%q", err, decodeB64(t, got.ContentB64))
+	}
+}
+
 func TestCommitAutoMergeAcrossFiles(t *testing.T) {
 	m := NewManager(t.TempDir())
 	parent := seedBareWithFile(t, m, "am", "a.txt", "A\n")

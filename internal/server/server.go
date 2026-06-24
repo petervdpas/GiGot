@@ -604,7 +604,17 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	httpSrv := &http.Server{Handler: s.Handler()}
+	// ReadHeaderTimeout caps slow-header (slowloris) clients; IdleTimeout
+	// bounds kept-alive connections. Deliberately no global WriteTimeout:
+	// /git/* (clone/fetch) and /snapshot stream arbitrarily large responses,
+	// and a blanket write deadline would sever them mid-transfer. Slow
+	// non-streaming handlers are bounded per-route instead (see the /commits
+	// dispatch in handleRepoRouter).
+	httpSrv := &http.Server{
+		Handler:           s.Handler(),
+		ReadHeaderTimeout: 30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

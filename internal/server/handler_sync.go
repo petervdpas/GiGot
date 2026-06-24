@@ -512,27 +512,37 @@ func (s *Server) handleRepoCommits(w http.ResponseWriter, r *http.Request) {
 	recordHeadVersion := ""
 	var recordConflicts []formidable.RecordConflict
 	conflictHead := ""
-	for i := range changes {
-		c := &changes[i]
-		if c.Op != gitmanager.OpPut {
-			continue
-		}
-		if !isFormidableRecordPath(c.Path) {
-			continue
-		}
-		merged, recConflict, headV, applicable, mergeErr := s.maybeFormidableMerge(name, c.Path, req.ParentVersion, c.Content)
-		if mergeErr != nil {
-			writeError(w, http.StatusInternalServerError, mergeErr.Error())
-			return
-		}
-		if recConflict != nil {
-			recordConflicts = append(recordConflicts, *recConflict)
-			conflictHead = headV
-			continue
-		}
-		if applicable && merged != nil {
-			c.Content = merged
-			recordHeadVersion = headV
+	// The structured record merger only changes the outcome when the client's
+	// parent has diverged from HEAD. On a fast-forward every per-file merge
+	// returns early, so derive HEAD and the Formidable marker once and skip
+	// the whole pre-scan rather than spawning ~6 git subprocesses per changed
+	// file to re-learn repo-global state that cannot matter here. This is what
+	// kept large fast-forward commits (dozens of record files) from blowing
+	// past the client's request timeout.
+	if head, headErr := s.git.Head(name); headErr == nil &&
+		req.ParentVersion != head.Version && s.isFormidableRepoAtHEAD(name) {
+		for i := range changes {
+			c := &changes[i]
+			if c.Op != gitmanager.OpPut {
+				continue
+			}
+			if !isFormidableRecordPath(c.Path) {
+				continue
+			}
+			merged, recConflict, applicable, mergeErr := s.mergeRecordAtHead(name, c.Path, req.ParentVersion, head.Version, c.Content)
+			if mergeErr != nil {
+				writeError(w, http.StatusInternalServerError, mergeErr.Error())
+				return
+			}
+			if recConflict != nil {
+				recordConflicts = append(recordConflicts, *recConflict)
+				conflictHead = head.Version
+				continue
+			}
+			if applicable && merged != nil {
+				c.Content = merged
+				recordHeadVersion = head.Version
+			}
 		}
 	}
 	// Transactional: any record conflict aborts the whole commit before the

@@ -88,49 +88,66 @@ func (s *Server) maybeFormidableMerge(
 		return nil, nil, "", false, nil
 	}
 
+	merged, conflict, applicable, err = s.mergeRecordAtHead(repo, filePath, parentVersion, head.Version, incoming)
+	return merged, conflict, head.Version, applicable, err
+}
+
+// mergeRecordAtHead runs the structured per-field record merge for one file,
+// assuming the caller has already established that the repo is Formidable,
+// HEAD is headVersion, and parentVersion differs from headVersion (a real
+// divergence). It performs no repo-global git calls, so a caller committing
+// many files can derive that state once and invoke this per change rather
+// than re-deriving HEAD and the marker for every file (see handleRepoCommits).
+// applicable is false when this write is not a reconcilable record candidate
+// (a side can't be read, or a blob is malformed); the caller then falls
+// through to the generic git merge.
+func (s *Server) mergeRecordAtHead(
+	repo, filePath, parentVersion, headVersion string,
+	incoming []byte,
+) (merged []byte, conflict *formidable.RecordConflict, applicable bool, err error) {
 	baseBlob, baseErr := s.git.File(repo, parentVersion, filePath)
-	theirsBlob, theirsErr := s.git.File(repo, head.Version, filePath)
+	theirsBlob, theirsErr := s.git.File(repo, headVersion, filePath)
 
 	// If either side can't be read (e.g. the record was just added and
 	// doesn't exist in one commit), defer to the generic path which
 	// handles add/add and delete/modify uniformly.
 	if baseErr != nil || theirsErr != nil {
-		return nil, nil, "", false, nil
+		return nil, nil, false, nil
 	}
 
 	baseBytes, err := base64.StdEncoding.DecodeString(baseBlob.ContentB64)
 	if err != nil {
-		return nil, nil, "", false, nil
+		return nil, nil, false, nil
 	}
 	theirsBytes, err := base64.StdEncoding.DecodeString(theirsBlob.ContentB64)
 	if err != nil {
-		return nil, nil, "", false, nil
+		return nil, nil, false, nil
 	}
 
 	base, err := formidable.ParseRecord(baseBytes)
 	if err != nil {
-		return nil, nil, "", false, nil
+		return nil, nil, false, nil
 	}
 	theirs, err := formidable.ParseRecord(theirsBytes)
 	if err != nil {
-		return nil, nil, "", false, nil
+		return nil, nil, false, nil
 	}
 	yours, err := formidable.ParseRecord(incoming)
 	if err != nil {
-		// Incoming is malformed — let the generic path handle it.
-		return nil, nil, "", false, nil
+		// Incoming is malformed; let the generic path handle it.
+		return nil, nil, false, nil
 	}
 
 	result, err := formidable.Merge(filePath, base, theirs, yours)
 	if err != nil {
-		return nil, nil, "", false, err
+		return nil, nil, false, err
 	}
 	if result.Conflict != nil {
 		// Surface the conflict: the per-field merger could not reconcile
 		// these fields (immutable meta, or both sides changed the same data
 		// field). The caller emits a 409 so the user resolves it, rather
 		// than silently dropping one side's write.
-		return nil, result.Conflict, head.Version, true, nil
+		return nil, result.Conflict, true, nil
 	}
-	return result.Merged, nil, head.Version, true, nil
+	return result.Merged, nil, true, nil
 }

@@ -1,11 +1,13 @@
 package git
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -192,10 +194,22 @@ func (m *Manager) Commit(name string, opts CommitOptions) (CommitResult, error) 
 	return CommitResult{}, fmt.Errorf("commit: gave up after %d contention retries", maxAttempts)
 }
 
+// nullSHA is the all-zero blob id; an --index-info record with this id and
+// mode 0 removes the path (a no-op when the path is already absent, which
+// matches the old --force-remove behaviour).
+const nullSHA = "0000000000000000000000000000000000000000"
+
 // treeWithChanges builds a tree from baseCommit with every Change applied in
 // order. Uses a throwaway GIT_INDEX_FILE so the bare repo's index (if any)
 // is not touched. Paths rejected by git (traversal, ".git/...") surface as
 // ErrInvalidPath regardless of which change triggered them.
+//
+// All put contents are written in one `hash-object --stdin-paths` pass and
+// all index mutations in one `update-index -z --index-info` pass, so the
+// process count is constant rather than two git forks per changed file. The
+// stream is NUL-separated, so a crafted path can't inject a second index
+// record; records still apply in order, so a path repeated across changes
+// resolves last-wins exactly as a sequential per-change apply would.
 func treeWithChanges(repoPath, baseCommit string, changes []Change) (string, error) {
 	tmpIndex, err := os.CreateTemp("", "gigot-index-*")
 	if err != nil {
@@ -204,20 +218,7 @@ func treeWithChanges(repoPath, baseCommit string, changes []Change) (string, err
 	tmpIndex.Close()
 	defer os.Remove(tmpIndex.Name())
 
-	// update-index --force-remove refuses to run in a bare repo ("this
-	// operation must be run in a work tree"). Hand it a throwaway work
-	// tree so the delete path works; put/add don't need it but inherit
-	// the env anyway.
-	tmpWork, err := os.MkdirTemp("", "gigot-work-*")
-	if err != nil {
-		return "", err
-	}
-	defer os.RemoveAll(tmpWork)
-
-	env := append(os.Environ(),
-		"GIT_INDEX_FILE="+tmpIndex.Name(),
-		"GIT_WORK_TREE="+tmpWork,
-	)
+	env := append(os.Environ(), "GIT_INDEX_FILE="+tmpIndex.Name())
 
 	readTree := exec.Command("git", "-C", repoPath, "read-tree", baseCommit)
 	readTree.Env = env
@@ -225,45 +226,93 @@ func treeWithChanges(repoPath, baseCommit string, changes []Change) (string, err
 		return "", fmt.Errorf("read-tree %s: %s: %w", baseCommit, string(out), err)
 	}
 
+	shaByChange, err := hashPutObjects(repoPath, changes)
+	if err != nil {
+		return "", err
+	}
+
+	var info bytes.Buffer
 	for i, c := range changes {
+		path := filepath.ToSlash(c.Path)
 		switch c.Op {
 		case OpPut:
-			blobSHA, err := hashObject(repoPath, c.Content)
-			if err != nil {
-				return "", fmt.Errorf("changes[%d] hash-object: %w", i, err)
-			}
-			upd := exec.Command("git", "-C", repoPath, "update-index", "--add",
-				"--cacheinfo", "100644,"+blobSHA+","+filepath.ToSlash(c.Path))
-			upd.Env = env
-			if out, err := upd.CombinedOutput(); err != nil {
-				if strings.Contains(string(out), "Invalid path") {
-					return "", ErrInvalidPath
-				}
-				return "", fmt.Errorf("changes[%d] update-index: %s: %w", i, string(out), err)
-			}
+			fmt.Fprintf(&info, "100644 %s\t%s\x00", shaByChange[i], path)
 		case OpDelete:
-			// --force-remove makes "delete an absent path" a no-op rather
-			// than an error; merge-time conflict detection still catches
-			// the interesting cases (delete-vs-modify, etc.).
-			upd := exec.Command("git", "-C", repoPath, "update-index", "--force-remove",
-				filepath.ToSlash(c.Path))
-			upd.Env = env
-			if out, err := upd.CombinedOutput(); err != nil {
-				if strings.Contains(string(out), "Invalid path") {
-					return "", ErrInvalidPath
-				}
-				return "", fmt.Errorf("changes[%d] remove: %s: %w", i, string(out), err)
-			}
+			fmt.Fprintf(&info, "0 %s\t%s\x00", nullSHA, path)
 		}
+	}
+
+	upd := exec.Command("git", "-C", repoPath, "update-index", "-z", "--index-info")
+	upd.Env = env
+	upd.Stdin = &info
+	out, err := upd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("update-index: %s: %w", string(out), err)
+	}
+	// --index-info reports a rejected path with "Ignoring path <p>" on stderr
+	// and still exits 0; treat that as the hard ErrInvalidPath the per-file
+	// --cacheinfo form used to return.
+	if bytes.Contains(out, []byte("Ignoring path")) || bytes.Contains(out, []byte("Invalid path")) {
+		return "", ErrInvalidPath
 	}
 
 	writeTree := exec.Command("git", "-C", repoPath, "write-tree")
 	writeTree.Env = env
-	out, err := writeTree.Output()
+	treeOut, err := writeTree.Output()
 	if err != nil {
 		return "", fmt.Errorf("write-tree: %w", err)
 	}
-	return strings.TrimSpace(string(out)), nil
+	return strings.TrimSpace(string(treeOut)), nil
+}
+
+// hashPutObjects writes every OpPut content into the object store in a single
+// `git hash-object -w --stdin-paths` pass and returns a map from change index
+// to blob SHA. Contents are staged through throwaway temp files (hash-object
+// reads paths, not bytes, from stdin), whose names are ours, so no client
+// path ever enters that stream. Returns an empty map when there are no puts.
+func hashPutObjects(repoPath string, changes []Change) (map[int]string, error) {
+	idx := make([]int, 0, len(changes))
+	for i, c := range changes {
+		if c.Op == OpPut {
+			idx = append(idx, i)
+		}
+	}
+	if len(idx) == 0 {
+		return map[int]string{}, nil
+	}
+
+	dir, err := os.MkdirTemp("", "gigot-blobs-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+
+	var paths bytes.Buffer
+	for n, i := range idx {
+		p := filepath.Join(dir, strconv.Itoa(n))
+		if err := os.WriteFile(p, changes[i].Content, 0o600); err != nil {
+			return nil, err
+		}
+		paths.WriteString(p)
+		paths.WriteByte('\n')
+	}
+
+	cmd := exec.Command("git", "-C", repoPath, "hash-object", "-w", "--stdin-paths")
+	cmd.Stdin = &paths
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("hash-object batch: %w", err)
+	}
+	shas := strings.Fields(string(out))
+	if len(shas) != len(idx) {
+		return nil, fmt.Errorf("hash-object batch: got %d shas for %d puts", len(shas), len(idx))
+	}
+
+	byChange := make(map[int]string, len(idx))
+	for n, i := range idx {
+		byChange[i] = shas[n]
+	}
+	return byChange, nil
 }
 
 // staleParentConflicts builds the 409 body for the not-an-ancestor case —

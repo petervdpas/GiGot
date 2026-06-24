@@ -213,6 +213,53 @@ func TestFormidableMerge_SkipsWhenMarkerAbsent(t *testing.T) {
 	}
 }
 
+// A fast-forward commit (parent_version == HEAD) carrying many record-path
+// puts must land every file. The pre-scan short-circuits this case to avoid
+// re-deriving HEAD per file, so this guards that the skip stays correct: all
+// puts commit, none are silently dropped or take-theirs'd.
+func TestFormidableMerge_CommitFastForwardLandsAllRecords(t *testing.T) {
+	srv := testServer(t)
+	repo := "fm-ff-multi"
+	parent := seedFormidableRepo(t, srv, repo, recordPath,
+		recordJSON(t, "2025-01-01T00:00:00Z", map[string]any{"name": "Oak"}))
+
+	type put struct{ path, body string }
+	puts := []put{
+		{"storage/addresses/elm.meta.json", recordJSON(t, "2025-02-01T00:00:00Z", map[string]any{"name": "Elm"})},
+		{"storage/addresses/ash.meta.json", recordJSON(t, "2025-02-01T00:00:00Z", map[string]any{"name": "Ash"})},
+		{"storage/addresses/fir.meta.json", recordJSON(t, "2025-02-01T00:00:00Z", map[string]any{"name": "Fir"})},
+	}
+	changes := make([]map[string]any, 0, len(puts))
+	for _, p := range puts {
+		changes = append(changes, map[string]any{
+			"op":          "put",
+			"path":        p.path,
+			"content_b64": base64.StdEncoding.EncodeToString([]byte(p.body)),
+		})
+	}
+	raw, _ := json.Marshal(map[string]any{
+		"parent_version": parent,
+		"message":        "add records",
+		"changes":        changes,
+	})
+	rec := postCommits(t, srv, repo, string(raw))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("fast-forward multi-record commit must 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var res gitmanager.CommitResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode CommitResult: %v", err)
+	}
+	if res.MergedFrom != "" {
+		t.Errorf("parent==HEAD must fast-forward, got merge: %+v", res)
+	}
+	for _, p := range puts {
+		if got := decodeFile(t, srv, repo, p.path); string(got) != p.body {
+			t.Errorf("record %s did not land verbatim; got %s", p.path, string(got))
+		}
+	}
+}
+
 func TestFormidableMerge_RejectsInvalidRecordPath(t *testing.T) {
 	cases := []struct {
 		path string

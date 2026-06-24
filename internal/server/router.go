@@ -4,7 +4,13 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// commitWriteTimeout bounds the non-streaming POST /commits handler. Kept
+// below the Formidable client's request timeout so a wedged commit surfaces
+// as a clean 503 here before the client gives up on its end.
+const commitWriteTimeout = 60 * time.Second
 
 // handleRepoRouter dispatches /api/repos/* to the appropriate handler.
 func (s *Server) handleRepoRouter(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +32,13 @@ func (s *Server) handleRepoRouter(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(path, "/destinations") || strings.Contains(path, "/destinations/"):
 		s.handleRepoDestinations(w, r)
 	case strings.HasSuffix(path, "/commits"):
-		s.handleRepoCommits(w, r)
+		// A commit is non-streaming JSON, so unlike /snapshot it can carry a
+		// write deadline. If the handler wedges, the client gets a clean 503
+		// instead of hanging until its own transport timeout fires. The git
+		// work is atomic, so a commit that finishes after the deadline lands
+		// harmlessly even though this response is already a timeout.
+		http.TimeoutHandler(http.HandlerFunc(s.handleRepoCommits),
+			commitWriteTimeout, "commit timed out").ServeHTTP(w, r)
 	case strings.HasSuffix(path, "/changes"):
 		s.handleRepoChanges(w, r)
 	case strings.HasSuffix(path, "/status"):
