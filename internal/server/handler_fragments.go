@@ -29,6 +29,16 @@ import (
 //go:embed templates/fragments/*.html
 var fragmentsFS embed.FS
 
+// userFacingFragments are the partials served on non-admin pages (the
+// self-serve /user profile). They gate on any valid session rather than
+// admin role, because maintainers and regular users legitimately reach
+// them. Every other fragment stays admin-only: it encodes admin-UI
+// shape and a leak hands an attacker free recon. Keep this set as small
+// as the user-facing surface demands.
+var userFacingFragments = map[string]bool{
+	"user-subscription-card": true,
+}
+
 // fragmentEntry holds one fragment's bytes plus the strong ETag
 // derived from its content, AND a precomputed gzipped copy when
 // compression earns its keep. Computed once at startup so the
@@ -77,14 +87,16 @@ var fragmentCache = func() map[string]*fragmentEntry {
 }()
 
 // handleFragments godoc
-// @Summary      Serve a UI fragment template (admin only)
+// @Summary      Serve a UI fragment template
 // @Description  Returns the raw HTML of the named fragment from
 // @Description  internal/server/templates/fragments/. Used by the
 // @Description  GG.lazy client helper to render detail panes on
-// @Description  demand. Admin-session gated — fragments don't carry
-// @Description  user data but they encode admin-UI shape (which
-// @Description  inputs exist, what gets PATCHed where), and a
-// @Description  leak gives an attacker recon for free.
+// @Description  demand. Admin-session gated by default: fragments don't
+// @Description  carry user data but they encode admin-UI shape (which
+// @Description  inputs exist, what gets PATCHed where), and a leak gives
+// @Description  an attacker recon for free. The user-facing subset (the
+// @Description  self-serve /user page) gates on any valid session so
+// @Description  maintainers and regular users can render their own page.
 // @Description
 // @Description  Cache: strong ETag derived from the fragment body's
 // @Description  SHA-256. Browsers send `If-None-Match` on every
@@ -101,9 +113,6 @@ var fragmentCache = func() map[string]*fragmentEntry {
 // @Security    SessionAuth
 // @Router       /fragments/{name} [get]
 func (s *Server) handleFragments(w http.ResponseWriter, r *http.Request) {
-	if s.requireAdminSession(w, r) == nil {
-		return
-	}
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -111,6 +120,16 @@ func (s *Server) handleFragments(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/fragments/")
 	if name == "" || strings.Contains(name, "/") {
 		writeError(w, http.StatusBadRequest, "invalid fragment name")
+		return
+	}
+	// User-facing fragments gate on any valid session; the rest stay
+	// admin-only. Pick the gate from the (already validated) name so a
+	// maintainer or regular user can render their own /user page.
+	if userFacingFragments[name] {
+		if s.requireSession(w, r) == nil {
+			return
+		}
+	} else if s.requireAdminSession(w, r) == nil {
 		return
 	}
 	entry, ok := fragmentCache[name]

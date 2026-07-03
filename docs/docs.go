@@ -3089,14 +3089,14 @@ const docTemplate = `{
                         "SessionAuth": []
                     }
                 ],
-                "description": "Returns the raw HTML of the named fragment from\ninternal/server/templates/fragments/. Used by the\nGG.lazy client helper to render detail panes on\ndemand. Admin-session gated — fragments don't carry\nuser data but they encode admin-UI shape (which\ninputs exist, what gets PATCHed where), and a\nleak gives an attacker recon for free.\n\nCache: strong ETag derived from the fragment body's\nSHA-256. Browsers send ` + "`" + `If-None-Match` + "`" + ` on every\nload and get a 304 after the first fetch — net cost\nper fragment per release is one tiny round trip.",
+                "description": "Returns the raw HTML of the named fragment from\ninternal/server/templates/fragments/. Used by the\nGG.lazy client helper to render detail panes on\ndemand. Admin-session gated by default: fragments don't\ncarry user data but they encode admin-UI shape (which\ninputs exist, what gets PATCHed where), and a leak gives\nan attacker recon for free. The user-facing subset (the\nself-serve /user page) gates on any valid session so\nmaintainers and regular users can render their own page.\n\nCache: strong ETag derived from the fragment body's\nSHA-256. Browsers send ` + "`" + `If-None-Match` + "`" + ` on every\nload and get a 304 after the first fetch — net cost\nper fragment per release is one tiny round trip.",
                 "produces": [
                     "text/html"
                 ],
                 "tags": [
                     "system"
                 ],
-                "summary": "Serve a UI fragment template (admin only)",
+                "summary": "Serve a UI fragment template",
                 "parameters": [
                     {
                         "type": "string",

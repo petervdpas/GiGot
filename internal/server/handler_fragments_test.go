@@ -5,6 +5,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/petervdpas/GiGot/internal/accounts"
+	"github.com/petervdpas/GiGot/internal/auth"
 )
 
 // TestFragments_HappyPath confirms the basic contract: an admin
@@ -39,6 +42,63 @@ func TestFragments_RequiresAdminSession(t *testing.T) {
 	rec := do(t, srv, http.MethodGet, "/fragments/abilities", nil, nil)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("want 401 without session, got %d", rec.Code)
+	}
+}
+
+// maintainerSession mints a non-admin (maintainer) account and returns
+// its session cookie. Used to prove the user-facing fragment gate lets
+// non-admins render their own /user page while admin fragments stay shut.
+func maintainerSession(t *testing.T, srv *Server) *http.Cookie {
+	t.Helper()
+	if _, err := srv.accounts.Put(accounts.Account{
+		Provider:   accounts.ProviderLocal,
+		Identifier: "malcolm",
+		Role:       accounts.RoleMaintainer,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := srv.sessionStrategy.Create("local", "malcolm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &http.Cookie{Name: auth.SessionCookieName, Value: sess.ID}
+}
+
+// TestFragments_UserFacingAllowsNonAdminSession is the regression pin
+// for the /user "Render failed" bug: a maintainer (non-admin) must be
+// able to fetch the user-subscription-card fragment their own profile
+// page lazy-loads. Before the fix this was a blanket 401.
+func TestFragments_UserFacingAllowsNonAdminSession(t *testing.T) {
+	srv, _ := adminTestServer(t)
+	sess := maintainerSession(t, srv)
+	rec := do(t, srv, http.MethodGet, "/fragments/user-subscription-card", nil, sess)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("maintainer should reach user fragment: want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestFragments_UserFacingStillRequiresSession pins that "user-facing"
+// does not mean "public": without any session cookie the user fragment
+// is still a 401. The self-serve card only makes sense for a signed-in
+// caller whose own keys /api/me will fill in.
+func TestFragments_UserFacingStillRequiresSession(t *testing.T) {
+	srv, _ := adminTestServer(t)
+	rec := do(t, srv, http.MethodGet, "/fragments/user-subscription-card", nil, nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("want 401 without session, got %d", rec.Code)
+	}
+}
+
+// TestFragments_AdminFragmentDeniesNonAdmin pins the other half of the
+// gate: a non-admin session that CAN read the user fragment still gets
+// a 401 on admin-only fragments, so the fix didn't widen the recon
+// surface for maintainers.
+func TestFragments_AdminFragmentDeniesNonAdmin(t *testing.T) {
+	srv, _ := adminTestServer(t)
+	sess := maintainerSession(t, srv)
+	rec := do(t, srv, http.MethodGet, "/fragments/abilities", nil, sess)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("maintainer must not reach admin fragment: want 401, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

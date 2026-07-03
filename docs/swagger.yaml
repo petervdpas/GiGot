@@ -3485,10 +3485,12 @@ paths:
         Returns the raw HTML of the named fragment from
         internal/server/templates/fragments/. Used by the
         GG.lazy client helper to render detail panes on
-        demand. Admin-session gated — fragments don't carry
-        user data but they encode admin-UI shape (which
-        inputs exist, what gets PATCHed where), and a
-        leak gives an attacker recon for free.
+        demand. Admin-session gated by default: fragments don't
+        carry user data but they encode admin-UI shape (which
+        inputs exist, what gets PATCHed where), and a leak gives
+        an attacker recon for free. The user-facing subset (the
+        self-serve /user page) gates on any valid session so
+        maintainers and regular users can render their own page.
 
         Cache: strong ETag derived from the fragment body's
         SHA-256. Browsers send `If-None-Match` on every
@@ -3525,7 +3527,7 @@ paths:
             $ref: '#/definitions/server.ErrorResponse'
       security:
       - SessionAuth: []
-      summary: Serve a UI fragment template (admin only)
+      summary: Serve a UI fragment template
       tags:
       - system
   /git/{name}.git/git-receive-pack:
