@@ -75,7 +75,12 @@
       '</td>' +
       '<td data-label="Identifier"><code class="acct-identifier" title="' + escapeHtml(a.identifier) + '">' +
         escapeHtml(a.identifier) + '</code></td>' +
-      '<td data-label="Display name">' + escapeHtml(a.display_name || '') + '</td>' +
+      '<td data-label="Display name">' +
+        (a.display_name
+          ? escapeHtml(a.display_name)
+          : '<span class="muted" title="No display name set. Showing the identifier; it fills in automatically the next time this user signs in.">' +
+              escapeHtml(a.identifier) + '</span>') +
+      '</td>' +
       '<td data-label="Role"><span class="badge"' + roleBadgeAttrs(a.role) + '>' +
         escapeHtml(a.role) + '</span></td>' +
       '<td class="row-actions"></td>';
